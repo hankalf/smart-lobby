@@ -811,6 +811,24 @@
       });
 
     const list = $('#q-list', m.bg);
+    /*
+     * A question can depend on an earlier answer — ask about the escort only when
+     * they said they have no card. Only questions with fixed answers can be
+     * depended on, since there is nothing dependable to match on free text.
+     */
+    const conditionValue = (q) => (q.show_if && q.show_if.id ? `${q.show_if.id}|${q.show_if.value}` : '');
+
+    const conditionChoices = (index) => {
+      const out = [];
+      questions.slice(0, index).forEach((earlier) => {
+        if (!earlier.label || !earlier.label.trim()) return;
+        const answers = earlier.type === 'choice' ? (earlier.options || []) : earlier.type === 'yesno' ? ['Yes', 'No'] : [];
+        const short = earlier.label.length > 40 ? `${earlier.label.slice(0, 40)}…` : earlier.label;
+        answers.forEach((a) => out.push([`${earlier.id}|${a}`, `“${short}” is ${a}`]));
+      });
+      return out;
+    };
+
     const drawQuestions = () => {
       list.innerHTML = questions.map((q, i) => `
         <div class="q-row" data-i="${i}">
@@ -826,6 +844,12 @@
           </div>
           ${q.type === 'choice' ? `<input class="input" data-qopts="${i}" style="margin-top:.5rem"
             placeholder="Options, separated by commas" value="${esc((q.options || []).join(', '))}">` : ''}
+          <label class="field" style="margin:.5rem 0 0"><span>Only ask this if</span>
+            <select class="input" data-qcond="${i}">
+              <option value="">Always ask it</option>
+              ${conditionChoices(i).map(([value, label]) =>
+                `<option value="${esc(value)}" ${conditionValue(q) === value ? 'selected' : ''}>${esc(label)}</option>`).join('')}
+            </select></label>
           <label class="check"><input type="checkbox" data-qreq="${i}" ${q.required ? 'checked' : ''}> Must be answered</label>
         </div>`).join('') || '<p class="muted">No questions — the visitor just reads and signs.</p>';
 
@@ -852,24 +876,40 @@
         questions[Number(input.dataset.qopts)].options = input.value.split(',').map((o) => o.trim()).filter(Boolean);
       });
       $$('[data-qreq]', list).forEach((input) => { questions[Number(input.dataset.qreq)].required = input.checked; });
+      $$('[data-qcond]', list).forEach((select) => {
+        const q = questions[Number(select.dataset.qcond)];
+        if (!select.value) { delete q.show_if; return; }
+        const [id, ...rest] = select.value.split('|');
+        q.show_if = { id, value: rest.join('|') };
+      });
     };
 
     function collectQuestions() {
       sync();
-      return questions
-        .filter((q) => String(q.label || '').trim())
-        .map((q, i) => ({
-          id: q.id || `q${i + 1}`,
-          label: q.label.trim(),
-          type: q.type || 'yesno',
-          required: !!q.required,
-          ...(q.type === 'choice' ? { options: q.options || [] } : {})
-        }));
+      const kept = questions.filter((q) => String(q.label || '').trim());
+      const ids = new Set(kept.map((q) => q.id));
+      return kept.map((q) => ({
+        id: q.id,
+        label: q.label.trim(),
+        type: q.type || 'yesno',
+        required: !!q.required,
+        ...(q.type === 'choice' ? { options: q.options || [] } : {}),
+        // A condition pointing at a question that has since been deleted would
+        // hide this one for ever, so it is dropped rather than kept dangling.
+        ...(q.show_if && ids.has(q.show_if.id) ? { show_if: q.show_if } : {})
+      }));
     }
+
+    // Ids must survive reordering, or a condition would come to mean a different
+    // question, so each new one takes the next unused number.
+    const nextQuestionId = () => {
+      const used = questions.map((q) => Number(String(q.id || '').replace(/\D/g, '')) || 0);
+      return `q${Math.max(0, ...used) + 1}`;
+    };
 
     $('#q-add', m.bg).addEventListener('click', () => {
       sync();
-      questions.push({ id: `q${questions.length + 1}`, label: '', type: 'yesno', required: true });
+      questions.push({ id: nextQuestionId(), label: '', type: 'yesno', required: true });
       drawQuestions();
     });
     drawQuestions();

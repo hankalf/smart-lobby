@@ -714,23 +714,55 @@
     box.innerHTML = questions.map((q, i) => {
       const id = q.id || `q${i + 1}`;
       const label = `<span class="q-label">${escapeHtml(q.label)}${q.required ? ' <span class="req">*</span>' : ''}</span>`;
-      if (q.type === 'text') {
-        return `<div class="question">${label}<input class="input" data-q="${id}" autocomplete="off"></div>`;
-      }
-      const choices = q.type === 'choice' ? (q.options || []) : ['Yes', 'No'];
-      return `<div class="question">${label}<div class="q-choices" data-qgroup="${id}">
-        ${choices.map((c) => `<button type="button" data-q="${id}" data-value="${escapeHtml(c)}" aria-pressed="false">${escapeHtml(c)}</button>`).join('')}
-      </div></div>`;
+      const body = q.type === 'text'
+        ? `<input class="input" data-q="${id}" autocomplete="off">`
+        : `<div class="q-choices" data-qgroup="${id}">
+             ${(q.type === 'choice' ? (q.options || []) : ['Yes', 'No']).map((c) =>
+               `<button type="button" data-q="${id}" data-value="${escapeHtml(c)}" aria-pressed="false">${escapeHtml(c)}</button>`).join('')}
+           </div>`;
+      return `<div class="question" data-question="${id}">${label}${body}</div>`;
     }).join('');
 
     $$('[data-qgroup] button', box).forEach((b) => b.addEventListener('click', () => {
       const group = b.closest('[data-qgroup]');
       $$('button', group).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
       state.answers[b.dataset.q] = b.dataset.value;
+      applyQuestionConditions();
     }));
     $$('input[data-q]', box).forEach((input) => input.addEventListener('input', () => {
       state.answers[input.dataset.q] = input.value.trim();
+      applyQuestionConditions();
     }));
+
+    applyQuestionConditions();
+  }
+
+  /**
+   * Questions that depend on an earlier answer. A hidden one is not asked, not
+   * required, and its answer is dropped — so changing your mind higher up cannot
+   * leave a stale answer to a question nobody was shown.
+   */
+  function questionVisible(q) {
+    if (!q.show_if || !q.show_if.id) return true;
+    const parent = (state.questions || []).find((x) => x.id === q.show_if.id);
+    if (parent && !questionVisible(parent)) return false;
+    return state.answers[q.show_if.id] === q.show_if.value;
+  }
+
+  function applyQuestionConditions() {
+    (state.questions || []).forEach((q, i) => {
+      const id = q.id || `q${i + 1}`;
+      const el = document.querySelector(`[data-question="${id}"]`);
+      if (!el) return;
+      const visible = questionVisible(q);
+      show(el, visible);
+      if (!visible && state.answers[id] !== undefined) {
+        delete state.answers[id];
+        const input = el.querySelector('input[data-q]');
+        if (input) input.value = '';
+        $$('button[data-q]', el).forEach((b) => b.setAttribute('aria-pressed', 'false'));
+      }
+    });
   }
 
   const escapeHtml = (s) => String(s == null ? '' : s)
@@ -950,7 +982,8 @@
   $('#agreement-continue').addEventListener('click', () => {
     const missing = (state.questions || []).filter((q, i) => {
       const id = q.id || `q${i + 1}`;
-      return q.required && !String(state.answers[id] || '').trim();
+      // A question they were never shown cannot be required of them.
+      return q.required && questionVisible(q) && !String(state.answers[id] || '').trim();
     });
     const err = $('#questions-error');
     if (missing.length) {

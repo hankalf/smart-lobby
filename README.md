@@ -255,6 +255,10 @@ A document can also carry its own **questions**, asked on the kiosk just above t
 A document with questions and the signature switched off is a **questionnaire — leave the signature off**
 and the visitor simply answers and carries on; the text body can be left empty too.
 
+A question can also depend on an earlier answer — **Only ask this if** — so a No opens the follow-up and a
+Yes opens a different one. A question nobody was shown is never required of them, and if they change the
+answer above it, the branch they abandoned is cleared rather than being stored.
+
 Mark a question as required and the visitor cannot continue until it is answered. Answers are stored
 against that visit alongside the signature, and shown on the visit record with the wording used at
 the time — so a later edit to a question never changes what a past answer appears to mean.
@@ -320,6 +324,10 @@ A document can also carry its own **questions**, asked on the kiosk just above t
 
 A document with questions and the signature switched off is a **questionnaire — leave the signature off**
 and the visitor simply answers and carries on; the text body can be left empty too.
+
+A question can also depend on an earlier answer — **Only ask this if** — so a No opens the follow-up and a
+Yes opens a different one. A question nobody was shown is never required of them, and if they change the
+answer above it, the branch they abandoned is cleared rather than being stored.
 
 Mark a question as required and the visitor cannot continue until it is answered. Answers are stored
 against that visit alongside the signature, and shown on the visit record with the wording used at
