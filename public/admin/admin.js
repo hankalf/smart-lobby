@@ -842,6 +842,8 @@
             <button class="btn ghost" type="button" data-qdown="${i}" ${i === questions.length - 1 ? 'disabled' : ''} title="Move down">↓</button>
             <button class="btn ghost" type="button" data-qdel="${i}" title="Remove">✕</button>
           </div>
+          <input class="input" data-qdesc="${i}" style="margin-top:.5rem"
+            placeholder="Help text shown under the question (optional)" value="${esc(q.description || '')}">
           ${q.type === 'choice' ? `<input class="input" data-qopts="${i}" style="margin-top:.5rem"
             placeholder="Options, separated by commas" value="${esc((q.options || []).join(', '))}">` : ''}
           <label class="field" style="margin:.5rem 0 0"><span>Only ask this if</span>
@@ -876,6 +878,7 @@
         questions[Number(input.dataset.qopts)].options = input.value.split(',').map((o) => o.trim()).filter(Boolean);
       });
       $$('[data-qreq]', list).forEach((input) => { questions[Number(input.dataset.qreq)].required = input.checked; });
+      $$('[data-qdesc]', list).forEach((input) => { questions[Number(input.dataset.qdesc)].description = input.value; });
       $$('[data-qcond]', list).forEach((select) => {
         const q = questions[Number(select.dataset.qcond)];
         if (!select.value) { delete q.show_if; return; }
@@ -893,6 +896,7 @@
         label: q.label.trim(),
         type: q.type || 'yesno',
         required: !!q.required,
+        ...(String(q.description || '').trim() ? { description: q.description.trim() } : {}),
         ...(q.type === 'choice' ? { options: q.options || [] } : {}),
         // A condition pointing at a question that has since been deleted would
         // hide this one for ever, so it is dropped rather than kept dangling.
@@ -1884,6 +1888,15 @@
             }).join('')}</tr>`).join('')}</tbody>
         </table></div>
         <p class="muted">Full name is always asked. Deliveries have their own short form, set further down.</p>
+
+        <h3>Wording</h3>
+        <p class="muted" style="margin-top:0">Change what a field is called and add a line of help underneath it —
+          a driver is asked for a haulier, not a company. Leave a box empty to keep the standard wording.</p>
+        <label class="field" style="max-width:16rem"><span>Wording for</span>
+          <select class="input" id="wording-type">
+            ${DETAIL_TYPES.map(([t, l]) => `<option value="${t}">${l}</option>`).join('')}
+          </select></label>
+        <div id="wording-fields"></div>
       </div>
 
       <div class="card section"><h2>The order things are asked</h2>
@@ -2067,6 +2080,45 @@
 
       <div class="row"><button class="btn" id="save-settings">Save settings</button></div>`;
 
+    /*
+     * Custom wording, one visitor type at a time. Held here and sent whole on
+     * save, so switching type in the picker does not lose unsaved edits.
+     */
+    const wording = JSON.parse(JSON.stringify(s.wording || {}));
+    const WORDING_FIELDS = [['name', 'Full name'], ...DETAIL_FIELDS.filter(([f]) => f !== 'photo').map(([f, l]) => [f, l])];
+
+    const drawWording = () => {
+      const type = $('#wording-type').value;
+      const forType = wording[type] || {};
+      $('#wording-fields').innerHTML = WORDING_FIELDS.map(([field, standard]) => {
+        const w = forType[field] || {};
+        return `<div class="q-row">
+          <div class="q-row-top">
+            <input class="input" data-wlabel="${field}" placeholder="${esc(standard)}" value="${esc(w.label || '')}">
+          </div>
+          <input class="input" data-wdesc="${field}" style="margin-top:.5rem"
+            placeholder="Help text shown under the field (optional)" value="${esc(w.description || '')}">
+        </div>`;
+      }).join('');
+
+      const capture = () => {
+        const current = $('#wording-type').value;
+        wording[current] = wording[current] || {};
+        WORDING_FIELDS.forEach(([field]) => {
+          const label = $(`[data-wlabel="${field}"]`).value.trim();
+          const description = $(`[data-wdesc="${field}"]`).value.trim();
+          if (label || description) wording[current][field] = { label, description };
+          else delete wording[current][field];
+        });
+      };
+      // Edits are captured as they are typed, against the type being shown at the
+      // time; switching type only redraws, or the new type would inherit them.
+      $$('[data-wlabel], [data-wdesc]').forEach((i) => i.addEventListener('input', capture));
+      $('#wording-type').onchange = drawWording;
+    };
+    drawWording();
+    VIEWS.settings.collectWording = () => wording;
+
     // Step order, one reorderable list per visitor type.
     const FLOW_LABELS = { details: 'Their details', photo: 'Photo', documents: 'Documents & questions', induction: 'Induction deck' };
     const flowState = {};
@@ -2132,6 +2184,7 @@
       patch.kiosk = patch.kiosk || {};
       patch.kiosk.visit_types = $$('[data-vtype]').filter((c) => c.checked).map((c) => c.dataset.vtype);
       if (VIEWS.settings.collectFlow) patch.flow = VIEWS.settings.collectFlow();
+      if (VIEWS.settings.collectWording) patch.wording = VIEWS.settings.collectWording();
       SETTINGS = await api('/settings', { method: 'PUT', body: patch });
       if (SETTINGS.warnings && SETTINGS.warnings.length) toast(SETTINGS.warnings.join(' '), 7000);
       else toast('Settings saved');

@@ -596,16 +596,51 @@
 
   function applyDetailFields() {
     const fields = detailFields();
+    const wording = ((state.cfg && state.cfg.wording) || {})[state.visitType] || {};
+
     for (const [field, sel] of Object.entries(DETAIL_WIDGETS)) {
       const wrap = $(sel);
       if (!wrap) continue;
       const mode = fields[field] || 'off';
       show(wrap, mode !== 'off');
+
+      const custom = wording[field] || {};
       const label = wrap.querySelector('span');
       if (label) {
-        const base = label.textContent.replace(/\s*\*$/, '');
+        // Remember the wording the page shipped with, so switching visitor type
+        // does not leave another type's label behind.
+        if (!label.dataset.base) label.dataset.base = label.textContent.replace(/\s*\*$/, '');
+        const base = (custom.label || '').trim() || label.dataset.base;
         label.textContent = mode === 'required' ? `${base} *` : base;
       }
+
+      let help = wrap.querySelector('.field-help');
+      const text = (custom.description || '').trim();
+      if (text && !help) {
+        help = document.createElement('span');
+        help.className = 'field-help';
+        wrap.appendChild(help);
+      }
+      if (help) { help.textContent = text; show(help, !!text); }
+    }
+
+    // The full name field is always asked, and can be worded too. It restores its
+    // own default like the rest, or one type's wording would follow the next.
+    const nameWrap = $('#w-name');
+    const nameLabel = nameWrap && nameWrap.querySelector('span');
+    if (nameLabel) {
+      const custom = wording.name || {};
+      if (!nameLabel.dataset.base) nameLabel.dataset.base = nameLabel.textContent.replace(/\s*\*$/, '');
+      nameLabel.textContent = `${(custom.label || '').trim() || nameLabel.dataset.base} *`;
+
+      let help = nameWrap.querySelector('.field-help');
+      const text = (custom.description || '').trim();
+      if (text && !help) {
+        help = document.createElement('span');
+        help.className = 'field-help';
+        nameWrap.appendChild(help);
+      }
+      if (help) { help.textContent = text; show(help, !!text); }
     }
   }
 
@@ -713,7 +748,8 @@
 
     box.innerHTML = questions.map((q, i) => {
       const id = q.id || `q${i + 1}`;
-      const label = `<span class="q-label">${escapeHtml(q.label)}${q.required ? ' <span class="req">*</span>' : ''}</span>`;
+      const label = `<span class="q-label">${escapeHtml(q.label)}${q.required ? ' <span class="req">*</span>' : ''}`
+        + `${q.description ? `<span class="q-help">${escapeHtml(q.description)}</span>` : ''}</span>`;
       const body = q.type === 'text'
         ? `<input class="input" data-q="${id}" autocomplete="off">`
         : `<div class="q-choices" data-qgroup="${id}">

@@ -44,6 +44,12 @@ const DEFAULTS = {
     interview: ['details', 'photo', 'documents', 'induction'],
     driver: ['details', 'photo', 'documents', 'induction']
   },
+  /*
+   * Custom label and help text for the details fields, per visitor type — a
+   * driver is asked for a haulier, not a company. Anything left empty falls back
+   * to the standard wording.
+   */
+  wording: {},
   kiosk: {
     visit_types: ['visitor', 'contractor', 'interview'],
     welcome_shows_menu: true,
@@ -278,6 +284,7 @@ function publicSettings() {
     org: s.org,
     kiosk: s.kiosk,
     details: s.details,
+    wording: s.wording,
     flow: s.flow,
     badge: { ...s.badge, mode: s.badge.mode },
     induction: s.induction,

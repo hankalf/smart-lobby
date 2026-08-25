@@ -224,6 +224,14 @@ screen is back at the welcome page, so nobody has a form rearranged under them m
 
 ## The order things are asked
 
+Field wording is editable per type under **Settings → The “Your details” form → Wording**: rename a field —
+a driver is asked for a haulier, not a company — and add a line of help underneath it. Questions can carry
+help text the same way.
+
+---
+
+## The order things are asked
+
 **Settings → The order things are asked.** Each visitor type has its own order for the four sign-in
 steps — their details, photo, documents and questions, induction deck — reorderable with the arrows.
 A contractor can watch the induction before signing anything, while visitors keep the usual order.
@@ -289,6 +297,14 @@ inductions all reach the tablets by themselves.
 
 A kiosk part-way through a sign-in waits: it applies the change once the visitor has finished and the
 screen is back at the welcome page, so nobody has a form rearranged under them mid-typing.
+
+---
+
+## The order things are asked
+
+Field wording is editable per type under **Settings → The “Your details” form → Wording**: rename a field —
+a driver is asked for a haulier, not a company — and add a line of help underneath it. Questions can carry
+help text the same way.
 
 ---
 
