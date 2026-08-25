@@ -52,18 +52,19 @@ body.has-bg .screen[data-screen="menu"] .btn.ghost { color: #fff; border-color: 
   .idle-bg, #bg-stage { transition: none; }
 }
 
-/* Sections shown straight on the welcome screen. */
-.welcome-actions { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: .5rem; }
-.idle[data-align="left"]   .welcome-actions { justify-content: flex-start; }
-.idle[data-align="right"]  .welcome-actions { justify-content: flex-end; }
-.idle[data-align="center"] .welcome-actions { justify-content: center; }
-.welcome-actions .tile { min-height: auto; min-width: 11rem; flex: 1 1 11rem; padding: 1.3rem 1.4rem; font-size: 1.1rem; }
+/* Sections shown straight on the welcome screen. A grid keeps every card the
+   same size however many there are, so a lone card never stretches across. */
+.welcome-actions {
+  display: grid; gap: 1rem; margin-top: .5rem; width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+}
+.welcome-actions .tile { min-height: auto; padding: 1.3rem 1.2rem; font-size: 1.05rem; }
+/* Two up on a portrait tablet, so four cards read as a block rather than 3 + 1. */
+@media (max-width: 900px) {
+  .welcome-actions { grid-template-columns: repeat(2, 1fr); }
+}
 .welcome-actions .tile-icon { font-size: 2.1rem; }
 
-/* Sign in and sign out share a card. */
-.tile.combo { cursor: default; }
-.combo-actions { display: flex; gap: .6rem; margin-top: .9rem; flex-wrap: wrap; justify-content: center; }
-.combo-actions .btn { font-size: 1rem; padding: .7rem 1.4rem; border-radius: 999px; }
 /* Where the welcome text sits — set from Settings so it can be placed clear of
    whatever the background photo has in it. */
 .idle[data-align="left"]   { align-items: flex-start; text-align: left; padding-left: max(3rem, 6vw); }
@@ -73,7 +74,7 @@ body.has-bg .screen[data-screen="menu"] .btn.ghost { color: #fff; border-color: 
 .idle[data-valign="top"]    { justify-content: flex-start; padding-top: 8vh; }
 .idle[data-valign="bottom"] { justify-content: flex-end; padding-bottom: 12vh; }
 
-.idle-inner { max-width: min(54rem, 92vw); }
+.idle-inner { width: 100%; max-width: min(54rem, 92vw); }
 .logo { max-height: 110px; max-width: 70vw; margin-bottom: 1.5rem; }
 .idle h1 { font-size: clamp(2.6rem, 7vw, 4.4rem); margin: 0 0 .5rem; color: var(--brand-dark); letter-spacing: -.02em; }
 .lead { font-size: clamp(1.05rem, 2.4vw, 1.4rem); color: var(--ink-soft); margin: 0 0 2rem; }

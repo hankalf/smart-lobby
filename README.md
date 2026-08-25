@@ -99,8 +99,8 @@ photo → document signing → induction → badge + QR code.
 
 The home screen is built from sections:
 
-- **Sign in / Sign out** — one card holding both, since it is the same errand to a visitor. Sign out
-  searches by first name, last name or phone number; the visitor taps their name and is out.
+- **Sign in** — visitors and contractors.
+- **Sign out** — searches by first name, last name or phone number; the visitor taps their name and is out.
 - **Interview** — candidates arriving to meet the hiring team, recorded as an interview visit without
   them choosing a visit type.
 - **Delivery** — courier drop-off. Switchable in **Settings → Kiosk sign-in flow → Sections**.

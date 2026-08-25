@@ -261,23 +261,15 @@
   $$('[data-go]').forEach((b) => b.addEventListener('click', () => setScreen(b.dataset.go)));
   $$('[data-back]').forEach((b) => b.addEventListener('click', goBack));
 
-  /**
-   * The sections offered on the home screen. Sign in and sign out share one card
-   * because they are the same errand from the visitor's point of view; everything
-   * else is a card of its own and can be switched off in Settings.
-   */
+  /** The sections offered on the home screen, one card each. */
   function sectionsHtml() {
     const { kiosk, deliveries, access } = state.cfg;
-    const cards = [`
-      <div class="tile combo">
-        <span class="tile-icon">👋</span>
-        <span>Sign in / Sign out</span>
-        <small>Visitors &amp; contractors</small>
-        <div class="combo-actions">
-          <button class="btn" data-action="signin">Sign in</button>
-          <button class="btn subtle" data-action="signout">Sign out</button>
-        </div>
-      </div>`];
+    const cards = [
+      `<button class="tile" data-action="signin">
+        <span class="tile-icon">👋</span><span>Sign in</span><small>Visitors &amp; contractors</small></button>`,
+      `<button class="tile" data-action="signout">
+        <span class="tile-icon">🚪</span><span>Sign out</span><small>Leaving site</small></button>`
+    ];
 
     if (kiosk.show_interview_button) {
       cards.push(`<button class="tile" data-action="interview">
