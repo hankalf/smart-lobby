@@ -229,9 +229,10 @@
     const data = await api('/rollcall');
     const html = `
       <p class="muted">Generated ${fmtDate(data.generated_at)} — ${data.count} people on site.</p>
-      <div class="table-wrap"><table><thead><tr><th>Name</th><th>Company</th><th>Phone</th><th>Host</th><th>In since</th></tr></thead>
+      <div class="table-wrap"><table><thead><tr><th>Name</th><th>Company</th><th>Phone</th><th>Host</th><th>Signed in at</th><th>In since</th></tr></thead>
       <tbody>${data.rows.map((r) => `<tr><td><b>${esc(r.full_name)}</b></td><td>${esc(r.company || '')}</td>
-        <td>${esc(r.phone || '')}</td><td>${esc(r.host_name || '')}</td><td>${fmtTime(r.signed_in_at)}</td></tr>`).join('')}</tbody></table></div>`;
+        <td>${esc(r.phone || '')}</td><td>${esc(r.host_name || '')}</td><td>${esc(r.location_name || '—')}</td>
+        <td>${fmtTime(r.signed_in_at)}</td></tr>`).join('')}</tbody></table></div>`;
     const m = modal('Emergency roll call', html, null);
     const actions = $('.modal-actions', m.bg);
     const print = el('<button class="btn subtle">Print</button>');
@@ -298,6 +299,7 @@
           <span class="muted">${esc(v.company || '')} ${v.phone ? '· ' + esc(v.phone) : ''} ${v.email ? '· ' + esc(v.email) : ''}</span></p>
           <p class="muted">${esc(v.visit_type)} · ${esc(v.purpose || 'no reason given')}<br>
           Host: ${esc(v.host_name || '—')} · Badge: ${esc(v.badge_no || '—')} ${v.vehicle_reg ? '· Vehicle: ' + esc(v.vehicle_reg) : ''}<br>
+          ${v.location_name ? `Signed in at: ${esc(v.location_name)}${v.device_name ? ` (${esc(v.device_name)})` : ''}<br>` : ''}
           In: ${fmtDate(v.signed_in_at)} · Out: ${fmtDate(v.signed_out_at)}</p>
         </div>
       </div>
@@ -827,40 +829,171 @@
       });
   }
 
+  /* ------------------------------------------------------------ locations */
+
+  VIEWS.locations = async (root) => {
+    const [rows, sites] = await Promise.all([api('/locations'), api('/sites')]);
+    const multiSite = sites.length > 1;
+    root.innerHTML = `
+      <h1 class="page">Locations</h1>
+      <p class="page-sub">Areas within a site — reception, the yard gate, the workshop entrance. Each device belongs to a
+        location, so you can see where somebody signed in and run a roll call area by area.</p>
+      <div class="card section">
+        <div class="inline-form" style="margin-bottom:1rem">
+          <label class="field"><span>Location name</span><input class="input" id="lo-name" placeholder="Main reception"></label>
+          <label class="field"><span>Description</span><input class="input" id="lo-desc" placeholder="Ground floor, front of building"></label>
+          ${multiSite ? `<label class="field"><span>Site</span><select class="input" id="lo-site">
+            ${sites.map((s) => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</select></label>` : ''}
+          <button class="btn" id="lo-add">Add location</button>
+        </div>
+        <div class="table-wrap">${rows.length ? `<table>
+          <thead><tr><th>Name</th><th>Description</th>${multiSite ? '<th>Site</th>' : ''}<th>Devices</th><th>On site now</th><th>Status</th><th></th></tr></thead>
+          <tbody>${rows.map((l) => `<tr>
+            <td><b>${esc(l.name)}</b></td>
+            <td class="muted">${esc(l.description || '')}</td>
+            ${multiSite ? `<td>${esc(l.site_name || '')}</td>` : ''}
+            <td>${l.device_count}</td>
+            <td>${l.onsite}</td>
+            <td><span class="pill ${l.active ? 'on' : 'off'}">${l.active ? 'active' : 'off'}</span></td>
+            <td><button class="btn ghost" data-loedit="${l.id}">Edit</button>
+                <button class="btn ghost" data-lodel="${l.id}">Remove</button></td></tr>`).join('')}</tbody></table>`
+          : '<p class="empty">No locations yet. Add one for each entrance or area that has a device.</p>'}</div>
+      </div>`;
+
+    $('#lo-add').addEventListener('click', async () => {
+      if (!$('#lo-name').value.trim()) return toast('Give the location a name');
+      await api('/locations', { method: 'POST', body: {
+        name: $('#lo-name').value.trim(), description: $('#lo-desc').value.trim(),
+        site_id: multiSite ? Number($('#lo-site').value) : (sites[0] ? sites[0].id : null) } });
+      render('locations');
+    });
+
+    $$('[data-loedit]').forEach((b) => b.addEventListener('click', () => {
+      const l = rows.find((x) => String(x.id) === b.dataset.loedit);
+      modal(`Edit ${l.name}`, `
+        <label class="field"><span>Name</span><input class="input" id="le-name" value="${esc(l.name)}"></label>
+        <label class="field"><span>Description</span><input class="input" id="le-desc" value="${esc(l.description || '')}"></label>
+        <label class="check"><input type="checkbox" id="le-active" ${l.active ? 'checked' : ''}> Active</label>`,
+        async (bg, close) => {
+          await api(`/locations/${l.id}`, { method: 'PATCH', body: {
+            name: $('#le-name', bg).value, description: $('#le-desc', bg).value, active: $('#le-active', bg).checked } });
+          close(); render('locations');
+        });
+    }));
+
+    $$('[data-lodel]').forEach((b) => b.addEventListener('click', () => confirmAction(
+      'Remove this location? Devices and past visits keep working, they just stop being tied to it.',
+      async () => { await api(`/locations/${b.dataset.lodel}`, { method: 'DELETE' }); render('locations'); })));
+  };
+
   /* -------------------------------------------------------------- devices */
 
+  const CAMERA_LABEL = { front: 'Front camera', rear: 'Rear camera' };
+
   VIEWS.devices = async (root) => {
-    const rows = await api('/devices');
+    const [rows, locations] = await Promise.all([api('/devices'), api('/locations')]);
     const origin = location.origin;
     root.innerHTML = `
-      <h1 class="page">Kiosks</h1>
-      <p class="page-sub">Register each tablet so you can see whether it is online. Open
-        <code class="token">${origin}/kiosk/</code> on the device and add it to the home screen.</p>
+      <h1 class="page">Devices</h1>
+      <p class="page-sub">Every tablet or screen running Smart Lobby. Register one here, then open its link on the device
+        and add it to the home screen.</p>
+      ${locations.length ? '' : `<div class="notice">No locations yet — add them under <b>Locations</b> first so each
+        device can say where it is.</div>`}
       <div class="card section">
         <div class="inline-form" style="margin-bottom:1rem">
           <label class="field"><span>Device name</span><input class="input" id="dv-name" placeholder="Reception iPad"></label>
-          <button class="btn" id="dv-add">Register kiosk</button>
+          <label class="field"><span>Location</span><select class="input" id="dv-loc">
+            <option value="">— none —</option>
+            ${locations.map((l) => `<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></label>
+          <button class="btn" id="dv-add">Register device</button>
         </div>
         <div class="table-wrap">${rows.length ? `<table>
-          <thead><tr><th>Name</th><th>Token</th><th>Last seen</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Location</th><th>Camera</th><th>Mode</th><th>Printing</th><th>Last seen</th><th>Status</th><th></th></tr></thead>
           <tbody>${rows.map((d) => {
             const online = d.last_seen_at && (Date.now() - new Date(d.last_seen_at).getTime()) < 5 * 60000;
-            return `<tr><td><b>${esc(d.name)}</b></td><td><code class="token">${esc(d.token)}</code></td>
+            return `<tr>
+              <td><b>${esc(d.name)}</b></td>
+              <td>${esc(d.location_name || '—')}</td>
+              <td>${esc(cameraName(d))}</td>
+              <td>${esc(d.mode || 'kiosk')}</td>
+              <td><span class="pill ${d.print_enabled ? 'on' : 'off'}">${d.print_enabled ? 'on' : 'off'}</span></td>
               <td>${fmtDate(d.last_seen_at)}</td>
               <td><span class="pill ${online ? 'on' : 'off'}">${online ? 'online' : 'offline'}</span></td>
-              <td><button class="btn ghost" data-dvdel="${d.id}">Remove</button></td></tr>`;
-          }).join('')}</tbody></table>` : '<p class="empty">No kiosks registered yet.</p>'}</div>
+              <td><button class="btn ghost" data-dvedit="${d.id}">Edit</button>
+                  <button class="btn ghost" data-dvlink="${d.id}">Link</button>
+                  <button class="btn ghost" data-dvdel="${d.id}">Remove</button></td></tr>`;
+          }).join('')}</tbody></table>` : '<p class="empty">No devices registered yet.</p>'}</div>
       </div>`;
+
+    const showLink = (d) => modal(`${d.name} — setup link`, `
+      <p>On the device, open:</p>
+      <p><code class="token">${origin}/kiosk/?token=${d.token}</code></p>
+      <p class="muted">It stores the token locally and reports in every minute, so this page shows whether it is online.
+        Add the page to the home screen for a full-screen kiosk.</p>`, null);
+
     $('#dv-add').addEventListener('click', async () => {
-      const d = await api('/devices', { method: 'POST', body: { name: $('#dv-name').value || 'Reception kiosk' } });
-      modal('Kiosk registered', `<p>On the tablet, open:</p><p><code class="token">${origin}/kiosk/?token=${d.token}</code></p>
-        <p class="muted">The kiosk stores the token locally and reports in every minute so you can see it here.</p>`, null);
+      const d = await api('/devices', { method: 'POST', body: {
+        name: $('#dv-name').value || 'Reception kiosk', location_id: $('#dv-loc').value || null } });
+      showLink(d);
       render('devices');
     });
-    $$('[data-dvdel]').forEach((b) => b.addEventListener('click', async () => {
-      await api(`/devices/${b.dataset.dvdel}`, { method: 'DELETE' }); render('devices');
+
+    $$('[data-dvlink]').forEach((b) => b.addEventListener('click', () =>
+      showLink(rows.find((x) => String(x.id) === b.dataset.dvlink))));
+
+    $$('[data-dvedit]').forEach((b) => b.addEventListener('click', () => {
+      const d = rows.find((x) => String(x.id) === b.dataset.dvedit);
+      let reported = [];
+      try { reported = JSON.parse(d.cameras || '[]'); } catch { reported = []; }
+      const options = [['front', 'Front camera'], ['rear', 'Rear camera'],
+        ...reported.map((c) => [c.id, c.label])];
+
+      modal(`Edit ${d.name}`, `
+        <div class="form-grid">
+          <label class="field"><span>Device name</span><input class="input" id="de-name" value="${esc(d.name)}"></label>
+          <label class="field"><span>Location</span><select class="input" id="de-loc">
+            <option value="">— none —</option>
+            ${locations.map((l) => `<option value="${l.id}" ${l.id === d.location_id ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}
+          </select></label>
+          <label class="field"><span>Default camera</span><select class="input" id="de-cam">
+            ${options.map(([v, l]) => `<option value="${esc(v)}" ${d.default_camera === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}
+          </select></label>
+          <label class="field"><span>Operational mode</span><select class="input" id="de-mode">
+            <option value="kiosk" ${d.mode === 'kiosk' ? 'selected' : ''}>Kiosk — visitor sign-in</option>
+          </select></label>
+        </div>
+        <p class="muted">${reported.length
+          ? `${reported.length} camera${reported.length === 1 ? '' : 's'} reported by this device.`
+          : 'This device has not reported its cameras yet — it does so once it has been opened and allowed camera access. Front/rear still work.'}</p>
+        <label class="check"><input type="checkbox" id="de-print" ${d.print_enabled ? 'checked' : ''}>
+          <span>Print badges from this device<br><span class="muted">Only applies while badge printing is on in
+            Settings. Turn it off for a device with no printer attached.</span></span></label>
+        <p class="muted">More operational modes are coming; every device runs in kiosk mode for now.</p>`,
+        async (bg, close) => {
+          await api(`/devices/${d.id}`, { method: 'PATCH', body: {
+            name: $('#de-name', bg).value,
+            location_id: $('#de-loc', bg).value || null,
+            default_camera: $('#de-cam', bg).value,
+            mode: $('#de-mode', bg).value,
+            print_enabled: $('#de-print', bg).checked } });
+          close(); render('devices');
+        });
     }));
+
+    $$('[data-dvdel]').forEach((b) => b.addEventListener('click', () => confirmAction(
+      'Remove this device? Its kiosk link stops working.',
+      async () => { await api(`/devices/${b.dataset.dvdel}`, { method: 'DELETE' }); render('devices'); })));
   };
+
+  function cameraName(d) {
+    const choice = d.default_camera || 'front';
+    if (CAMERA_LABEL[choice]) return CAMERA_LABEL[choice];
+    try {
+      const found = JSON.parse(d.cameras || '[]').find((c) => c.id === choice);
+      if (found) return found.label;
+    } catch { /* no cameras reported */ }
+    return 'Specific camera';
+  }
 
   /* -------------------------------------------------------------- reports */
 

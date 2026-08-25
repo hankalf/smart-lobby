@@ -190,13 +190,17 @@ router.post('/signin', async (req, res) => {
     const badgeNo = badgeCfg.enabled ? nextBadgeNo() : null;
     const code = crypto.randomBytes(4).toString('hex').toUpperCase();
 
+    // Which entrance or area they signed in at, taken from the kiosk itself.
+    const device = b.device_id ? get('SELECT * FROM devices WHERE id = ?', Number(b.device_id)) : null;
+
     const visitRes = run(`INSERT INTO visits
       (site_id, visitor_id, host_id, visit_type, purpose, vehicle_reg, badge_no, checkout_code, photo_path,
-       induction_shown, signed_in_at, status, device_id, created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,'onsite',?,?)`,
+       induction_shown, signed_in_at, status, device_id, location_id, created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,'onsite',?,?,?)`,
       site ? site.id : null, visitor.id, b.host_id ? Number(b.host_id) : null, visitType,
       clean(b.purpose) || null, (clean(b.vehicle_reg) || '').toUpperCase() || null, badgeNo, code, photoPath,
-      b.induction_completed ? 1 : 0, nowISO(), b.device_id ? Number(b.device_id) : null, nowISO());
+      b.induction_completed ? 1 : 0, nowISO(), device ? device.id : null,
+      device ? device.location_id : null, nowISO());
     const visitId = Number(visitRes.lastInsertRowid);
 
     // Signed agreement (NDA / site rules)
@@ -301,9 +305,27 @@ router.post('/ping', (req, res) => {
   if (token) {
     const device = get('SELECT * FROM devices WHERE token = ?', token);
     if (device) {
-      run('UPDATE devices SET last_seen_at = ?, last_ip = ?, app_version = ? WHERE id = ?',
-        nowISO(), req.ip, String(req.body.version || ''), device.id);
-      return res.json({ ok: true, device_id: device.id, name: device.name, site_id: device.site_id });
+      // The kiosk reports the cameras it can see so they can be chosen in the dashboard.
+      const cameras = Array.isArray(req.body.cameras)
+        ? JSON.stringify(req.body.cameras.slice(0, 8).map((c) => ({
+            id: String(c.id || '').slice(0, 120),
+            label: String(c.label || '').slice(0, 120)
+          })))
+        : device.cameras;
+      run('UPDATE devices SET last_seen_at = ?, last_ip = ?, app_version = ?, cameras = ? WHERE id = ?',
+        nowISO(), req.ip, String(req.body.version || ''), cameras, device.id);
+      const location = device.location_id ? get('SELECT name FROM locations WHERE id = ?', device.location_id) : null;
+      return res.json({
+        ok: true,
+        device_id: device.id,
+        name: device.name,
+        site_id: device.site_id,
+        location_id: device.location_id,
+        location_name: location ? location.name : null,
+        mode: device.mode,
+        default_camera: device.default_camera || 'front',
+        print_enabled: !!device.print_enabled
+      });
     }
   }
   res.json({ ok: true, device_id: null });

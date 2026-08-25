@@ -118,7 +118,8 @@ are shown behind both the welcome screen and the menu behind it.
 | Documents | NDAs and site rules, versioned — old signatures stay attached to the version signed |
 | Hosts | People visitors ask for, each with their own email and chat webhook |
 | Access & doors | HTTP-controlled doors, test unlock, unlock audit trail |
-| Kiosks | Register tablets, see which are online |
+| Locations | Areas within a site — reception, yard gate, workshop entrance — with device and on-site counts |
+| Devices | Every tablet: name, location, default camera, operational mode, per-device badge printing, online status |
 | Reports | Visits per day, busiest hosts, top companies, arrival times, average time on site |
 | Settings | Branding (logo, kiosk background photo, colours, time zone), kiosk flow, badges, induction, deliveries, access, notifications, retention, users |
 

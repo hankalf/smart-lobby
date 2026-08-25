@@ -21,7 +21,8 @@
     deckStart: null,
     lastResult: null,
     deviceToken: localStorage.getItem('sl_device_token') || '',
-    deviceId: null
+    deviceId: null,
+    device: null
   };
 
   /* ------------------------------------------------------------- helpers */
@@ -237,12 +238,25 @@
     } catch { /* offline */ }
   }
 
-  function ping() {
-    fetch('/api/kiosk/ping', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: state.deviceToken, version: '1.0.0' })
-    }).then((r) => r.json()).then((d) => { state.deviceId = d.device_id; }).catch(() => {});
+  async function ping() {
+    // Report the cameras this tablet has, so one can be picked in the dashboard.
+    let cameras = [];
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      cameras = devices.filter((d) => d.kind === 'videoinput')
+        .map((d, i) => ({ id: d.deviceId, label: d.label || `Camera ${i + 1}` }));
+    } catch { /* permission not granted yet, or no media API */ }
+
+    try {
+      const res = await fetch('/api/kiosk/ping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: state.deviceToken, version: '1.0.0', cameras })
+      });
+      const d = await res.json();
+      state.deviceId = d.device_id;
+      state.device = d.device_id ? d : null;
+    } catch { /* offline; the kiosk keeps working */ }
   }
 
   /* ---------------------------------------------------------------- menu */
@@ -405,6 +419,18 @@
 
   /* ---------------------------------------------------------------- camera */
 
+  /**
+   * Which camera to open. "front"/"rear" map to facingMode; anything else is
+   * treated as a specific camera id chosen for this device in the dashboard.
+   */
+  function cameraConstraint() {
+    const choice = (state.device && state.device.default_camera) || 'front';
+    const base = { width: { ideal: 1280 } };
+    if (choice === 'front') return { ...base, facingMode: 'user' };
+    if (choice === 'rear') return { ...base, facingMode: 'environment' };
+    return { ...base, deviceId: { ideal: choice } };
+  }
+
   let stream = null;
   async function startCamera(videoEl) {
     stopCamera();
@@ -413,7 +439,7 @@
     show($('#d-native'), false);
     show($('#btn-capture'), true);
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 } }, audio: false });
+      stream = await navigator.mediaDevices.getUserMedia({ video: cameraConstraint(), audio: false });
       videoEl.srcObject = stream;
     } catch (e) {
       // Live preview is unavailable (insecure origin, or permission refused).
@@ -669,7 +695,9 @@
     $('#done-code').textContent = `Sign-out code: ${result.checkout_code}`;
     $('#done-qr').innerHTML = `<img src="/api/qr?text=${encodeURIComponent(result.checkout_code)}" alt="Sign out QR code">`;
 
-    const badge = result.badge;
+    // Badges are on for the account, but a kiosk with no printer attached opts out.
+    const deviceCanPrint = !state.device || state.device.print_enabled;
+    const badge = deviceCanPrint ? result.badge : null;
     show($('#btn-print-badge'), !!badge);
     if (badge) {
       buildBadge(result, badge, org);

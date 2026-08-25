@@ -92,15 +92,17 @@ router.get('/dashboard', (req, res) => {
 
 router.get('/rollcall', (req, res) => {
   const rows = all(`SELECT v.id, v.signed_in_at, v.visit_type, v.badge_no, v.vehicle_reg, p.full_name, p.company, p.phone,
-                           h.name AS host_name, s.name AS site_name
+                           h.name AS host_name, s.name AS site_name, l.name AS location_name
                     FROM visits v JOIN visitors p ON p.id = v.visitor_id
                     LEFT JOIN hosts h ON h.id = v.host_id LEFT JOIN sites s ON s.id = v.site_id
-                    WHERE v.status = 'onsite' ORDER BY p.full_name`);
+                    LEFT JOIN locations l ON l.id = v.location_id
+                    WHERE v.status = 'onsite' ORDER BY l.name, p.full_name`);
   if (req.query.format === 'csv') {
     const body = csv(rows, [
       { label: 'Name', key: 'full_name' }, { label: 'Company', key: 'company' }, { label: 'Phone', key: 'phone' },
       { label: 'Type', key: 'visit_type' }, { label: 'Host', key: 'host_name' }, { label: 'Badge', key: 'badge_no' },
-      { label: 'Vehicle', key: 'vehicle_reg' }, { label: 'Signed in', key: 'signed_in_at' }, { label: 'Site', key: 'site_name' }
+      { label: 'Vehicle', key: 'vehicle_reg' }, { label: 'Signed in at', key: 'location_name' },
+      { label: 'Signed in', key: 'signed_in_at' }, { label: 'Site', key: 'site_name' }
     ]);
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="rollcall-${Date.now()}.csv"`);
@@ -144,9 +146,11 @@ router.get('/visits', (req, res) => {
 
 router.get('/visits/:id', (req, res) => {
   const visit = get(`SELECT v.*, p.full_name, p.company, p.phone, p.email, p.photo_path AS profile_photo,
-                            h.name AS host_name, s.name AS site_name
+                            h.name AS host_name, s.name AS site_name, l.name AS location_name, d.name AS device_name
                      FROM visits v JOIN visitors p ON p.id = v.visitor_id
-                     LEFT JOIN hosts h ON h.id = v.host_id LEFT JOIN sites s ON s.id = v.site_id WHERE v.id = ?`, req.params.id);
+                     LEFT JOIN hosts h ON h.id = v.host_id LEFT JOIN sites s ON s.id = v.site_id
+                     LEFT JOIN locations l ON l.id = v.location_id
+                     LEFT JOIN devices d ON d.id = v.device_id WHERE v.id = ?`, req.params.id);
   if (!visit) return res.status(404).json({ error: 'not_found' });
   visit.signatures = all(`SELECT sg.*, a.name AS agreement_name FROM signatures sg
                           LEFT JOIN agreements a ON a.id = sg.agreement_id WHERE sg.visit_id = ?`, visit.id);
@@ -255,6 +259,44 @@ crud('sites', 'sites', ['name', 'address', 'max_occupancy', 'active']);
 crud('agreements', 'agreements', ['name', 'body', 'version', 'required_for', 'active']);
 crud('access-points', 'access_points', ['site_id', 'name', 'kind', 'url', 'method', 'headers', 'body',
   'unlock_seconds', 'auto_unlock_on_signin', 'auto_unlock_on_signout', 'enabled']);
+
+/* ------------------------------------------------------------- locations */
+
+router.get('/locations', (req, res) => {
+  const rows = all(`SELECT l.*, s.name AS site_name,
+                      (SELECT COUNT(*) FROM devices d WHERE d.location_id = l.id) AS device_count,
+                      (SELECT COUNT(*) FROM visits v WHERE v.location_id = l.id AND v.status = 'onsite') AS onsite
+                    FROM locations l LEFT JOIN sites s ON s.id = l.site_id
+                    ORDER BY l.name`);
+  res.json(rows);
+});
+
+router.post('/locations', (req, res) => {
+  const b = req.body || {};
+  if (!clean(b.name)) return res.status(400).json({ error: 'name_required' });
+  const r = run('INSERT INTO locations (site_id, name, description, active, created_at) VALUES (?,?,?,?,?)',
+    b.site_id || null, clean(b.name), clean(b.description) || null, b.active === false ? 0 : 1, nowISO());
+  audit(req, 'create', 'location', Number(r.lastInsertRowid), b);
+  res.json(get('SELECT * FROM locations WHERE id = ?', r.lastInsertRowid));
+});
+
+router.patch('/locations/:id', (req, res) => {
+  const b = req.body || {};
+  const fields = ['site_id', 'name', 'description', 'active'];
+  const cols = fields.filter((f) => b[f] !== undefined);
+  if (cols.length) {
+    run(`UPDATE locations SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`,
+      ...cols.map((c) => (typeof b[c] === 'boolean' ? (b[c] ? 1 : 0) : b[c])), req.params.id);
+  }
+  audit(req, 'update', 'location', Number(req.params.id), b);
+  res.json(get('SELECT * FROM locations WHERE id = ?', req.params.id));
+});
+
+router.delete('/locations/:id', (req, res) => {
+  run('DELETE FROM locations WHERE id = ?', req.params.id);
+  audit(req, 'delete', 'location', Number(req.params.id));
+  res.json({ ok: true });
+});
 
 /* ------------------------------------------------------------- induction */
 
@@ -396,13 +438,32 @@ router.get('/access-events', (req, res) => {
 
 /* --------------------------------------------------------------- devices */
 
-router.get('/devices', (req, res) => res.json(all('SELECT * FROM devices ORDER BY name')));
+router.get('/devices', (req, res) => {
+  res.json(all(`SELECT d.*, l.name AS location_name FROM devices d
+                LEFT JOIN locations l ON l.id = d.location_id ORDER BY d.name`));
+});
 
 router.post('/devices', (req, res) => {
+  const b = req.body || {};
   const token = crypto.randomBytes(16).toString('hex');
-  const r = run('INSERT INTO devices (site_id, name, token, mode, created_at) VALUES (?,?,?,?,?)',
-    req.body.site_id || null, clean(req.body.name) || 'Reception kiosk', token, clean(req.body.mode) || 'kiosk', nowISO());
+  const r = run(`INSERT INTO devices (site_id, location_id, name, token, mode, default_camera, print_enabled, created_at)
+                 VALUES (?,?,?,?,?,?,?,?)`,
+    b.site_id || null, b.location_id || null, clean(b.name) || 'Reception kiosk', token,
+    clean(b.mode) || 'kiosk', clean(b.default_camera) || 'front', b.print_enabled === false ? 0 : 1, nowISO());
+  audit(req, 'create', 'device', Number(r.lastInsertRowid), { name: b.name });
   res.json(get('SELECT * FROM devices WHERE id = ?', r.lastInsertRowid));
+});
+
+router.patch('/devices/:id', (req, res) => {
+  const b = req.body || {};
+  const fields = ['site_id', 'location_id', 'name', 'mode', 'default_camera', 'print_enabled'];
+  const cols = fields.filter((f) => b[f] !== undefined);
+  if (cols.length) {
+    run(`UPDATE devices SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`,
+      ...cols.map((c) => (typeof b[c] === 'boolean' ? (b[c] ? 1 : 0) : b[c])), req.params.id);
+  }
+  audit(req, 'update', 'device', Number(req.params.id), b);
+  res.json(get('SELECT * FROM devices WHERE id = ?', req.params.id));
 });
 
 router.delete('/devices/:id', (req, res) => {

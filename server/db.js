@@ -250,6 +250,15 @@ function migrate() {
     created_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS locations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site_id INTEGER REFERENCES sites(id) ON DELETE SET NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS devices (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     site_id INTEGER REFERENCES sites(id) ON DELETE SET NULL,
@@ -291,6 +300,21 @@ function migrate() {
     expires_at TEXT NOT NULL
   );
   `);
+
+  // Columns added after the first release. CREATE TABLE IF NOT EXISTS does not
+  // touch an existing table, so they are added one at a time when missing.
+  addColumn('devices', 'location_id', 'INTEGER REFERENCES locations(id) ON DELETE SET NULL');
+  addColumn('devices', 'default_camera', "TEXT NOT NULL DEFAULT 'front'");
+  addColumn('devices', 'cameras', 'TEXT');
+  addColumn('devices', 'print_enabled', 'INTEGER NOT NULL DEFAULT 1');
+  addColumn('visits', 'location_id', 'INTEGER REFERENCES locations(id) ON DELETE SET NULL');
+}
+
+function addColumn(table, column, definition) {
+  const existing = all(`PRAGMA table_info(${table})`).map((c) => c.name);
+  if (existing.includes(column)) return;
+  exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  console.log(`[migrate] added ${table}.${column}`);
 }
 
 module.exports = { db, run, get, all, exec, migrate, nowISO, DATA_DIR, STORAGE };
