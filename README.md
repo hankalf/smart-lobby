@@ -94,8 +94,12 @@ The database is a single file, so keep **one** instance running — do not scale
 
 ### Kiosk (`/kiosk/`)
 
-Idle screen → sign in / sign out / delivery → visit type → returning-visitor lookup → details →
+Welcome screen → sign in / sign out / delivery → visit type → returning-visitor lookup → details →
 photo → document signing → induction → badge + QR code.
+
+The welcome screen can either show a single "Touch to start" button, or put Sign in / Sign out /
+Delivery straight on it (**Settings → Kiosk sign-in flow → Skip "Touch to start"**). Background photos
+are shown behind both the welcome screen and the menu behind it.
 
 - Recognises returning visitors by mobile number (or email) and pre-fills their details.
 - Signature capture on the glass for NDAs and site rules.

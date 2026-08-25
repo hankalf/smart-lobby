@@ -3,7 +3,7 @@
   'use strict';
 
   const $ = (sel) => document.querySelector(sel);
-  const $$ = (sel) => [...document.querySelectorAll(sel)];
+  const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
   const show = (el, on = true) => el && el.classList.toggle('hidden', !on);
 
   const state = {
@@ -46,10 +46,18 @@
     toast._t = setTimeout(() => show(t, false), ms);
   }
 
+  // The background photos are shown on the welcome screen and on the menu behind it.
+  const BACKDROP_SCREENS = new Set(['idle', 'menu']);
+  function updateBackdrop() {
+    $('#bg-stage').classList.toggle('visible',
+      document.body.classList.contains('has-bg') && BACKDROP_SCREENS.has(state.screen));
+  }
+
   function setScreen(name, { push = true } = {}) {
     if (push && state.screen !== name) state.history.push(state.screen);
     state.screen = name;
     $$('.screen').forEach((s) => { s.hidden = s.dataset.screen !== name; });
+    updateBackdrop();
     if (name !== 'photo' && name !== 'delivery') stopCamera();
     if (name === 'idle') resetVisit();
     if (name === 'agreement') sizeSignaturePad();
@@ -132,8 +140,9 @@
     idle.dataset.align = org.welcome_align || 'center';
     idle.dataset.valign = org.welcome_valign || 'middle';
     show(document.querySelector('.idle-foot'), !!org.show_welcome_footer);
-    idle.style.setProperty('--scrim', `rgba(8,18,14,${(Number(org.background_dim) || 0) / 100})`);
+    document.documentElement.style.setProperty('--scrim', `rgba(8,18,14,${(Number(org.background_dim) || 0) / 100})`);
     startBackgrounds(org.backgrounds || [], Number(org.background_rotate_seconds) || 12);
+    buildWelcomeActions();
     document.title = `${org.name} — Reception`;
 
     show($('#tile-delivery'), !!(kiosk.show_delivery_button && deliveries.enabled));
@@ -175,17 +184,18 @@
    */
   let bgTimer = null;
   function startBackgrounds(list, seconds) {
-    const idle = document.querySelector('.idle');
+    const stage = $('#bg-stage');
     clearInterval(bgTimer);
-    idle.querySelectorAll('.idle-bg').forEach((el) => el.remove());
+    stage.querySelectorAll('.idle-bg').forEach((el) => el.remove());
 
-    if (!list.length) { idle.classList.remove('has-bg'); return; }
-    idle.classList.add('has-bg');
+    if (!list.length) { document.body.classList.remove('has-bg'); updateBackdrop(); return; }
+    document.body.classList.add('has-bg');
+    updateBackdrop();
 
     const layers = [0, 1].map(() => {
       const el = document.createElement('div');
       el.className = 'idle-bg';
-      idle.prepend(el);
+      stage.prepend(el);
       return el;
     });
 
@@ -199,7 +209,7 @@
 
     bgTimer = setInterval(() => {
       // Nothing to see while the visitor is mid sign-in, so hold until they finish.
-      if (state.screen !== 'idle') return;
+      if (!BACKDROP_SCREENS.has(state.screen)) return;
       index = (index + 1) % list.length;
       const back = 1 - front;
       layers[back].style.backgroundImage = `url("${list[index]}")`;
@@ -240,8 +250,10 @@
   $$('[data-go]').forEach((b) => b.addEventListener('click', () => setScreen(b.dataset.go)));
   $$('[data-back]').forEach((b) => b.addEventListener('click', goBack));
 
-  $$('#menu-tiles .tile').forEach((tile) => tile.addEventListener('click', async () => {
-    const action = tile.dataset.action;
+  $$('#menu-tiles .tile').forEach((tile) =>
+    tile.addEventListener('click', () => runAction(tile.dataset.action)));
+
+  async function runAction(action) {
     if (action === 'signin') {
       const types = state.cfg.kiosk.visit_types || ['visitor'];
       if (types.length > 1) return setScreen('type');
@@ -257,7 +269,26 @@
         toast('Door unlocked — please come in');
       } catch { toast('Could not unlock the door'); }
     }
-  }));
+  }
+
+  /** Optionally put the actions straight on the welcome screen, skipping "Touch to start". */
+  function buildWelcomeActions() {
+    const { kiosk, deliveries, access } = state.cfg;
+    const box = $('#welcome-actions');
+    const inline = !!kiosk.welcome_shows_menu;
+    show($('#start-btn'), !inline);
+    show(box, inline);
+    if (!inline) return;
+
+    const actions = [['signin', '👋', 'Sign in', 'Visitors & contractors'], ['signout', '🚪', 'Sign out', 'Leaving site']];
+    if (kiosk.show_delivery_button && deliveries.enabled) actions.push(['delivery', '📦', 'Delivery', 'Courier drop-off']);
+    if (access.enabled && access.unlock_button_on_kiosk && state.cfg.access_points.length) {
+      actions.push(['unlock', '🔓', 'Request entry', 'Unlock the door']);
+    }
+    box.innerHTML = actions.map(([a, icon, label, sub]) =>
+      `<button data-wa="${a}"><span class="wa-icon">${icon}</span><span>${label}</span><small>${sub}</small></button>`).join('');
+    $$('[data-wa]', box).forEach((b) => b.addEventListener('click', () => runAction(b.dataset.wa)));
+  }
 
   /* ------------------------------------------------------------ identify */
 

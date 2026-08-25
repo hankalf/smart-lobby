@@ -30,6 +30,7 @@ const DEFAULTS = {
     ask_vehicle: false,
     ask_purpose: true,
     visit_types: ['visitor', 'contractor', 'interview'],
+    welcome_shows_menu: false,
     show_delivery_button: true,
     show_staff_button: false,
     show_onsite_count: false,

@@ -12,6 +12,9 @@
 </head>
 <body>
 
+<!-- Background photos, shared by the welcome and menu screens -->
+<div id="bg-stage" aria-hidden="true"><div id="bg-scrim"></div></div>
+
 <div id="app">
 
   <!-- IDLE ------------------------------------------------------------- -->
@@ -20,7 +23,8 @@
       <img id="idle-logo" class="logo hidden" alt="">
       <h1 id="idle-title">Welcome</h1>
       <p id="idle-message" class="lead">Please tap below to sign in</p>
-      <button class="btn big" data-go="menu">Touch to start</button>
+      <button class="btn big" id="start-btn" data-go="menu">Touch to start</button>
+      <div class="welcome-actions hidden" id="welcome-actions"></div>
       <p class="onsite-count hidden" id="onsite-count"></p>
     </div>
     <footer class="idle-foot"><span id="idle-clock"></span> · <span id="idle-org"></span></footer>

@@ -1002,6 +1002,8 @@
           ${chk('kiosk.require_host', 'Require choosing a host')}
           ${chk('kiosk.ask_purpose', 'Ask reason for visit')}
           ${chk('kiosk.ask_vehicle', 'Ask vehicle registration')}
+          ${chk('kiosk.welcome_shows_menu', 'Skip “Touch to start”',
+            'Put Sign in / Sign out / Delivery straight on the welcome screen')}
           ${chk('kiosk.show_delivery_button', 'Show the delivery button')}
           ${chk('kiosk.show_onsite_count', 'Show how many people are on site')}
         </div>

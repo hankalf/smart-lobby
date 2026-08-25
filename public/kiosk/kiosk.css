@@ -22,25 +22,50 @@ body { background: var(--bg); }
   text-align: center;
   background: linear-gradient(160deg, var(--brand-soft), var(--bg) 60%);
 }
-/* Stacked photo layers so several backgrounds can crossfade on a timer. */
+/* Background photos live behind the whole app so the welcome and menu screens
+   can share them. Stacked layers crossfade on a timer. */
+#bg-stage {
+  position: fixed; inset: 0; z-index: 0;
+  opacity: 0; visibility: hidden; transition: opacity .4s ease;
+}
+#bg-stage.visible { opacity: 1; visibility: visible; }
 .idle-bg {
-  position: absolute; inset: 0; z-index: 0;
+  position: absolute; inset: 0;
   background-size: cover; background-position: center;
   opacity: 0; transition: opacity 1.4s ease-in-out;
 }
 .idle-bg.on { opacity: 1; }
-.idle.has-bg::before { content: ''; position: absolute; inset: 0; z-index: 1; background: var(--scrim, rgba(8,18,14,.4)); }
-.idle.has-bg .idle-inner { position: relative; z-index: 2; }
-.idle.has-bg .idle-foot { z-index: 2; } /* stays absolutely positioned at the foot */
+#bg-scrim { position: absolute; inset: 0; background: var(--scrim, rgba(8,18,14,.4)); }
+
+/* Screens sit above the photos; the ones that share them drop their own fill. */
+#app { position: relative; z-index: 1; }
+body.has-bg .idle,
+body.has-bg .screen[data-screen="menu"] { background: transparent; }
+body.has-bg .screen[data-screen="menu"] .bar h2,
+body.has-bg .idle h1,
+body.has-bg .idle .lead,
+body.has-bg .idle .idle-foot,
+body.has-bg .idle .onsite-count { color: #fff; text-shadow: 0 1px 14px rgba(0, 0, 0, .45); }
+body.has-bg .screen[data-screen="menu"] .btn.ghost { color: #fff; border-color: rgba(255,255,255,.5); background: rgba(0,0,0,.25); }
 
 @media (prefers-reduced-motion: reduce) {
-  .idle-bg { transition: none; }
+  .idle-bg, #bg-stage { transition: none; }
 }
-.idle.has-bg h1,
-.idle.has-bg .lead,
-.idle.has-bg .idle-foot,
-.idle.has-bg .onsite-count { color: #fff; text-shadow: 0 1px 14px rgba(0, 0, 0, .45); }
 
+/* Action tiles shown straight on the welcome screen. */
+.welcome-actions { display: flex; gap: .9rem; flex-wrap: wrap; justify-content: inherit; margin-top: .5rem; }
+.idle[data-align="left"]  .welcome-actions { justify-content: flex-start; }
+.idle[data-align="right"] .welcome-actions { justify-content: flex-end; }
+.idle[data-align="center"] .welcome-actions { justify-content: center; }
+.welcome-actions button {
+  display: flex; flex-direction: column; align-items: center; gap: .3rem;
+  min-width: 9.5rem; padding: 1.1rem 1.4rem; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); font-size: 1.05rem; font-weight: 700; color: var(--brand-dark);
+}
+.welcome-actions button:active { transform: scale(.985); }
+.welcome-actions .wa-icon { font-size: 1.9rem; }
+.welcome-actions small { font-weight: 500; font-size: .8rem; color: var(--ink-soft); }
 /* Where the welcome text sits — set from Settings so it can be placed clear of
    whatever the background photo has in it. */
 .idle[data-align="left"]   { align-items: flex-start; text-align: left; padding-left: max(3rem, 6vw); }
