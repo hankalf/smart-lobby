@@ -29,8 +29,7 @@ const DEFAULTS = {
     interview: { photo: 'required', company: 'off', phone: 'required', email: 'optional', staff: 'required', purpose: 'off', vehicle: 'off', reference: 'off', movement: 'off' },
     // A driver at a warehouse gate: the haulier, the vehicle and the paperwork
     // matter; who they are visiting usually does not.
-    driver: { photo: 'optional', company: 'required', phone: 'required', email: 'off', staff: 'off', purpose: 'off', vehicle: 'required', reference: 'required', movement: 'required' },
-    staff: { photo: 'off', company: 'off', phone: 'optional', email: 'off', staff: 'off', purpose: 'off', vehicle: 'off', reference: 'off', movement: 'off' }
+    driver: { photo: 'optional', company: 'required', phone: 'required', email: 'off', staff: 'off', purpose: 'off', vehicle: 'required', reference: 'required', movement: 'required' }
   },
   /*
    * The order the sign-in steps are asked in, per visitor type. Finding the
@@ -43,8 +42,7 @@ const DEFAULTS = {
     visitor: ['details', 'photo', 'documents', 'induction'],
     contractor: ['details', 'photo', 'documents', 'induction'],
     interview: ['details', 'photo', 'documents', 'induction'],
-    driver: ['details', 'photo', 'documents', 'induction'],
-    staff: ['details', 'photo', 'documents', 'induction']
+    driver: ['details', 'photo', 'documents', 'induction']
   },
   kiosk: {
     visit_types: ['visitor', 'contractor', 'interview'],
@@ -52,7 +50,6 @@ const DEFAULTS = {
     show_interview_button: true,
     show_driver_button: false,
     show_delivery_button: true,
-    show_staff_button: false,
     show_onsite_count: false,
     idle_timeout_seconds: 90,
     returning_lookup_field: 'phone',

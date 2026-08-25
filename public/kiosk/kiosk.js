@@ -225,7 +225,7 @@
 
     const tiles = $('#type-tiles');
     const labels = { visitor: ['👤', 'Visitor'], contractor: ['🦺', 'Contractor'], interview: ['💼', 'Interview'],
-      delivery: ['📦', 'Delivery'], staff: ['🪪', 'Staff'] };
+      delivery: ['📦', 'Delivery'], driver: ['🚚', 'Driver'] };
     tiles.innerHTML = (kiosk.visit_types || ['visitor']).map((t) => {
       const [icon, label] = labels[t] || ['👤', t];
       return `<button class="tile" data-type="${t}"><span class="tile-icon">${icon}</span><span>${label}</span></button>`;

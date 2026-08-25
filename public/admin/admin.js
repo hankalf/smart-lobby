@@ -560,13 +560,12 @@
   async function deckSettings(id) {
     const existing = id ? (await api('/slideshows')).rows.find((r) => String(r.id) === String(id)) : null;
     const req = existing ? JSON.parse(existing.required_for) : ['visitor', 'contractor'];
-    const types = ['visitor', 'contractor', 'interview', 'staff'];
     modal(existing ? 'Deck settings' : 'New induction deck', `
       <label class="field"><span>Name</span><input class="input" id="dk-name" value="${esc(existing ? existing.name : 'Site induction')}"></label>
       <label class="field"><span>Description</span><input class="input" id="dk-desc" value="${esc(existing ? existing.description || '' : '')}"></label>
       <span class="muted">Show to these visitor types</span>
       <div class="form-grid" style="margin:.5rem 0 1rem">
-        ${types.map((t) => `<label class="check"><input type="checkbox" data-type="${t}" ${req.includes(t) ? 'checked' : ''}> ${t}</label>`).join('')}
+        ${CATEGORIES.map(([t, label]) => `<label class="check"><input type="checkbox" data-type="${t}" ${req.includes(t) ? 'checked' : ''}> ${label}</label>`).join('')}
       </div>
       <div class="form-grid">
         <label class="field"><span>Repeat after (days, 0 = never)</span>
@@ -617,8 +616,7 @@
     ['visitor', 'Visitors', 'Sign in / Sign out card'],
     ['contractor', 'Contractors', 'Sign in / Sign out card'],
     ['interview', 'Interviews', 'Interview card — candidates'],
-    ['driver', 'Drivers', 'Driver card — deliveries and collections'],
-    ['staff', 'Staff', 'Employees, if you sign them in']
+    ['driver', 'Drivers', 'Driver card — deliveries and collections']
   ];
   const categoryLabel = (t) => (CATEGORIES.find(([v]) => v === t) || [t, t])[1];
 
@@ -1274,7 +1272,7 @@
     ['movement', 'Delivering or collecting', '']
   ];
   const DETAIL_TYPES = [['visitor', 'Visitors'], ['contractor', 'Contractors'], ['interview', 'Interviews'],
-    ['driver', 'Drivers'], ['staff', 'Staff']];
+    ['driver', 'Drivers']];
 
   VIEWS.settings = async (root) => {
     SETTINGS = await api('/settings');
@@ -1451,7 +1449,7 @@
 
         <span class="muted">Visit types offered on the kiosk</span>
         <div class="form-grid" style="margin-top:.5rem">
-          ${['visitor', 'contractor', 'interview', 'staff'].map((t) => `<label class="check">
+          ${['visitor', 'contractor', 'interview'].map((t) => `<label class="check">
             <input type="checkbox" data-vtype="${t}" ${s.kiosk.visit_types.includes(t) ? 'checked' : ''}> ${t}</label>`).join('')}
         </div>
       </div>

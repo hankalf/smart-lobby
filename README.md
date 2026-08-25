@@ -232,7 +232,7 @@ home-screen cards:
 | --- | --- |
 | Visitors, Contractors | Sign in / Sign out |
 | Interviews | Interview |
-| Staff | if you sign employees in |
+| Drivers | Driver |
 
 Deliveries sign nothing.
 
@@ -298,7 +298,7 @@ home-screen cards:
 | --- | --- |
 | Visitors, Contractors | Sign in / Sign out |
 | Interviews | Interview |
-| Staff | if you sign employees in |
+| Drivers | Driver |
 
 Deliveries sign nothing.
 
