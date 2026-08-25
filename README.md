@@ -117,7 +117,8 @@ The sections can sit straight on the home screen, or behind a "Touch to start" b
 - Recognises returning visitors by mobile number (or email) and pre-fills their details.
 - Signature capture on the glass for NDAs and site rules.
 - QR code on screen and on the badge for one-tap sign-out.
-- Times out back to the welcome screen; auto signs-out anyone left at a configurable hour.
+- Times out back to the welcome screen; signs out anyone left on site at a time you set (23:59 by default),
+  in the site time zone, and only during that minute so a late arrival is not signed straight back out.
 
 ### Admin (`/admin/`)
 
@@ -225,7 +226,7 @@ The people visitors ask for. Each can have an email address, a mobile number for
 chat webhook, so alerts reach them directly.
 
 **Add several at once from a spreadsheet** — upload an `.xlsx` or `.csv`. The first row should be
-headings; only *Name* is required, and headings are matched loosely, so "Full name", "Phone",
+headings — first and last name in separate columns, or a single full-name column; only the name is required, and headings are matched loosely, so "Full name", "Phone",
 "Mobile", "Team" and similar all work. Someone already on the list is updated rather than
 duplicated — matched on email, or on name where there is no email — so a corrected sheet can simply
 be uploaded again. A template is downloadable from that panel.
@@ -269,7 +270,7 @@ The people visitors ask for. Each can have an email address, a mobile number for
 chat webhook, so alerts reach them directly.
 
 **Add several at once from a spreadsheet** — upload an `.xlsx` or `.csv`. The first row should be
-headings; only *Name* is required, and headings are matched loosely, so "Full name", "Phone",
+headings — first and last name in separate columns, or a single full-name column; only the name is required, and headings are matched loosely, so "Full name", "Phone",
 "Mobile", "Team" and similar all work. Someone already on the list is updated rather than
 duplicated — matched on email, or on name where there is no email — so a corrected sheet can simply
 be uploaded again. A template is downloadable from that panel.

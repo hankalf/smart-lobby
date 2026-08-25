@@ -73,19 +73,41 @@ app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
 
 /* --------------------------------------------------------- housekeeping */
 
+/**
+ * Close anyone still signed in at the configured time — people forget to sign
+ * out, and a roll call is worthless if last week's visitors are still listed.
+ *
+ * It fires only during the minute it is set for, in the site's own time zone, so
+ * somebody arriving after it never gets signed straight back out again.
+ */
+let lastAutoSignOut = null;
 function autoSignOut() {
   const kiosk = settings.getSection('kiosk');
   const org = settings.getSection('org');
-  if (!kiosk.auto_signout_hour) return;
-  let hour;
+  if (!kiosk.auto_signout_enabled) return;
+
+  const target = /^\d{1,2}:\d{2}$/.test(kiosk.auto_signout_time || '') ? kiosk.auto_signout_time : '23:59';
+  let localNow;
   try {
-    hour = Number(new Intl.DateTimeFormat('en-GB', { hour: '2-digit', hour12: false, timeZone: org.timezone }).format(new Date()));
-  } catch { hour = new Date().getHours(); }
-  if (hour < Number(kiosk.auto_signout_hour)) return;
+    localNow = new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit', minute: '2-digit', hour12: false, timeZone: org.timezone
+    }).format(new Date());
+  } catch {
+    const d = new Date();
+    localNow = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+
+  const [h, m] = target.split(':');
+  if (localNow !== `${h.padStart(2, '0')}:${m}`) return;
+
+  const stamp = `${new Date().toISOString().slice(0, 10)} ${localNow}`;
+  if (lastAutoSignOut === stamp) return; // already done this minute
+  lastAutoSignOut = stamp;
+
   const stale = all("SELECT id FROM visits WHERE status = 'onsite'");
   if (!stale.length) return;
   run("UPDATE visits SET status = 'out', signed_out_at = ?, signed_out_by = 'auto' WHERE status = 'onsite'", nowISO());
-  console.log(`[auto-signout] closed ${stale.length} open visit(s)`);
+  console.log(`[auto-signout] closed ${stale.length} open visit(s) at ${localNow}`);
 }
 
 function purgeOldData() {
@@ -105,7 +127,7 @@ function purgeOldData() {
   auth.purgeExpired();
 }
 
-setInterval(autoSignOut, 15 * 60 * 1000);
+setInterval(autoSignOut, 30 * 1000); // checked often so a to-the-minute time is not missed
 setInterval(purgeOldData, 24 * 60 * 60 * 1000);
 
 /* ------------------------------------------------------- first-run seed */

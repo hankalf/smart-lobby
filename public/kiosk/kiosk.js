@@ -52,11 +52,13 @@
     toast._t = setTimeout(() => show(t, false), ms);
   }
 
-  // The background photos are shown on the welcome screen and on the menu behind it.
-  const BACKDROP_SCREENS = new Set(['idle', 'menu']);
+  // The background photos stay up throughout, so tapping a card does not drop the
+  // visitor onto a bare screen. The induction deck is the exception: it takes over
+  // the whole screen and a photo behind it would only distract.
+  const NO_BACKDROP = new Set(['induction']);
   function updateBackdrop() {
     $('#bg-stage').classList.toggle('visible',
-      document.body.classList.contains('has-bg') && BACKDROP_SCREENS.has(state.screen));
+      document.body.classList.contains('has-bg') && !NO_BACKDROP.has(state.screen));
   }
 
   function setScreen(name, { push = true } = {}) {
@@ -66,6 +68,7 @@
     updateBackdrop();
     if (name !== 'photo' && name !== 'delivery') stopCamera();
     if (name === 'idle') resetVisit();
+    if (name === 'details') applyDetailFields();
     if (name === 'agreement') sizeSignaturePad();
     resetIdleTimer();
     const focusable = document.querySelector(`.screen[data-screen="${name}"] input:not([type=hidden])`);
@@ -156,16 +159,32 @@
     buildSections();
     document.title = `${org.name} — Reception`;
 
-    show($('#w-company'), true);
-    show($('#w-phone'), true);
-    show($('#w-email'), kiosk.require_email || !kiosk.require_phone);
-    show($('#w-host'), kiosk.require_host !== false);
-    show($('#w-purpose'), !!kiosk.ask_purpose);
-    show($('#w-vehicle'), !!kiosk.ask_vehicle);
     show($('#w-tracking'), !!deliveries.ask_tracking);
 
-    $('#identify-label').textContent = kiosk.returning_lookup_field === 'email' ? 'Email address' : 'Mobile number';
-    $('#identify-value').type = kiosk.returning_lookup_field === 'email' ? 'email' : 'tel';
+    // Phone wording and the example shown follow the country set in Settings.
+    const PHONE = {
+      US: { label: 'Phone number', example: '(555) 123-4567' },
+      CA: { label: 'Phone number', example: '(555) 123-4567' },
+      GB: { label: 'Mobile number', example: '07700 900123' },
+      IE: { label: 'Mobile number', example: '085 123 4567' },
+      AU: { label: 'Mobile number', example: '0412 345 678' },
+      NZ: { label: 'Mobile number', example: '021 123 4567' }
+    };
+    const phone = PHONE[(org.phone_country || 'US').toUpperCase()] || PHONE.US;
+    const byEmail = kiosk.returning_lookup_field === 'email';
+
+    $('#identify-label').textContent = byEmail ? 'Email address' : phone.label;
+    $('#identify-value').type = byEmail ? 'email' : 'tel';
+    $('#identify-value').placeholder = byEmail ? 'you@company.com' : phone.example;
+    $('#identify-lead').textContent = byEmail
+      ? "Enter your email address and we'll speed things up."
+      : `Enter your ${phone.label.toLowerCase()} and we'll speed things up.`;
+    $('#f-phone').placeholder = phone.example;
+    $('#w-phone').querySelector('span').textContent = phone.label;
+    $('#signout-q').placeholder = 'Start typing…';
+    $('#signout-label').textContent = `First name, last name or ${phone.label.toLowerCase()}`;
+    $('#signout-lead').textContent =
+      `Search for yourself by first name, last name or ${phone.label.toLowerCase()}, then tap your name.`;
     $('#ack-text').textContent = state.cfg.induction.acknowledgement_text || 'I confirm I have watched the induction.';
 
     const tiles = $('#type-tiles');
@@ -217,7 +236,7 @@
 
     bgTimer = setInterval(() => {
       // Nothing to see while the visitor is mid sign-in, so hold until they finish.
-      if (!BACKDROP_SCREENS.has(state.screen)) return;
+      if (state.screen !== 'idle') return;
       index = (index + 1) % list.length;
       const back = 1 - front;
       layers[back].style.backgroundImage = `url("${list[index]}")`;
@@ -409,15 +428,45 @@
   attachHostPicker('#f-host-search', '#f-host-id', '#host-suggest');
   attachHostPicker('#d-host-search', '#d-host-id', '#d-host-suggest');
 
+  /**
+   * "Your details" is configured per visitor type: each field is off, optional or
+   * required, so an interview is not asked why they are here.
+   */
+  const DETAIL_WIDGETS = {
+    company: '#w-company', phone: '#w-phone', email: '#w-email',
+    staff: '#w-host', purpose: '#w-purpose', vehicle: '#w-vehicle'
+  };
+
+  function detailFields() {
+    const all = (state.cfg && state.cfg.details) || {};
+    return all[state.visitType] || all.visitor || {};
+  }
+
+  function applyDetailFields() {
+    const fields = detailFields();
+    for (const [field, sel] of Object.entries(DETAIL_WIDGETS)) {
+      const wrap = $(sel);
+      if (!wrap) continue;
+      const mode = fields[field] || 'off';
+      show(wrap, mode !== 'off');
+      const label = wrap.querySelector('span');
+      if (label) {
+        const base = label.textContent.replace(/\s*\*$/, '');
+        label.textContent = mode === 'required' ? `${base} *` : base;
+      }
+    }
+  }
+
   /* --------------------------------------------------------------- details */
 
   $('#details-continue').addEventListener('click', async () => {
     const err = $('#details-error');
-    const k = state.cfg.kiosk;
+    const fields = detailFields();
     if (!$('#f-name').value.trim()) return fail('Please enter your name.');
-    if (k.require_phone && !$('#f-phone').value.trim()) return fail('Please enter a contact number.');
-    if (k.require_email && !$('#f-email').value.trim()) return fail('Please enter an email address.');
-    if (k.require_host !== false && !$('#f-host-id').value) return fail('Please choose who you are visiting.');
+    if (fields.phone === 'required' && !$('#f-phone').value.trim()) return fail('Please enter a contact number.');
+    if (fields.email === 'required' && !$('#f-email').value.trim()) return fail('Please enter an email address.');
+    if (fields.company === 'required' && !$('#f-company').value.trim()) return fail('Please enter your company.');
+    if (fields.staff === 'required' && !$('#f-host-id').value) return fail('Please choose who you are here to see.');
     show(err, false);
 
     if (!state.visitor) {
@@ -431,7 +480,13 @@
   });
 
   function nextAfterDetails() {
-    if (state.cfg.kiosk.require_photo) { setScreen('photo'); return startCamera($('#cam')); }
+    const photo = detailFields().photo || 'off';
+    if (photo !== 'off') {
+      // A required photo hides the skip, unless the camera could not open at all.
+      show($('#btn-photo-skip'), photo !== 'required');
+      setScreen('photo');
+      return startCamera($('#cam'));
+    }
     afterPhoto();
   }
 

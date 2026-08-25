@@ -791,8 +791,10 @@
       <div class="card section">
         <h2>Add several at once from a spreadsheet</h2>
         <p class="muted" style="margin-top:0">Upload an Excel file (<b>.xlsx</b>) or a <b>.csv</b>. The first row should be
-          headings — <i>Name</i>, <i>Email</i>, <i>Mobile</i>, <i>Department</i>, <i>Chat webhook</i>. Only Name is required,
-          and the headings can be worded your way (“Full name”, “Phone”, “Team” and similar are understood).</p>
+          headings — <i>First name</i>, <i>Last name</i>, <i>Email</i>, <i>Phone</i>, <i>Department</i>,
+          <i>Chat webhook</i>. Only the name is required, and headings can be worded your way: a single
+          <i>Full name</i> column works just as well as separate first and last, and “Mobile”, “Surname”, “Team” and
+          similar are all understood.</p>
         <p class="muted">Someone already on the list is updated rather than duplicated, matched on email, or on name when
           there is no email — so you can fix a sheet and upload it again.</p>
         <div class="row">
@@ -1187,6 +1189,18 @@
 
   /* ------------------------------------------------------------- settings */
 
+  // Rows and columns of the "Your details" matrix.
+  const DETAIL_FIELDS = [
+    ['photo', 'Photo', 'Needs https:// for the camera to open'],
+    ['company', 'Company', ''],
+    ['phone', 'Phone number', 'Also used to recognise returning visitors'],
+    ['email', 'Email address', ''],
+    ['staff', 'Who they are seeing', ''],
+    ['purpose', 'Reason for visit', ''],
+    ['vehicle', 'Vehicle registration', '']
+  ];
+  const DETAIL_TYPES = [['visitor', 'Visitors'], ['contractor', 'Contractors'], ['interview', 'Interviews'], ['staff', 'Staff']];
+
   VIEWS.settings = async (root) => {
     SETTINGS = await api('/settings');
     const users = await api('/users');
@@ -1211,6 +1225,13 @@
           ${txt('org.accent_color', 'Dark accent colour', 'color')}
           <label class="field"><span>Time zone</span>
             <select class="input" data-set="org.timezone" id="tz-select"></select></label>
+          <label class="field"><span>Phone number format</span>
+            <select class="input" data-set="org.phone_country">
+              ${[['US', 'United States — (555) 123-4567'], ['CA', 'Canada — (555) 123-4567'],
+                 ['GB', 'United Kingdom — 07700 900123'], ['IE', 'Ireland — 085 123 4567'],
+                 ['AU', 'Australia — 0412 345 678'], ['NZ', 'New Zealand — 021 123 4567']]
+                .map(([v, l]) => `<option value="${v}" ${(s.org.phone_country || 'US') === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select></label>
           <label class="field"><span>Date format</span>
             <select class="input" data-set="org.date_format">
               ${[['en-GB', 'UK — 25 Aug 2026, 14:30'], ['en-US', 'US — Aug 25, 2026, 2:30 PM'],
@@ -1286,22 +1307,38 @@
         ` : ''}
       </div>
 
+      <div class="card section"><h2>The “Your details” form</h2>
+        <p class="muted" style="margin-top:0">What each type of visitor is asked. An interview does not need a reason for
+          visit — the card already says why they are here — so switch it off in that column alone.</p>
+        <div class="table-wrap"><table class="fields-table">
+          <thead><tr><th>Field</th>${DETAIL_TYPES.map(([, l]) => `<th>${l}</th>`).join('')}</tr></thead>
+          <tbody>${DETAIL_FIELDS.map(([field, label, hint]) => `<tr>
+            <td><b>${label}</b>${hint ? `<div class="muted">${hint}</div>` : ''}</td>
+            ${DETAIL_TYPES.map(([type]) => {
+              const value = ((s.details[type] || {})[field]) || 'off';
+              return `<td><select class="input" data-set="details.${type}.${field}">
+                ${[['off', 'Not asked'], ['optional', 'Optional'], ['required', 'Required']]
+                  .map(([v, l]) => `<option value="${v}" ${value === v ? 'selected' : ''}>${l}</option>`).join('')}
+              </select></td>`;
+            }).join('')}</tr>`).join('')}</tbody>
+        </table></div>
+        <p class="muted">Full name is always asked. Deliveries have their own short form, set further down.</p>
+      </div>
+
       <div class="card section"><h2>Kiosk sign-in flow</h2>
         <div class="form-grid">
-          ${chk('kiosk.require_photo', 'Take a photo', 'Needs https:// or localhost for the camera to open')}
-          ${chk('kiosk.require_phone', 'Require a phone number')}
-          ${chk('kiosk.require_email', 'Require an email address')}
-          ${chk('kiosk.require_host', 'Require choosing a staff member')}
-          ${chk('kiosk.ask_purpose', 'Ask reason for visit')}
-          ${chk('kiosk.ask_vehicle', 'Ask vehicle registration')}
           ${chk('kiosk.welcome_shows_menu', 'Skip “Touch to start”',
             'Put the sections straight on the home screen')}
           ${chk('kiosk.show_onsite_count', 'Show how many people are on site')}
+          ${chk('kiosk.auto_signout_enabled', 'Sign everyone out at the end of the day',
+            'People forget to sign out, and a roll call is worthless with yesterday&rsquo;s visitors still on it')}
         </div>
         <div class="form-grid">
           ${txt('kiosk.idle_timeout_seconds', 'Return to the welcome screen after (seconds)', 'number')}
           ${txt('kiosk.thank_you_seconds', 'Hold the thank-you screen for (seconds)', 'number')}
-          ${txt('kiosk.auto_signout_hour', 'Automatically sign everyone out at (hour, 24h)', 'number')}
+          <label class="field"><span>Sign everyone out at</span>
+            <input class="input" data-set="kiosk.auto_signout_time" type="time"
+              value="${esc(s.kiosk.auto_signout_time || '23:59')}"></label>
           <label class="field"><span>Returning-visitor lookup</span>
             <select class="input" data-set="kiosk.returning_lookup_field">
               <option value="phone" ${s.kiosk.returning_lookup_field === 'phone' ? 'selected' : ''}>Mobile number</option>

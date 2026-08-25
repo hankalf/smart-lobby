@@ -266,9 +266,10 @@ crud('access-points', 'access_points', ['site_id', 'name', 'kind', 'url', 'metho
 const sheets = require('../spreadsheet');
 
 router.get('/staff/template.csv', (req, res) => {
-  const body = ['Name,Email,Mobile,Department,Chat webhook',
-    'Alex Green,alex@example.com,07700 900123,Site office,',
-    'Priya Shah,priya@example.com,07700 900456,Estimating,'].join('\r\n');
+  const example = settings.phoneCountry(settings.getSection('org').phone_country).example;
+  const body = ['First name,Last name,Email,Phone,Department,Chat webhook',
+    `Alex,Green,alex@example.com,${example},Site office,`,
+    `Priya,Shah,priya@example.com,${example},Estimating,`].join('\r\n');
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename="staff-template.csv"');
   res.send(body);
@@ -291,9 +292,8 @@ router.post('/staff/import', files.memoryUpload.single('file'), (req, res) => {
   if (!rows.length) return res.status(400).json({ error: 'empty_file' });
 
   const header = sheets.mapHeaders(rows[0]);
-  if (header.name === undefined) {
-    return res.status(400).json({ error: 'no_name_column', found: rows[0] });
-  }
+  const hasName = header.name !== undefined || header.first_name !== undefined || header.last_name !== undefined;
+  if (!hasName) return res.status(400).json({ error: 'no_name_column', found: rows[0] });
 
   const created = [];
   const updated = [];
@@ -301,16 +301,19 @@ router.post('/staff/import', files.memoryUpload.single('file'), (req, res) => {
   const cell = (row, key) => (header[key] === undefined ? '' : clean(row[header[key]] || ''));
 
   rows.slice(1).forEach((row, i) => {
-    const name = cell(row, 'name');
+    // Either a single Name column, or First name and Last name columns.
+    const name = cell(row, 'name')
+      || [cell(row, 'first_name'), cell(row, 'last_name')].filter(Boolean).join(' ').trim();
     if (!name) { skipped.push({ line: i + 2, reason: 'no name' }); return; }
     const email = cell(row, 'email').toLowerCase();
     const phone = cell(row, 'phone');
     const department = cell(row, 'department');
     const webhook = cell(row, 'webhook_url');
 
-    const existing = email
-      ? get('SELECT * FROM hosts WHERE lower(email) = ?', email)
-      : get('SELECT * FROM hosts WHERE lower(name) = ?', name.toLowerCase());
+    // Match on email first, then fall back to the name, so adding an email to
+    // somebody already on the list updates them rather than duplicating them.
+    const existing = (email ? get('SELECT * FROM hosts WHERE lower(email) = ?', email) : null)
+      || get('SELECT * FROM hosts WHERE lower(name) = ?', name.toLowerCase());
 
     if (existing) {
       run(`UPDATE hosts SET name = ?, email = COALESCE(NULLIF(?,''), email), phone = COALESCE(NULLIF(?,''), phone),

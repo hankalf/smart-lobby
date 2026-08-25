@@ -98,12 +98,16 @@ async function sendWebhook({ url, title, lines, photoUrl, visit_id, delivery_id 
  * SMS via Twilio's REST API — no SDK needed, it is one form POST.
  * Numbers should be in E.164 form (+447700900123); UK 07… numbers are converted.
  */
-function toE164(number, defaultCountry = '+44') {
+function toE164(number, countryCode) {
+  const country = settings.phoneCountry(countryCode || settings.getSection('org').phone_country);
   const raw = String(number || '').replace(/[^\d+]/g, '');
   if (!raw) return null;
   if (raw.startsWith('+')) return raw;
   if (raw.startsWith('00')) return `+${raw.slice(2)}`;
-  if (raw.startsWith('0')) return `${defaultCountry}${raw.slice(1)}`;
+  // Countries with a trunk prefix drop it: UK 07700 900123 -> +447700900123.
+  if (country.trunk && raw.startsWith(country.trunk)) return `${country.dial}${raw.slice(country.trunk.length)}`;
+  // Locally typed numbers without a country code, e.g. US 5551234567 -> +15551234567.
+  if (!country.trunk && raw.length <= 10) return `${country.dial}${raw}`;
   return `+${raw}`;
 }
 

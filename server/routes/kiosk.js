@@ -167,9 +167,13 @@ router.post('/signin', async (req, res) => {
     const visitType = clean(b.visit_type) || 'visitor';
     const phone = normPhone(b.phone);
     const email = lower(b.email);
-    if (kiosk.require_phone && !phone) return res.status(400).json({ error: 'phone_required' });
-    if (kiosk.require_email && !email) return res.status(400).json({ error: 'email_required' });
-    if (kiosk.require_host && !b.host_id) return res.status(400).json({ error: 'host_required' });
+
+    // Which fields this visitor type must supply is configured per type.
+    const fields = settings.fieldsFor(visitType);
+    if (fields.phone === 'required' && !phone) return res.status(400).json({ error: 'phone_required' });
+    if (fields.email === 'required' && !email) return res.status(400).json({ error: 'email_required' });
+    if (fields.staff === 'required' && !b.host_id) return res.status(400).json({ error: 'host_required' });
+    if (fields.company === 'required' && !clean(b.company)) return res.status(400).json({ error: 'company_required' });
 
     const site = b.site_id ? get('SELECT * FROM sites WHERE id = ?', Number(b.site_id)) : defaultSite();
 

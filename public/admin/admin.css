@@ -124,6 +124,12 @@ td .btn { padding: .35rem .7rem; font-size: .82rem; }
   border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
   background-size: cover; background-position: center;
 }
+.fields-table th { text-transform: none; font-size: .82rem; color: var(--brand-dark); font-weight: 700; }
+.fields-table td { vertical-align: top; }
+.fields-table td:first-child { min-width: 12rem; }
+.fields-table select { min-width: 8.5rem; }
+.fields-table .muted { font-size: .78rem; }
+
 .q-row { border: 1px solid var(--line); border-radius: 10px; padding: .8rem; margin-bottom: .6rem; background: var(--bg); }
 .q-row-top { display: flex; gap: .5rem; align-items: center; }
 .q-row-top .input[data-qlabel] { flex: 1 1 auto; }

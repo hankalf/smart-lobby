@@ -37,16 +37,18 @@ body { background: var(--bg); }
 .idle-bg.on { opacity: 1; }
 #bg-scrim { position: absolute; inset: 0; background: var(--scrim, rgba(8,18,14,.4)); }
 
-/* Screens sit above the photos; the ones that share them drop their own fill. */
+/* Screens sit above the photos and drop their own fill so the photo shows through.
+   Panels stay opaque, so anything being read or typed keeps full contrast. */
 #app { position: relative; z-index: 1; }
-body.has-bg .idle,
-body.has-bg .screen[data-screen="menu"] { background: transparent; }
-body.has-bg .screen[data-screen="menu"] .bar h2,
+body.has-bg .screen:not(.dark) { background: transparent; }
+body.has-bg .screen:not(.dark) > .bar h2,
 body.has-bg .idle h1,
 body.has-bg .idle .lead,
 body.has-bg .idle .idle-foot,
 body.has-bg .idle .onsite-count { color: #fff; text-shadow: 0 1px 14px rgba(0, 0, 0, .45); }
-body.has-bg .screen[data-screen="menu"] .btn.ghost { color: #fff; border-color: rgba(255,255,255,.5); background: rgba(0,0,0,.25); }
+body.has-bg .screen:not(.dark) > .bar .btn.ghost {
+  color: #fff; border-color: rgba(255, 255, 255, .5); background: rgba(0, 0, 0, .28);
+}
 
 @media (prefers-reduced-motion: reduce) {
   .idle-bg, #bg-stage { transition: none; }

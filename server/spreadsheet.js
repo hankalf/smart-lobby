@@ -107,6 +107,8 @@ function parseSpreadsheet(buffer, filename) {
  */
 const HEADER_ALIASES = {
   name: ['name', 'full name', 'fullname', 'staff', 'staff name', 'employee', 'employee name', 'person'],
+  first_name: ['first name', 'firstname', 'first', 'forename', 'given name', 'christian name'],
+  last_name: ['last name', 'lastname', 'last', 'surname', 'family name'],
   email: ['email', 'e-mail', 'email address', 'mail'],
   phone: ['phone', 'mobile', 'mobile number', 'phone number', 'telephone', 'cell', 'contact number'],
   department: ['department', 'dept', 'team', 'division', 'role', 'job title', 'title'],

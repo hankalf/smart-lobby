@@ -18,17 +18,18 @@ const DEFAULTS = {
     welcome_message: 'Please tap below to sign in',
     goodbye_message: 'Thanks for visiting. Have a safe journey.',
     timezone: 'Europe/London',
-    date_format: 'en-GB'
+    date_format: 'en-GB',
+    phone_country: 'US'
+  },
+  // What the "Your details" form asks, per visitor type. Each field is
+  // off / optional / required, so an interview need not ask why they are here.
+  details: {
+    visitor: { photo: 'required', company: 'optional', phone: 'required', email: 'off', staff: 'required', purpose: 'optional', vehicle: 'off' },
+    contractor: { photo: 'required', company: 'required', phone: 'required', email: 'off', staff: 'required', purpose: 'optional', vehicle: 'optional' },
+    interview: { photo: 'required', company: 'off', phone: 'required', email: 'optional', staff: 'required', purpose: 'off', vehicle: 'off' },
+    staff: { photo: 'off', company: 'off', phone: 'optional', email: 'off', staff: 'off', purpose: 'off', vehicle: 'off' }
   },
   kiosk: {
-    require_photo: true,
-    photo_optional: false,
-    require_phone: true,
-    require_email: false,
-    require_host: true,
-    require_company: false,
-    ask_vehicle: false,
-    ask_purpose: true,
     visit_types: ['visitor', 'contractor', 'interview'],
     welcome_shows_menu: true,
     show_interview_button: true,
@@ -37,7 +38,8 @@ const DEFAULTS = {
     show_onsite_count: false,
     idle_timeout_seconds: 90,
     returning_lookup_field: 'phone',
-    auto_signout_hour: 20,
+    auto_signout_enabled: true,
+    auto_signout_time: '23:59',
     thank_you_seconds: 12
   },
   badge: {
@@ -109,6 +111,38 @@ const DEFAULTS = {
     hide_names_on_signout_list: false
   }
 };
+
+/**
+ * Phone conventions per country: the dialling code used to turn a locally typed
+ * number into E.164 for SMS, the wording on the kiosk, and an example so people
+ * can see the shape expected of them.
+ */
+const PHONE_COUNTRIES = {
+  US: { dial: '+1', trunk: '', label: 'Phone number', example: '(555) 123-4567', name: 'United States' },
+  CA: { dial: '+1', trunk: '', label: 'Phone number', example: '(555) 123-4567', name: 'Canada' },
+  GB: { dial: '+44', trunk: '0', label: 'Mobile number', example: '07700 900123', name: 'United Kingdom' },
+  IE: { dial: '+353', trunk: '0', label: 'Mobile number', example: '085 123 4567', name: 'Ireland' },
+  AU: { dial: '+61', trunk: '0', label: 'Mobile number', example: '0412 345 678', name: 'Australia' },
+  NZ: { dial: '+64', trunk: '0', label: 'Mobile number', example: '021 123 4567', name: 'New Zealand' }
+};
+
+const phoneCountry = (code) => PHONE_COUNTRIES[String(code || '').toUpperCase()] || PHONE_COUNTRIES.US;
+
+const DETAIL_FIELDS = [
+  ['photo', 'Photo'],
+  ['company', 'Company'],
+  ['phone', 'Phone number'],
+  ['email', 'Email address'],
+  ['staff', 'Who they are seeing'],
+  ['purpose', 'Reason for visit'],
+  ['vehicle', 'Vehicle registration']
+];
+
+/** The form configuration for one visitor type, falling back to the visitor one. */
+function fieldsFor(visitType) {
+  const details = module.exports.getAll().details;
+  return details[visitType] || details.visitor;
+}
 
 /** True for IANA zone names Intl actually understands, e.g. "America/New_York". */
 function isValidTimeZone(tz) {
@@ -184,6 +218,7 @@ function publicSettings() {
   return {
     org: s.org,
     kiosk: s.kiosk,
+    details: s.details,
     badge: { ...s.badge, mode: s.badge.mode },
     induction: s.induction,
     deliveries: s.deliveries,
@@ -191,4 +226,5 @@ function publicSettings() {
   };
 }
 
-module.exports = { DEFAULTS, getAll, getSection, setSection, setAll, publicSettings, deepMerge, isValidTimeZone, isValidLocale };
+module.exports = { DEFAULTS, getAll, getSection, setSection, setAll, publicSettings, deepMerge,
+  isValidTimeZone, isValidLocale, PHONE_COUNTRIES, phoneCountry, DETAIL_FIELDS, fieldsFor };
