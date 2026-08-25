@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Lobby — device check</title>
+<link rel="stylesheet" href="/shared/theme.css">
+<style>
+  body { padding: 1.5rem; max-width: 44rem; margin: 0 auto; }
+  h1 { color: var(--brand-dark); margin: 0 0 .25rem; }
+  .lead { color: var(--ink-soft); margin: 0 0 1.5rem; }
+  .row { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 0; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .mark { font-size: 1.3rem; line-height: 1.2; flex: 0 0 1.6rem; text-align: center; }
+  .pass { color: var(--ok); } .fail { color: var(--danger); } .warn { color: var(--warn); }
+  .what { font-weight: 600; }
+  .why { color: var(--ink-soft); font-size: .9rem; margin-top: .15rem; }
+  .card { padding: 1.25rem; margin-bottom: 1.25rem; }
+  video { width: 100%; max-width: 320px; border-radius: 12px; background: #0d1512; display: block; margin-top: .75rem; }
+  code { background: var(--bg); padding: .1rem .35rem; border-radius: 5px; font-size: .85rem; word-break: break-all; }
+</style>
+</head>
+<body>
+
+<h1>Device check</h1>
+<p class="lead">Open this on the tablet you plan to use as a kiosk. It tests what this browser actually allows,
+  which is the quickest way to find out whether a kiosk app is getting in the way.</p>
+
+<div class="card" id="results"></div>
+
+<div class="card">
+  <button class="btn" id="test-camera">Test the camera</button>
+  <p class="why" id="camera-note">Nothing is recorded or uploaded — the picture stays on this device.</p>
+  <video id="cam" autoplay playsinline muted></video>
+</div>
+
+<div class="card">
+  <button class="btn subtle" id="test-print">Test printing</button>
+  <p class="why">Opens a print dialog. Cancel it — this only checks that one appears.</p>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;font-size:1rem">What this browser reports</h2>
+  <p class="why"><code id="ua"></code></p>
+</div>
+
+<script>
+(() => {
+  const results = document.getElementById('results');
+  const add = (state, what, why) => {
+    const mark = state === 'pass' ? '✓' : state === 'fail' ? '✕' : '!';
+    results.insertAdjacentHTML('beforeend',
+      `<div class="row"><div class="mark ${state}">${mark}</div>
+       <div><div class="what">${what}</div><div class="why">${why}</div></div></div>`);
+  };
+
+  document.getElementById('ua').textContent = navigator.userAgent;
+
+  // Secure context — everything camera-related depends on it.
+  if (window.isSecureContext) {
+    add('pass', 'Secure connection', 'The camera is allowed to work on this address.');
+  } else {
+    add('fail', 'Not a secure connection',
+      `This page is on ${location.protocol}//. Browsers only allow the camera over https:// or on localhost, ` +
+      'so the selfie step and the badge scanner cannot run here.');
+  }
+
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    add('pass', 'Camera interface present', 'This browser exposes a camera to web pages. Press “Test the camera” to prove it works.');
+  } else {
+    add('fail', 'No camera interface',
+      'This browser gives web pages no way to reach the camera at all. In a kiosk app this usually means the app ' +
+      'does not support it — Safari with Guided Access does.');
+  }
+
+  add('BarcodeDetector' in window ? 'pass' : 'warn',
+    'BarcodeDetector' in window ? 'Built-in barcode reader' : 'No built-in barcode reader',
+    'BarcodeDetector' in window
+      ? 'QR codes are read by the browser itself.'
+      : 'Normal on iPad — Smart Lobby loads its own reader instead, which works the same.');
+
+  try {
+    localStorage.setItem('sl_check', '1'); localStorage.removeItem('sl_check');
+    add('pass', 'Local storage', 'The kiosk can remember which device it is.');
+  } catch {
+    add('fail', 'Local storage blocked', 'The kiosk cannot remember which device it is, so it will not report in.');
+  }
+
+  add(typeof window.print === 'function' ? 'pass' : 'warn', 'Printing available',
+    typeof window.print === 'function' ? 'Badges can be sent to a printer.' : 'This browser may not be able to print badges.');
+
+  add(window.navigator.standalone ? 'pass' : 'warn',
+    window.navigator.standalone ? 'Running full screen' : 'Running in a browser tab',
+    window.navigator.standalone ? 'Added to the home screen.' : 'Fine for testing. For a real kiosk, add it to the home screen.');
+
+  document.getElementById('test-camera').addEventListener('click', async () => {
+    const note = document.getElementById('camera-note');
+    note.textContent = 'Asking for the camera…';
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+      const video = document.getElementById('cam');
+      video.srcObject = stream;
+      await video.play().catch(() => {});
+      setTimeout(() => {
+        note.textContent = video.videoWidth
+          ? `Camera works — ${video.videoWidth}×${video.videoHeight}. The selfie step and badge scanner will both run here.`
+          : 'The camera opened but sent no picture. This usually means the app is blocking playback.';
+        note.className = 'why';
+      }, 1200);
+    } catch (err) {
+      note.innerHTML = `<b>The camera was refused:</b> ${err.name} — ${err.message}.<br>` +
+        'If this is a kiosk app, it probably does not pass camera permission through to web pages. ' +
+        'Safari with Guided Access does, and so does adding the kiosk to the home screen.';
+    }
+  });
+
+  document.getElementById('test-print').addEventListener('click', () => window.print());
+})();
+</script>
+</body>
+</html>

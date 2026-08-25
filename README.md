@@ -23,6 +23,8 @@ npm start
 ```
 
 - Kiosk: <http://localhost:3000/kiosk/>
+- Device check: <http://localhost:3000/check/> — open this on a tablet to see what that browser actually
+  allows (camera, storage, printing). The quickest way to find out whether a kiosk app is blocking something.
 - Admin: <http://localhost:3000/admin/>
 
 The first time you open the admin URL it asks you to create the owner account. That is the whole
