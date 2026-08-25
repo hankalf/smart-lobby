@@ -241,15 +241,55 @@ async function notifyDelivery(deliveryId) {
   ]);
 }
 
+/** Turn an SMTP failure into something a person can act on. */
+function explainSmtpError(err) {
+  const message = String((err && err.message) || err);
+  const code = (err && err.code) || '';
+  const response = String((err && err.response) || '');
+
+  if (code === 'EAUTH' || /535|password not accepted|invalid credentials/i.test(response + message)) {
+    return 'The username or password was rejected. Gmail needs a 16-character App Password rather than your '
+      + 'normal password, and the username must be the full address.';
+  }
+  if (/must issue a starttls|STARTTLS/i.test(response + message)) {
+    return 'The server wants an encrypted connection. Use port 587 with TLS-on-connect switched off, or port 465 with it on.';
+  }
+  if (code === 'ESOCKET' || /wrong version number|SSL routines/i.test(message)) {
+    return 'TLS mismatch: port 587 needs “Use TLS on connect” switched off, port 465 needs it on.';
+  }
+  if (code === 'ECONNECTION' || code === 'ETIMEDOUT' || code === 'EDNS' || /getaddrinfo|ENOTFOUND/i.test(message)) {
+    return 'Could not reach that SMTP server — check the host name and port.';
+  }
+  if (/5\.7\.0|denied|not allowed to send/i.test(response)) {
+    return 'The server accepted the login but refused to send. The From address usually has to match the account you signed in with.';
+  }
+  return message;
+}
+
 async function sendTest(to) {
   const org = settings.getSection('org');
-  const ok = await sendEmail({
-    to,
-    subject: `${org.name} Smart Lobby test email`,
-    text: 'This is a test notification from your Smart Lobby install. If you can read this, SMTP is configured correctly.',
-    html: '<p>This is a test notification from your Smart Lobby install.</p><p>If you can read this, SMTP is configured correctly.</p>'
-  });
-  return ok;
+  const n = settings.getSection('notify');
+  const t = transport();
+  if (!t) {
+    return { ok: false, error: 'Email is switched off, or no SMTP host is set. Save those settings, then test.' };
+  }
+  if (!to) return { ok: false, error: 'No address to send the test to.' };
+
+  try {
+    await t.sendMail({
+      from: `"${n.from_name}" <${n.from_email}>`,
+      to,
+      subject: `${org.name} Smart Lobby test email`,
+      text: 'This is a test notification from your Smart Lobby install. If you can read this, SMTP is configured correctly.',
+      html: '<p>This is a test notification from your Smart Lobby install.</p>'
+        + '<p>If you can read this, SMTP is configured correctly.</p>'
+    });
+    log({ channel: 'email', target: to, subject: 'test', status: 'sent' });
+    return { ok: true };
+  } catch (err) {
+    log({ channel: 'email', target: to, subject: 'test', status: 'error', error: String(err.message || err) });
+    return { ok: false, error: explainSmtpError(err) };
+  }
 }
 
 async function sendTestSms(to) {

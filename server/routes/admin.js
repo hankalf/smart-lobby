@@ -658,8 +658,9 @@ router.delete('/settings/backgrounds/:index', (req, res) => {
 });
 
 router.post('/settings/test-email', async (req, res) => {
-  const ok = await notify.sendTest(req.body.to || req.user.email);
-  res.json({ ok });
+  const to = req.body.to || req.user.email;
+  const result = await notify.sendTest(to);
+  res.json({ ...result, to });
 });
 
 router.post('/settings/test-sms', async (req, res) => {

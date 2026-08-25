@@ -1431,7 +1431,31 @@
       </div>
 
       <div class="card section"><h2>Notifications</h2>
-        ${chk('notify.email_enabled', 'Send host emails over SMTP')}
+        <h3>Email</h3>
+        <div class="row" style="margin-bottom:.5rem">
+          <span class="muted">Fill in the server settings for:</span>
+          <button class="btn subtle" type="button" data-smtp="gmail">Gmail</button>
+          <button class="btn subtle" type="button" data-smtp="m365">Microsoft 365</button>
+          <button class="btn subtle" type="button" data-smtp="icloud">iCloud</button>
+        </div>
+        <details class="howto" id="gmail-howto">
+          <summary><b>Using a Gmail address — what you need first</b></summary>
+          <ol>
+            <li>Gmail refuses ordinary passwords here, so turn on <b>2-Step Verification</b> at
+              <code class="token">myaccount.google.com/security</code> if it is not on already.</li>
+            <li>Go to <code class="token">myaccount.google.com/apppasswords</code>, name it “Smart Lobby”, and
+              create it. Google shows a <b>16-character password</b> once — copy it.</li>
+            <li>Press <b>Gmail</b> above to fill in the server settings.</li>
+            <li>Put your full Gmail address in both <b>From address</b> and <b>SMTP username</b>, and paste the
+              16-character App Password into <b>SMTP password</b> (spaces do not matter).</li>
+            <li><b>Save settings</b>, then <b>Send test email</b>.</li>
+          </ol>
+          <p class="muted">Gmail always sends as the account you signed in with, so the From address has to be that
+            same address. A personal account can send roughly 500 messages a day, a Workspace one about 2,000 —
+            far beyond a lobby's needs. If <b>App passwords</b> is missing from your Google account, 2-Step
+            Verification is not on yet, or a Workspace admin has blocked them.</p>
+        </details>
+        ${chk('notify.email_enabled', 'Send staff emails over SMTP')}
         <div class="form-grid">
           ${txt('notify.from_name', 'From name')}
           ${txt('notify.from_email', 'From address', 'email')}
@@ -1465,6 +1489,7 @@
           <button class="btn subtle" id="test-hook">Send test webhook</button>
           <button class="btn subtle" id="test-sms">Send test SMS</button>
           <input class="input" id="test-sms-to" placeholder="Number for the test SMS" style="max-width:15rem"></div>
+        <div id="email-result"></div>
       </div>
 
       <div class="card section"><h2>Data retention</h2>
@@ -1597,9 +1622,28 @@
       render('settings');
     });
 
+    // Server settings for the common providers, so nobody has to look up a port.
+    const SMTP_PRESETS = {
+      gmail: { host: 'smtp.gmail.com', port: 587, secure: false },
+      m365: { host: 'smtp.office365.com', port: 587, secure: false },
+      icloud: { host: 'smtp.mail.me.com', port: 587, secure: false }
+    };
+    $$('[data-smtp]').forEach((b) => b.addEventListener('click', () => {
+      const preset = SMTP_PRESETS[b.dataset.smtp];
+      $('[data-set="notify.smtp_host"]').value = preset.host;
+      $('[data-set="notify.smtp_port"]').value = preset.port;
+      $('[data-set="notify.smtp_secure"]').checked = preset.secure;
+      $('[data-set="notify.email_enabled"]').checked = true;
+      toast('Server settings filled in — now add your address and password, then save');
+    }));
+
     $('#test-email').addEventListener('click', async () => {
+      const box = $('#email-result');
+      box.innerHTML = '<p class="muted">Sending…</p>';
       const r = await api('/settings/test-email', { method: 'POST', body: { to: ME.email } });
-      toast(r.ok ? `Test email sent to ${ME.email}` : 'Could not send — check the SMTP settings (save first)');
+      box.innerHTML = r.ok
+        ? `<div class="notice">Test email sent to <b>${esc(r.to)}</b>. If it does not arrive, check the spam folder.</div>`
+        : `<div class="notice error"><b>Could not send.</b> ${esc(r.error || '')}</div>`;
     });
     $('#test-sms').addEventListener('click', async () => {
       const to = $('#test-sms-to').value.trim();
