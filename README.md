@@ -82,9 +82,14 @@ Everything else — sign-in, induction, signatures, badges, deliveries — works
    - `PUBLIC_URL=https://your-app.up.railway.app` (used for photo links inside notification emails)
 4. Deploy. Railway provides HTTPS, so the kiosk camera works out of the box.
 
-`nixpacks.toml` pins Node 24 and installs LibreOffice and poppler so PowerPoint decks render
-slide-for-slide. Remove those two packages if you want a smaller, faster image and are happy with
-the built-in PowerPoint parser.
+The included `Dockerfile` installs LibreOffice, poppler and metric-compatible fonts, so uploaded
+PowerPoint decks render exactly as they look in PowerPoint. Railway uses a Dockerfile in preference to
+any other builder, so nothing needs configuring — but it does make the image around a gigabyte and the
+first build slow. If you would rather have small, fast builds and are happy with decks being rebuilt
+from their text, delete the Dockerfile and upload PDF exports instead.
+
+Check which you have at any time: `/api/health` reports `slide_rendering`, and the **Induction decks**
+page says plainly whether it can render properly.
 
 The database is a single file, so keep **one** instance running — do not scale to multiple replicas.
 

@@ -91,7 +91,10 @@ td .btn { padding: .35rem .7rem; font-size: .82rem; }
 .slide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: .75rem; }
 .slide-thumb { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #0d1512; position: relative; aspect-ratio: 16/10; }
 .slide-thumb img { width: 100%; height: 100%; object-fit: contain; }
-.slide-thumb .html-preview { color: #fff; font-size: .55rem; padding: .5rem; overflow: hidden; height: 100%; }
+.slide-thumb .html-preview { background: #fff; color: #222; font-size: .5rem; padding: .4rem; overflow: hidden; height: 100%; }
+.slide-thumb .html-preview h1 { font-size: .8rem; margin: 0 0 .2rem; }
+.slide-thumb .html-preview ul { padding-left: .9em; margin: 0; }
+.slide-thumb .html-preview img { max-height: 1.6rem; }
 .slide-thumb .num { position: absolute; top: 4px; left: 6px; background: rgba(0,0,0,.6); color: #fff; font-size: .7rem; padding: 0 .4rem; border-radius: 4px; }
 .slide-thumb button { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,.6); color: #fff; border: 0;
   border-radius: 4px; cursor: pointer; font-size: .75rem; padding: .1rem .35rem; }

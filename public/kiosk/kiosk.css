@@ -174,12 +174,26 @@ body.has-bg .screen[data-screen="menu"] .btn.ghost { color: #fff; border-color: 
 .deck-count { color: #9db3a9; font-size: .95rem; }
 .deck .btn.ghost { color: #cfe0d8; border-color: #2c3a34; }
 
-.pptx-slide { color: #fff; max-width: 60rem; text-align: left; }
-.pptx-slide h1 { font-size: clamp(1.8rem, 4.6vw, 3rem); margin: 0 0 1.2rem; color: #fff; }
-.pptx-slide ul { font-size: clamp(1.05rem, 2.4vw, 1.5rem); line-height: 1.6; padding-left: 1.4em; }
+/* Slides rebuilt from a PowerPoint file when the server cannot render it.
+   Styled as a white 16:9 slide so it reads like a deck rather than a web page. */
+.pptx-slide {
+  background: #fff; color: #1a1a1a; width: min(100%, 62rem); aspect-ratio: 16 / 9;
+  border-radius: 10px; padding: clamp(1.5rem, 4vw, 3.5rem); text-align: left;
+  display: flex; flex-direction: column; overflow: hidden;
+  font-family: "Liberation Sans", Calibri, Carlito, system-ui, sans-serif;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .35);
+}
+.pptx-slide h1 {
+  font-size: clamp(1.6rem, 3.6vw, 2.6rem); line-height: 1.15; margin: 0 0 1rem;
+  color: #1a1a1a; font-weight: 700;
+}
+.pptx-slide ul { font-size: clamp(1rem, 2vw, 1.4rem); line-height: 1.5; padding-left: 1.2em; margin: 0; }
 .pptx-slide li { margin-bottom: .5rem; }
-.pptx-media { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1.5rem; }
-.pptx-media img { max-height: 34vh; border-radius: 10px; }
+.pptx-media { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: auto; justify-content: center; }
+.pptx-media img { max-height: 30vh; max-width: 100%; object-fit: contain; border-radius: 6px; }
+@media (max-aspect-ratio: 1/1) {
+  .pptx-slide { aspect-ratio: auto; min-height: 60vh; }
+}
 
 /* ---------------------------------------------------------------- done */
 .tick {

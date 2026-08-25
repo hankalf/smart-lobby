@@ -471,17 +471,25 @@
       <h1 class="page">Induction decks</h1>
       <p class="page-sub">Upload a PowerPoint, PDF or images. First-time visitors watch it before they finish signing in;
         people who have already seen the current version skip straight through.</p>
-      ${capabilities.libreoffice && capabilities.poppler ? ''
-        : `<div class="notice">High-fidelity rendering is not available on this server
-           (${capabilities.libreoffice ? '' : 'LibreOffice missing'}${!capabilities.libreoffice && !capabilities.poppler ? ', ' : ''}${capabilities.poppler ? '' : 'poppler/pdftoppm missing'}).
-           PowerPoint files are rebuilt from their text and images instead — for pixel-perfect slides, export your deck to PDF and upload that, or install those tools.</div>`}
+      ${capabilities.libreoffice && capabilities.poppler
+        ? '<div class="notice">Slides are rendered exactly as they look in PowerPoint.</div>'
+        : `<div class="notice error"><b>This server cannot render PowerPoint properly.</b>
+           Missing: ${[capabilities.libreoffice ? null : 'LibreOffice', capabilities.poppler ? null : 'poppler (pdftoppm)'].filter(Boolean).join(' and ')}.
+           Decks are rebuilt from their text and images instead, which loses the original layout, fonts and colours.
+           <br>Deploy with the included <code class="token">Dockerfile</code> to get both, or export your deck to PDF and
+           upload that instead — a PDF keeps the original look.</div>`}
       <div class="row"><button class="btn" id="s-new">New deck</button></div>
       ${rows.length ? rows.map((s) => `
         <div class="card section" data-show="${s.id}">
           <div class="row between">
             <div><h2 style="margin:0">${esc(s.name)} <span class="pill ${s.active ? 'on' : 'off'}">${s.active ? 'active' : 'off'}</span></h2>
               <span class="muted">v${s.version} · ${s.slide_count} slide(s) · watched ${s.views} time(s)
-              ${s.source_file ? `· from ${esc(s.source_file)}` : ''}</span></div>
+              ${s.source_file ? `· from ${esc(s.source_file)}` : ''}</span>
+              ${s.render_mode === 'rebuilt'
+                ? '<div><span class="pill wait">rebuilt from text — not the original layout</span></div>'
+                : s.render_mode === 'rendered'
+                ? '<div><span class="pill on">rendered as designed</span></div>'
+                : s.render_mode === 'pdf' ? '<div><span class="pill wait">embedded PDF</span></div>' : ''}</div>
             <div class="row" style="margin:0">
               <button class="btn ghost" data-preview="${s.id}">Preview</button>
               <button class="btn ghost" data-edit="${s.id}">Settings</button>

@@ -374,6 +374,10 @@ router.get('/slideshows', (req, res) => {
   for (const r of rows) {
     r.slide_count = get('SELECT COUNT(*) AS n FROM slides WHERE slideshow_id = ?', r.id).n;
     r.views = get('SELECT COUNT(*) AS n FROM slide_views WHERE slideshow_id = ? AND completed_at IS NOT NULL', r.id).n;
+    // How the current slides were produced, so a rebuilt deck is never mistaken
+    // for a rendered one.
+    const kinds = all('SELECT DISTINCT kind FROM slides WHERE slideshow_id = ?', r.id).map((k) => k.kind);
+    r.render_mode = kinds.includes('html') ? 'rebuilt' : kinds.includes('pdf') ? 'pdf' : kinds.length ? 'rendered' : null;
   }
   res.json({ rows, capabilities: decks.capabilities() });
 });

@@ -44,7 +44,9 @@ app.get('/api/health', (req, res) => {
     ok: true,
     time: nowISO(),
     onsite: get("SELECT COUNT(*) AS n FROM visits WHERE status='onsite'").n,
-    storage: STORAGE.ephemeral ? 'ephemeral' : 'persistent'
+    storage: STORAGE.ephemeral ? 'ephemeral' : 'persistent',
+    // Whether uploaded PowerPoint decks can be rendered slide-for-slide here.
+    slide_rendering: require('./slides').capabilities()
   });
 });
 
