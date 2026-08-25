@@ -839,15 +839,23 @@
             <li>Paste it into the staff member's <b>Chat webhook</b> box above.</li>
           </ol>
           <p><b>To one person (a DM)</b> — use this when a site manager should be pinged directly rather than
-            in a shared channel.</p>
+            in a shared channel. To send it to <i>yourself</i>, start from a chat with yourself.</p>
           <ol>
-            <li>In Teams, open the chat with that person → <b>⋯</b> → <b>Workflows</b>. (Or open the
-              <b>Workflows</b> app and start from there.)</li>
+            <li>In Teams, click <b>New chat</b>, type your own name and pick yourself — Teams opens a chat with
+              you. (For someone else, just open your chat with them.)</li>
+            <li>Hover that chat in the list → <b>⋯</b> → <b>Workflows</b>. Or open the <b>Workflows</b> app from
+              the left rail and choose <b>+ New flow</b>.</li>
             <li>Choose the template <b>“Post to a chat when a webhook request is received”</b> — the
               <i>chat</i> one, not the channel one.</li>
-            <li>Confirm the chat it will post into, then <b>Add workflow</b> and copy the URL.</li>
+            <li>Confirm the chat it will post into, then <b>Add workflow</b>, and copy the URL. You only get it once.</li>
             <li>Paste it into that person's <b>Chat webhook</b> box above. Only their visitors trigger it.</li>
           </ol>
+          <p class="muted"><b>If the chat template is not offered</b> — some tenants only expose the channel one.
+            Go to <b>make.powerautomate.com</b> → <b>Create</b> → <b>Automated cloud flow</b>, pick the trigger
+            <b>“When a Teams webhook request is received”</b> and set <i>Who can trigger</i> to <b>Anyone</b>. Add
+            the action <b>“Post message in a chat or channel”</b> with <i>Post as</i> = <b>Flow bot</b>,
+            <i>Post in</i> = <b>Chat with Flow bot</b> and <i>Recipient</i> = your own address. Save, then copy the
+            trigger's HTTP URL.</p>
           <p class="muted">The message arrives from <b>Flow bot</b> rather than from a person, which is normal.
             Some tenants restrict the chat template — if you cannot see it, your IT admin controls that.
             Microsoft is also retiring the older Office 365 connectors; if your tenant still offers
