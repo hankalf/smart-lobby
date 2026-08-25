@@ -62,6 +62,18 @@ router.post('/logout', (req, res) => { auth.endSession(req, res); res.json({ ok:
 
 router.use(auth.requireAuth);
 
+// Any successful change in the dashboard bumps the configuration revision, so
+// every kiosk picks it up on its next check-in without anybody touching them.
+router.use((req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD') return next();
+  res.on('finish', () => {
+    if (res.statusCode < 400) {
+      try { settings.bumpConfigRev(); } catch { /* never let this break the request */ }
+    }
+  });
+  next();
+});
+
 router.get('/me', (req, res) => res.json(req.user));
 
 /* ------------------------------------------------------------- dashboard */

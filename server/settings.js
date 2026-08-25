@@ -1,5 +1,5 @@
 'use strict';
-const { get, all, run } = require('./db');
+const { get, all, run } = require('./db'); // eslint-disable-line no-unused-vars
 
 const DEFAULTS = {
   org: {
@@ -207,6 +207,26 @@ function setSection(section, patch) {
   return merged;
 }
 
+/*
+ * A revision number bumped on every admin change. Kiosks send the one they are
+ * running when they check in; a different number means they reload their
+ * configuration, so a change made in the dashboard reaches the tablets by
+ * itself rather than needing someone to walk over and refresh them.
+ */
+const CONFIG_REV_KEY = '_config_rev';
+
+function configRev() {
+  const row = get('SELECT value FROM settings WHERE key = ?', CONFIG_REV_KEY);
+  return row ? Number(row.value) || 0 : 0;
+}
+
+function bumpConfigRev() {
+  const next = configRev() + 1;
+  run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    CONFIG_REV_KEY, String(next));
+  return next;
+}
+
 function setAll(patch) {
   for (const section of Object.keys(patch || {})) {
     if (DEFAULTS[section]) setSection(section, patch[section]);
@@ -229,4 +249,5 @@ function publicSettings() {
 }
 
 module.exports = { DEFAULTS, getAll, getSection, setSection, setAll, publicSettings, deepMerge,
-  isValidTimeZone, isValidLocale, PHONE_COUNTRIES, phoneCountry, DETAIL_FIELDS, fieldsFor };
+  isValidTimeZone, isValidLocale, PHONE_COUNTRIES, phoneCountry, DETAIL_FIELDS, fieldsFor,
+  configRev, bumpConfigRev };

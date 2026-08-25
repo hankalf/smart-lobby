@@ -197,6 +197,17 @@ rejected instead of becoming a broken image on the kiosk. Replacing an image del
 
 ---
 
+## Changes reaching the kiosks
+
+Every change saved in the dashboard bumps a configuration revision. Kiosks check in every 20 seconds and
+reload their settings when that number moves, so branding, sections, form fields, documents and
+inductions all reach the tablets by themselves.
+
+A kiosk part-way through a sign-in waits: it applies the change once the visitor has finished and the
+screen is back at the welcome page, so nobody has a form rearranged under them mid-typing.
+
+---
+
 ## Documents and questions
 
 Each document in **Documents** is assigned to the categories that must sign it, matching the kiosk
@@ -238,6 +249,17 @@ headings — first and last name in separate columns, or a single full-name colu
 "Mobile", "Team" and similar all work. Someone already on the list is updated rather than
 duplicated — matched on email, or on name where there is no email — so a corrected sheet can simply
 be uploaded again. A template is downloadable from that panel.
+
+---
+
+## Changes reaching the kiosks
+
+Every change saved in the dashboard bumps a configuration revision. Kiosks check in every 20 seconds and
+reload their settings when that number moves, so branding, sections, form fields, documents and
+inductions all reach the tablets by themselves.
+
+A kiosk part-way through a sign-in waits: it applies the change once the visitor has finished and the
+screen is back at the welcome page, so nobody has a form rearranged under them mid-typing.
 
 ---
 

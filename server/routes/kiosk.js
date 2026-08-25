@@ -97,6 +97,7 @@ router.get('/config', (req, res) => {
     access_points: pub.access.unlock_button_on_kiosk
       ? all('SELECT id, name FROM access_points WHERE enabled = 1 ORDER BY name')
       : [],
+    config_rev: settings.configRev(),
     server_time: nowISO()
   });
 });
@@ -366,6 +367,7 @@ router.post('/unlock', async (req, res) => {
 /* ------------------------------------------------------------ heartbeat */
 
 router.post('/ping', (req, res) => {
+  const rev = settings.configRev();
   const token = String(req.body.token || '');
   if (token) {
     const device = get('SELECT * FROM devices WHERE token = ?', token);
@@ -382,6 +384,7 @@ router.post('/ping', (req, res) => {
       const location = device.location_id ? get('SELECT name FROM locations WHERE id = ?', device.location_id) : null;
       return res.json({
         ok: true,
+        config_rev: rev,
         device_id: device.id,
         name: device.name,
         site_id: device.site_id,
@@ -393,7 +396,7 @@ router.post('/ping', (req, res) => {
       });
     }
   }
-  res.json({ ok: true, device_id: null });
+  res.json({ ok: true, config_rev: rev, device_id: null });
 });
 
 module.exports = router;

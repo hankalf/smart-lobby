@@ -27,7 +27,9 @@
     lastResult: null,
     deviceToken: localStorage.getItem('sl_device_token') || '',
     deviceId: null,
-    device: null
+    device: null,
+    configRev: null,
+    configPending: false
   };
 
   /* ------------------------------------------------------------- helpers */
@@ -153,9 +155,10 @@
       toast('Cannot reach the lobby server — retrying…');
       return setTimeout(boot, 5000);
     }
+    state.configRev = state.cfg.config_rev;
     applyConfig();
     ping();
-    setInterval(ping, 60000);
+    setInterval(ping, 20000); // also how quickly a dashboard change reaches the kiosk
     setInterval(refreshCount, 60000);
   }
 
@@ -220,8 +223,11 @@
 
     refreshCount();
     tickClock();
-    setInterval(tickClock, 20000);
+    // applyConfig runs again whenever settings change, so this must not stack up.
+    clearInterval(clockTimer);
+    clockTimer = setInterval(tickClock, 20000);
   }
+  let clockTimer = null;
 
   /**
    * Welcome-screen backgrounds. One image is simply shown; several crossfade on a
@@ -301,7 +307,23 @@
       const d = await res.json();
       state.deviceId = d.device_id;
       state.device = d.device_id ? d : null;
+
+      // Something changed in the dashboard: pick it up without anyone walking
+      // over to the tablet, but never mid sign-in.
+      if (d.config_rev !== undefined && state.configRev !== null && d.config_rev !== state.configRev) {
+        state.configPending = true;
+      }
+      if (state.configPending && state.screen === 'idle') await reloadConfig();
     } catch { /* offline; the kiosk keeps working */ }
+  }
+
+  async function reloadConfig() {
+    try {
+      state.cfg = await api('/config');
+      state.configRev = state.cfg.config_rev;
+      state.configPending = false;
+      applyConfig();
+    } catch { /* try again on the next check-in */ }
   }
 
   /* ---------------------------------------------------------------- menu */
