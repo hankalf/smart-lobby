@@ -1375,6 +1375,19 @@
         <p class="muted">Full name is always asked. Deliveries have their own short form, set further down.</p>
       </div>
 
+      <div class="card section"><h2>The order things are asked</h2>
+        <p class="muted" style="margin-top:0">Finding the visitor always comes first — it decides whether they need the
+          induction at all. Everything after that is yours to arrange, per type. A step that does not apply is skipped
+          wherever it sits: no photo asked for, no documents for that type, an induction already watched.</p>
+        <div class="grid two" id="flow-editor">
+          ${DETAIL_TYPES.map(([type, label]) => `
+            <div class="flow-col" data-flowtype="${type}">
+              <h3 style="margin-top:0">${label}</h3>
+              <ol class="flow-list"></ol>
+            </div>`).join('')}
+        </div>
+      </div>
+
       <div class="card section"><h2>Kiosk sign-in flow</h2>
         <div class="form-grid">
           ${chk('kiosk.welcome_shows_menu', 'Skip “Touch to start”',
@@ -1563,6 +1576,42 @@
 
       <div class="row"><button class="btn" id="save-settings">Save settings</button></div>`;
 
+    // Step order, one reorderable list per visitor type.
+    const FLOW_LABELS = { details: 'Their details', photo: 'Photo', documents: 'Documents & questions', induction: 'Induction deck' };
+    const flowState = {};
+    DETAIL_TYPES.forEach(([type]) => {
+      const configured = (s.flow && s.flow[type]) || Object.keys(FLOW_LABELS);
+      // Repair anything missing so a step can never quietly disappear.
+      flowState[type] = [...new Set([...configured.filter((k) => FLOW_LABELS[k]), ...Object.keys(FLOW_LABELS)])];
+    });
+
+    function drawFlow() {
+      DETAIL_TYPES.forEach(([type]) => {
+        const list = $(`[data-flowtype="${type}"] .flow-list`);
+        list.innerHTML = flowState[type].map((step, i) => `<li>
+          <span>${FLOW_LABELS[step]}</span>
+          <span class="flow-moves">
+            <button class="btn ghost" type="button" data-fup="${type}:${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
+            <button class="btn ghost" type="button" data-fdown="${type}:${i}" ${i === flowState[type].length - 1 ? 'disabled' : ''}>↓</button>
+          </span></li>`).join('');
+      });
+      $$('[data-fup]').forEach((b) => b.addEventListener('click', () => {
+        const [type, i] = b.dataset.fup.split(':'); const n = Number(i);
+        const arr = flowState[type];
+        [arr[n - 1], arr[n]] = [arr[n], arr[n - 1]];
+        drawFlow();
+      }));
+      $$('[data-fdown]').forEach((b) => b.addEventListener('click', () => {
+        const [type, i] = b.dataset.fdown.split(':'); const n = Number(i);
+        const arr = flowState[type];
+        [arr[n + 1], arr[n]] = [arr[n], arr[n + 1]];
+        drawFlow();
+      }));
+    }
+    drawFlow();
+    root.dataset.flowReady = '1';
+    VIEWS.settings.collectFlow = () => flowState;
+
     // One tap to switch a field off for every visitor type — turning the selfie
     // off everywhere should not mean four separate changes.
     $$('[data-rowoff]').forEach((b) => b.addEventListener('click', () => {
@@ -1591,6 +1640,7 @@
       });
       patch.kiosk = patch.kiosk || {};
       patch.kiosk.visit_types = $$('[data-vtype]').filter((c) => c.checked).map((c) => c.dataset.vtype);
+      if (VIEWS.settings.collectFlow) patch.flow = VIEWS.settings.collectFlow();
       SETTINGS = await api('/settings', { method: 'PUT', body: patch });
       if (SETTINGS.warnings && SETTINGS.warnings.length) toast(SETTINGS.warnings.join(' '), 7000);
       else toast('Settings saved');

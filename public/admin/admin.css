@@ -124,6 +124,15 @@ td .btn { padding: .35rem .7rem; font-size: .82rem; }
   border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
   background-size: cover; background-position: center;
 }
+.flow-col { border: 1px solid var(--line); border-radius: 12px; padding: 1rem; background: var(--bg); }
+.flow-list { margin: 0; padding-left: 1.3rem; }
+.flow-list li {
+  display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+  padding: .45rem 0; font-size: .93rem;
+}
+.flow-moves { display: flex; gap: .25rem; }
+.flow-moves .btn { padding: .3rem .55rem; line-height: 1; }
+
 .fields-table th { text-transform: none; font-size: .82rem; color: var(--brand-dark); font-weight: 700; }
 .fields-table td { vertical-align: top; }
 .fields-table td:first-child { min-width: 12rem; }

@@ -24,6 +24,9 @@
     answers: {},
     deckIndex: 0,
     deckStart: null,
+    inductionDone: false,
+    flow: [],
+    flowIndex: -1,
     lastResult: null,
     deviceToken: localStorage.getItem('sl_device_token') || '',
     deviceId: null,
@@ -98,6 +101,9 @@
     state.induction = { required: false, slideshow: null };
     state.lastResult = null;
     state.deckIndex = 0;
+    state.inductionDone = false;
+    state.flow = [];
+    state.flowIndex = -1;
     ['#f-name', '#f-company', '#f-phone', '#f-email', '#f-host-search', '#f-host-id', '#f-purpose', '#f-vehicle',
      '#identify-value', '#signout-q', '#d-name', '#d-company', '#d-host-search', '#d-host-id', '#d-tracking'].forEach((s) => {
       const el = $(s); if (el) el.value = '';
@@ -419,7 +425,7 @@
 
   $('#identify-continue').addEventListener('click', async () => {
     const value = $('#identify-value').value.trim();
-    if (!value) return setScreen('details');
+    if (!value) return startFlow();
     const isEmail = value.includes('@');
 
     // Name typed: offer the matches so they can pick themselves.
@@ -430,7 +436,7 @@
       if (!r.matches.length) {
         box.innerHTML = '';
         $('#f-name').value = value;
-        return setScreen('details');
+        return startFlow();
       }
       box.innerHTML = r.matches.map((m) => `<div class="result">
           <div class="result-photo initials">${escapeHtml(initials(m.full_name))}</div>
@@ -444,7 +450,7 @@
       $('#not-listed', box).addEventListener('click', () => {
         box.innerHTML = '';
         $('#f-name').value = value;
-        setScreen('details');
+        startFlow();
       });
       return;
     }
@@ -466,14 +472,14 @@
           ? `Welcome back ${r.visitor.full_name}. Our records show you are already signed in — continue to sign in again, or go back and sign out.`
           : `Welcome back, ${r.visitor.full_name}!${state.induction.required ? '' : ' No need to watch the induction again.'}`;
         note.classList.remove('hidden');
-        setTimeout(() => setScreen('details'), 900);
+        setTimeout(() => startFlow(), 900);
       } else {
         if (isEmail) $('#f-email').value = value; else $('#f-phone').value = value;
-        setScreen('details');
+        startFlow();
       }
     } catch (err) {
       if (err.status === 403) return toast('Please see reception.');
-      setScreen('details');
+      startFlow();
     }
   });
 
@@ -490,16 +496,16 @@
         $('#f-phone').value = r.visitor.phone || '';
         $('#f-email').value = r.visitor.email || '';
       }
-      setScreen('details');
+      startFlow();
     } catch (err) {
       if (err.status === 403) return toast('Please see reception.');
-      setScreen('details');
+      startFlow();
     }
   }
 
   $('#identify-skip').addEventListener('click', async () => {
     try { state.induction = await api('/induction', { visit_type: state.visitType }); } catch { /* ignore */ }
-    setScreen('details');
+    startFlow();
   });
 
   /* -------------------------------------------------------- host picker */
@@ -573,25 +579,52 @@
         state.induction = await api('/induction', { visit_type: state.visitType });
       } catch { /* keep whatever we have */ }
     }
-    nextAfterDetails();
+    nextStep();
 
     function fail(msg) { err.textContent = msg; show(err, true); }
   });
 
-  function nextAfterDetails() {
-    const photo = detailFields().photo || 'off';
-    if (photo !== 'off') {
+  /*
+   * The sign-in steps run in the order configured for this visitor type, so a
+   * contractor can watch the induction before signing anything. A step that does
+   * not apply is skipped wherever it sits in the order.
+   */
+  function startFlow() {
+    const configured = (state.cfg.flow && state.cfg.flow[state.visitType]) || ['details', 'photo', 'documents', 'induction'];
+    state.flow = configured.slice();
+    state.flowIndex = -1;
+    nextStep();
+  }
+
+  function nextStep() {
+    state.flowIndex += 1;
+    const step = state.flow[state.flowIndex];
+    if (!step) return submitSignIn();
+
+    if (step === 'details') return setScreen('details');
+
+    if (step === 'photo') {
+      const photo = detailFields().photo || 'off';
+      if (photo === 'off') return nextStep();
       // A required photo hides the skip, unless the camera could not open at all.
       show($('#btn-photo-skip'), photo !== 'required');
       setScreen('photo');
       return startCamera($('#cam'));
     }
-    afterPhoto();
-  }
 
-  function afterPhoto() {
-    if (state.agreements && state.agreements.length) return showDocument(0);
-    afterAgreement();
+    if (step === 'documents') {
+      if (!state.agreements || !state.agreements.length) return nextStep();
+      return showDocument(0);
+    }
+
+    if (step === 'induction') {
+      const show_ = state.induction && state.induction.slideshow;
+      const needed = state.induction && state.induction.required && show_ && show_.slides && show_.slides.length;
+      if (!needed) return nextStep();
+      return startDeck();
+    }
+
+    return nextStep();
   }
 
   /** Show one document: its text, its questions, and a signature box. */
@@ -652,14 +685,6 @@
 
   const escapeHtml = (s) => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-  function afterAgreement() {
-    if (state.induction && state.induction.required && state.induction.slideshow &&
-        state.induction.slideshow.slides && state.induction.slideshow.slides.length) {
-      return startDeck();
-    }
-    submitSignIn();
-  }
 
   /* ---------------------------------------------------------------- camera */
 
@@ -763,7 +788,7 @@
   }
 
   $('#btn-capture').addEventListener('click', () => {
-    if (!stream) return afterPhoto();
+    if (!stream) return nextStep();
     state.photo = grabFrame($('#cam'));
     $('#shot').src = state.photo;
     show($('#shot'), true);
@@ -784,8 +809,8 @@
     startCamera($('#cam'));
   });
 
-  $('#btn-photo-continue').addEventListener('click', () => { stopCamera(); afterPhoto(); });
-  $('#btn-photo-skip').addEventListener('click', () => { state.photo = null; stopCamera(); afterPhoto(); });
+  $('#btn-photo-continue').addEventListener('click', () => { stopCamera(); nextStep(); });
+  $('#btn-photo-skip').addEventListener('click', () => { state.photo = null; stopCamera(); nextStep(); });
 
   /* ------------------------------------------------------------- signature */
 
@@ -863,7 +888,7 @@
 
     const next = state.agreementIndex + 1;
     if (next < state.agreements.length) return showDocument(next);
-    afterAgreement();
+    nextStep();
   });
 
   /* ------------------------------------------------------------------ deck */
@@ -912,7 +937,7 @@
     if (state.deckIndex < slides.length - 1) { state.deckIndex += 1; return renderSlide(); }
     clearInterval(renderSlide._t);
     if (state.cfg.induction.require_acknowledgement) setScreen('ack');
-    else submitSignIn(true);
+    else { state.inductionDone = true; nextStep(); }
   });
 
   $('#deck-prev').addEventListener('click', () => {
@@ -920,11 +945,12 @@
   });
 
   $('#ack-replay').addEventListener('click', () => { state.deckIndex = 0; renderSlide(); setScreen('induction'); });
-  $('#ack-confirm').addEventListener('click', () => submitSignIn(true));
+  $('#ack-confirm').addEventListener('click', () => { state.inductionDone = true; nextStep(); });
 
   /* --------------------------------------------------------------- sign in */
 
-  async function submitSignIn(inductionDone = false) {
+  async function submitSignIn() {
+    const inductionDone = state.inductionDone;
     const payload = {
       visitor_id: state.visitor ? state.visitor.id : null,
       full_name: $('#f-name').value.trim(),

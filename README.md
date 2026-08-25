@@ -210,6 +210,17 @@ screen is back at the welcome page, so nobody has a form rearranged under them m
 
 ---
 
+## The order things are asked
+
+**Settings → The order things are asked.** Each visitor type has its own order for the four sign-in
+steps — their details, photo, documents and questions, induction deck — reorderable with the arrows.
+A contractor can watch the induction before signing anything, while visitors keep the usual order.
+
+Finding the visitor always comes first, because it decides whether the induction is needed at all. A
+step that does not apply is skipped wherever it sits.
+
+---
+
 ## Documents and questions
 
 Each document in **Documents** is assigned to the categories that must sign it, matching the kiosk
@@ -262,6 +273,17 @@ inductions all reach the tablets by themselves.
 
 A kiosk part-way through a sign-in waits: it applies the change once the visitor has finished and the
 screen is back at the welcome page, so nobody has a form rearranged under them mid-typing.
+
+---
+
+## The order things are asked
+
+**Settings → The order things are asked.** Each visitor type has its own order for the four sign-in
+steps — their details, photo, documents and questions, induction deck — reorderable with the arrows.
+A contractor can watch the induction before signing anything, while visitors keep the usual order.
+
+Finding the visitor always comes first, because it decides whether the induction is needed at all. A
+step that does not apply is skipped wherever it sits.
 
 ---
 

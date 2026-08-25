@@ -29,6 +29,19 @@ const DEFAULTS = {
     interview: { photo: 'required', company: 'off', phone: 'required', email: 'optional', staff: 'required', purpose: 'off', vehicle: 'off' },
     staff: { photo: 'off', company: 'off', phone: 'optional', email: 'off', staff: 'off', purpose: 'off', vehicle: 'off' }
   },
+  /*
+   * The order the sign-in steps are asked in, per visitor type. Finding the
+   * visitor always comes first, because it decides whether the induction is
+   * needed at all; everything after that is yours to arrange. A step that does
+   * not apply — no photo asked for, no documents for this type, an induction
+   * already watched — is skipped wherever it sits.
+   */
+  flow: {
+    visitor: ['details', 'photo', 'documents', 'induction'],
+    contractor: ['details', 'photo', 'documents', 'induction'],
+    interview: ['details', 'photo', 'documents', 'induction'],
+    staff: ['details', 'photo', 'documents', 'induction']
+  },
   kiosk: {
     visit_types: ['visitor', 'contractor', 'interview'],
     welcome_shows_menu: true,
@@ -147,6 +160,23 @@ function fieldsFor(visitType) {
   return details[visitType] || details.visitor;
 }
 
+const FLOW_STEPS = [
+  ['details', 'Their details'],
+  ['photo', 'Photo'],
+  ['documents', 'Documents & questions'],
+  ['induction', 'Induction deck']
+];
+
+/** The step order for a type, repaired if anything is missing or unknown. */
+function flowFor(visitType) {
+  const all = module.exports.getAll().flow || {};
+  const configured = Array.isArray(all[visitType]) ? all[visitType] : (all.visitor || []);
+  const known = FLOW_STEPS.map(([key]) => key);
+  const ordered = configured.filter((s) => known.includes(s));
+  // Anything left out still happens, at the end, rather than silently vanishing.
+  return [...new Set([...ordered, ...known])];
+}
+
 /** True for IANA zone names Intl actually understands, e.g. "America/New_York". */
 function isValidTimeZone(tz) {
   if (!tz || typeof tz !== 'string') return false;
@@ -242,6 +272,7 @@ function publicSettings() {
     org: s.org,
     kiosk: s.kiosk,
     details: s.details,
+    flow: s.flow,
     badge: { ...s.badge, mode: s.badge.mode },
     induction: s.induction,
     deliveries: s.deliveries,
@@ -251,4 +282,4 @@ function publicSettings() {
 
 module.exports = { DEFAULTS, getAll, getSection, setSection, setAll, publicSettings, deepMerge,
   isValidTimeZone, isValidLocale, PHONE_COUNTRIES, phoneCountry, DETAIL_FIELDS, fieldsFor,
-  configRev, bumpConfigRev };
+  FLOW_STEPS, flowFor, configRev, bumpConfigRev };
