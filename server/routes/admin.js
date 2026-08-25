@@ -125,6 +125,46 @@ router.get('/rollcall', (req, res) => {
   res.json({ generated_at: nowISO(), count: rows.length, rows });
 });
 
+/* --------------------------------------------------------------- badges */
+
+/**
+ * Everything needed to print (or reprint) one badge. A visit signed in while
+ * badge printing was off has no number yet, so one is issued now rather than
+ * printing a badge with a blank space where it should be.
+ */
+router.post('/visits/:id/badge', (req, res) => {
+  const visit = get(`SELECT v.*, p.full_name, p.company, h.name AS host_name, s.name AS site_name
+                     FROM visits v JOIN visitors p ON p.id = v.visitor_id
+                     LEFT JOIN hosts h ON h.id = v.host_id LEFT JOIN sites s ON s.id = v.site_id
+                     WHERE v.id = ?`, req.params.id);
+  if (!visit) return res.status(404).json({ error: 'not_found' });
+
+  if (!visit.badge_no) {
+    const badge = settings.getSection('badge');
+    const day = String(visit.signed_in_at).slice(0, 10);
+    const seq = get('SELECT COUNT(*) AS n FROM visits WHERE substr(signed_in_at,1,10) = ? AND id <= ?', day, visit.id).n;
+    visit.badge_no = `${badge.badge_prefix || 'V'}${day.replace(/-/g, '').slice(2)}-${String(seq).padStart(3, '0')}`;
+    run('UPDATE visits SET badge_no = ? WHERE id = ?', visit.badge_no, visit.id);
+  }
+
+  audit(req, 'reprint_badge', 'visit', Number(req.params.id), { badge_no: visit.badge_no });
+  res.json({ visit, badge: settings.getSection('badge'), org: settings.getSection('org') });
+});
+
+/** Badges issued recently, for reprinting a lost or damaged one. */
+router.get('/badges', (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  res.json({
+    issued: all(`SELECT v.id, v.badge_no, v.signed_in_at, v.status, v.visit_type, v.photo_path,
+                        p.full_name, p.company, h.name AS host_name
+                 FROM visits v JOIN visitors p ON p.id = v.visitor_id
+                 LEFT JOIN hosts h ON h.id = v.host_id
+                 WHERE v.signed_in_at >= date('now','-7 days')
+                 ORDER BY v.signed_in_at DESC LIMIT 100`),
+    printed_today: get('SELECT COUNT(*) AS n FROM visits WHERE badge_no IS NOT NULL AND substr(signed_in_at,1,10) = ?', today).n
+  });
+});
+
 /* --------------------------------------------------------------- drivers */
 
 /** Everything about truck drivers in one place: who is on site, and the log. */
@@ -154,7 +194,7 @@ router.get('/drivers', (req, res) => {
     const body = csv(log, [
       { label: 'Driver', key: 'full_name' }, { label: 'Haulier', key: 'company' }, { label: 'Phone', key: 'phone' },
       { label: 'Vehicle', key: 'vehicle_reg' }, { label: 'Reference', key: 'reference' },
-      { label: 'Delivering/collecting', key: 'movement' }, { label: 'Gate', key: 'location_name' },
+      { label: 'Pick-Up / Delivery', key: 'movement' }, { label: 'Gate', key: 'location_name' },
       { label: 'Arrived', key: 'signed_in_at' }, { label: 'Left', key: 'signed_out_at' },
       { label: 'On site (minutes)', value: (r) => (r.signed_out_at
         ? Math.round((new Date(r.signed_out_at) - new Date(r.signed_in_at)) / 60000) : '') },
@@ -172,8 +212,8 @@ router.get('/drivers', (req, res) => {
     stats: {
       onsite: onsite.length,
       today: count("SELECT COUNT(*) AS n FROM visits WHERE visit_type = 'driver' AND substr(signed_in_at,1,10) = ?", today),
-      delivering_today: count("SELECT COUNT(*) AS n FROM visits WHERE visit_type = 'driver' AND movement IN ('Delivering','Both') AND substr(signed_in_at,1,10) = ?", today),
-      collecting_today: count("SELECT COUNT(*) AS n FROM visits WHERE visit_type = 'driver' AND movement IN ('Collecting','Both') AND substr(signed_in_at,1,10) = ?", today),
+      delivering_today: count("SELECT COUNT(*) AS n FROM visits WHERE visit_type = 'driver' AND movement IN ('Delivery','Delivering','Both') AND substr(signed_in_at,1,10) = ?", today),
+      collecting_today: count("SELECT COUNT(*) AS n FROM visits WHERE visit_type = 'driver' AND movement IN ('Pick-Up','Collecting','Both') AND substr(signed_in_at,1,10) = ?", today),
       avg_minutes: get(`SELECT AVG((julianday(signed_out_at) - julianday(signed_in_at)) * 1440) AS m
                         FROM visits WHERE visit_type = 'driver' AND signed_out_at IS NOT NULL`).m
     }
@@ -203,7 +243,7 @@ router.get('/visits', (req, res) => {
       { label: 'Name', key: 'full_name' }, { label: 'Company', key: 'company' }, { label: 'Phone', key: 'phone' },
       { label: 'Email', key: 'email' }, { label: 'Type', key: 'visit_type' }, { label: 'Purpose', key: 'purpose' },
       { label: 'Staff member', key: 'host_name' }, { label: 'Badge', key: 'badge_no' }, { label: 'Vehicle', key: 'vehicle_reg' },
-      { label: 'Reference', key: 'reference' }, { label: 'Delivering/collecting', key: 'movement' },
+      { label: 'Reference', key: 'reference' }, { label: 'Pick-Up / Delivery', key: 'movement' },
       { label: 'Signed in', key: 'signed_in_at' }, { label: 'Signed out', key: 'signed_out_at' },
       { label: 'Status', key: 'status' }, { label: 'Site', key: 'site_name' }
     ]);

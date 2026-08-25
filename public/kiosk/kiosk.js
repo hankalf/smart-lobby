@@ -370,7 +370,7 @@
     }
     if (kiosk.show_driver_button) {
       cards.push(`<button class="tile" data-action="driver">
-        <span class="tile-icon">🚚</span><span>Driver</span><small>Delivering or collecting a load</small></button>`);
+        <span class="tile-icon">🚚</span><span>Driver</span><small>Pick-up or delivery</small></button>`);
     }
     if (kiosk.show_delivery_button && deliveries.enabled) {
       cards.push(`<button class="tile" data-action="delivery">
@@ -606,7 +606,7 @@
     if (fields.staff === 'required' && !$('#f-host-id').value) return fail('Please choose who you are here to see.');
     if (fields.vehicle === 'required' && !$('#f-vehicle').value.trim()) return fail('Please enter your vehicle registration.');
     if (fields.reference === 'required' && !$('#f-reference').value.trim()) return fail('Please enter your load or order reference.');
-    if (fields.movement === 'required' && !$('#f-movement').value) return fail('Please choose whether you are delivering or collecting.');
+    if (fields.movement === 'required' && !$('#f-movement').value) return fail('Please choose whether this is a pick-up or a delivery.');
     show(err, false);
 
     if (!state.visitor) {

@@ -142,6 +142,7 @@ The sections can sit straight on the home screen, or behind a "Touch to start" b
 | Drivers | Truck drivers on site and the full driver log, searchable by driver, haulier, vehicle or reference, with turnaround times and CSV export |
 | Deliveries | Parcels awaiting collection, collect with signature, re-notify, CSV export |
 | Induction decks | Upload/replace decks, reorder and delete slides, preview, per-visit-type targeting |
+| Badges | Badge design, label size, live preview, test print and reprinting |
 | Documents | NDAs, site rules and declarations — assigned to categories, each with its own questions, versioned |
 | Staff | People visitors ask for, each with their own email, mobile and chat webhook. Bulk import from Excel or CSV |
 | Access & doors | HTTP-controlled doors, test unlock, unlock audit trail |
@@ -334,10 +335,17 @@ be uploaded again. A template is downloadable from that panel.
 
 ---
 
-## ID badge printing (optional)
+## Badges (optional)
 
-Off by default. Turn it on in **Settings → ID badge printing**, where you get a live preview and a
-**Print a test badge** button for alignment before any visitor sees it.
+Off by default. The **Badges** tab holds the lot: whether badges print at all, the label stock, what the
+badge shows, a live preview at the real size, a test print, and reprinting.
+
+**Label size** — pick your stock from a list of common Brother and Dymo rolls, or set width and height in
+millimetres. A text-size slider scales everything on the badge together.
+
+**Reprinting** — badges from the last week are listed, searchable by name, company or badge number, with a
+Reprint button; the same is on the dashboard beside anyone on site. A visit that never had a number
+(badges were off at the time) is issued one at that point rather than printing a blank.
 
 Setup:
 

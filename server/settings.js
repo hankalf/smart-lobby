@@ -155,7 +155,7 @@ const DETAIL_FIELDS = [
   ['purpose', 'Reason for visit'],
   ['vehicle', 'Vehicle registration'],
   ['reference', 'Load or order reference'],
-  ['movement', 'Delivering or collecting']
+  ['movement', 'Pick-Up or Delivery']
 ];
 
 /** The form configuration for one visitor type, falling back to the visitor one. */

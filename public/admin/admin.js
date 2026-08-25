@@ -214,7 +214,8 @@
         <td>${esc(r.host_name || '')}</td>
         <td>${esc(r.badge_no || '')}</td>
         <td>${fmtTime(r.signed_in_at)}</td>
-        <td><button class="btn ghost" data-signout="${r.id}">Sign out</button></td></tr>`).join('')}</tbody></table>`;
+        <td><button class="btn ghost" data-reprint="${r.id}">Badge</button>
+            <button class="btn ghost" data-signout="${r.id}">Sign out</button></td></tr>`).join('')}</tbody></table>`;
   }
 
   function bindSignoutButtons(root, after) {
@@ -223,6 +224,8 @@
       toast('Signed out');
       after();
     }));
+    // Reprinting from wherever somebody is standing when they are asked for it.
+    $$('[data-reprint]', root).forEach((b) => b.addEventListener('click', () => reprintBadge(b.dataset.reprint)));
   }
 
   async function rollCall() {
@@ -394,7 +397,7 @@
     const data = await api(`/drivers?${params}`);
     const cfg = await api('/settings');
 
-    const movementPill = (m) => (m ? `<span class="pill ${m === 'Collecting' ? 'wait' : 'on'}">${esc(m)}</span>` : '—');
+    const movementPill = (m) => (m ? `<span class="pill ${/pick/i.test(m) ? 'wait' : 'on'}">${esc(m)}</span>` : '—');
     const minutes = (r) => (r.signed_out_at
       ? `${Math.round((new Date(r.signed_out_at) - new Date(r.signed_in_at)) / 60000)} min`
       : `<span class="muted">on site</span>`);
@@ -409,7 +412,7 @@
 
       <div class="grid cards" style="margin-bottom:1.25rem">
         ${[['On site now', data.stats.onsite], ['Arrived today', data.stats.today],
-           ['Delivering today', data.stats.delivering_today], ['Collecting today', data.stats.collecting_today],
+           ['Deliveries today', data.stats.delivering_today], ['Pick-ups today', data.stats.collecting_today],
            ['Average turnaround', data.stats.avg_minutes ? `${Math.round(data.stats.avg_minutes)} min` : '—']]
           .map(([l, n]) => `<div class="card stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('')}
       </div>
@@ -417,7 +420,7 @@
       <div class="card section">
         <h2>On site now (${data.onsite.length})</h2>
         ${data.onsite.length ? `<div class="table-wrap"><table>
-          <thead><tr><th>Driver</th><th>Haulier</th><th>Vehicle</th><th>Reference</th><th>Doing</th><th>Gate</th><th>Arrived</th><th></th></tr></thead>
+          <thead><tr><th>Driver</th><th>Haulier</th><th>Vehicle</th><th>Reference</th><th>Pick-Up / Delivery</th><th>Gate</th><th>Arrived</th><th></th></tr></thead>
           <tbody>${data.onsite.map((r) => `<tr>
             <td><b>${esc(r.full_name)}</b>${r.phone ? `<div class="muted">${esc(r.phone)}</div>` : ''}</td>
             <td>${esc(r.company || '')}</td>
@@ -444,7 +447,7 @@
           ${VIEWS.drivers.q || VIEWS.drivers.from || VIEWS.drivers.to ? '<button class="btn ghost" id="dr-clear">Clear</button>' : ''}
         </div>
         ${data.log.length ? `<div class="table-wrap"><table>
-          <thead><tr><th>Arrived</th><th>Driver</th><th>Haulier</th><th>Vehicle</th><th>Reference</th><th>Doing</th><th>Gate</th><th>Turnaround</th></tr></thead>
+          <thead><tr><th>Arrived</th><th>Driver</th><th>Haulier</th><th>Vehicle</th><th>Reference</th><th>Pick-Up / Delivery</th><th>Gate</th><th>Turnaround</th></tr></thead>
           <tbody>${data.log.map((r) => `<tr>
             <td>${fmtDate(r.signed_in_at)}</td>
             <td><b>${esc(r.full_name)}</b></td>
@@ -847,6 +850,203 @@
       drawQuestions();
     });
     drawQuestions();
+  }
+
+  /* --------------------------------------------------------------- badges */
+
+  // Common label stock, so nobody has to measure their own roll.
+  const LABEL_SIZES = [
+    [62, 100, 'Brother DK-11202 — 62 × 100 mm'],
+    [62, 29, 'Brother DK-11209 — 62 × 29 mm'],
+    [62, 60, 'Brother DK-11221 — 62 × 60 mm'],
+    [54, 101, 'Dymo 99014 — 54 × 101 mm'],
+    [89, 36, 'Dymo 99012 — 89 × 36 mm'],
+    [101.6, 152.4, '4 × 6 inch shipping label'],
+    [76.2, 50.8, '3 × 2 inch label'],
+    [86, 54, 'Credit-card size — 86 × 54 mm']
+  ];
+
+  VIEWS.badges = async (root) => {
+    SETTINGS = await api('/settings');
+    const s = SETTINGS;
+    const b = s.badge;
+    const data = await api('/badges');
+
+    const chk = (path, label, help) => `<label class="check"><input type="checkbox" data-set="${path}"
+      ${getPath(s, path) ? 'checked' : ''}> <span>${label}${help ? `<br><span class="muted">${help}</span>` : ''}</span></label>`;
+    const txt = (path, label, type = 'text') => `<label class="field"><span>${label}</span>
+      <input class="input" data-set="${path}" type="${type}" value="${esc(getPath(s, path) ?? '')}"></label>`;
+    const isPreset = LABEL_SIZES.some(([w, h]) => Number(b.label_width_mm) === w && Number(b.label_height_mm) === h);
+
+    root.innerHTML = `
+      <h1 class="page">Badges</h1>
+      <p class="page-sub">What a printed badge shows, the label it prints on, and reprinting one that has been lost.</p>
+
+      <div class="card section">
+        <div class="check-list">
+          ${chk('badge.enabled', 'Print a badge when someone signs in',
+            'Leave this off if no label printer is connected — everything else works either way')}
+          ${chk('badge.auto_print', 'Print automatically', 'Off means the visitor taps “Print badge” themselves')}
+        </div>
+      </div>
+
+      <div class="grid two">
+        <div class="card section">
+          <h2>Label size</h2>
+          <label class="field"><span>Label stock</span>
+            <select class="input" id="label-preset">
+              ${LABEL_SIZES.map(([w, h, name]) =>
+                `<option value="${w}x${h}" ${Number(b.label_width_mm) === w && Number(b.label_height_mm) === h ? 'selected' : ''}>${name}</option>`).join('')}
+              <option value="custom" ${isPreset ? '' : 'selected'}>Custom size…</option>
+            </select></label>
+          <div class="form-grid">
+            ${txt('badge.label_width_mm', 'Width (mm)', 'number')}
+            ${txt('badge.label_height_mm', 'Height (mm)', 'number')}
+          </div>
+          <label class="field"><span>Text size — <b id="scale-value">${b.font_scale}</b>×</span>
+            <input type="range" min="0.6" max="1.6" step="0.05" id="badge-scale" data-set="badge.font_scale" value="${b.font_scale}"></label>
+          <h3>Wording</h3>
+          <div class="field-list">
+            ${txt('badge.title_text', 'Header')}
+            ${txt('badge.footer_text', 'Footer')}
+            ${txt('badge.badge_prefix', 'Badge number prefix')}
+          </div>
+        </div>
+
+        <div class="card section">
+          <h2>What the badge shows</h2>
+          <div class="check-list">
+            ${chk('badge.show_logo', 'Logo')}
+            ${chk('badge.show_photo', 'Photo')}
+            ${chk('badge.show_company', 'Company')}
+            ${chk('badge.show_host', 'Who they are visiting')}
+            ${chk('badge.show_date', 'Date')}
+            ${chk('badge.show_time', 'Time')}
+            ${chk('badge.show_badge_no', 'Badge number')}
+            ${chk('badge.show_qr', 'QR code', 'Scannable at the kiosk to sign out')}
+          </div>
+        </div>
+      </div>
+
+      <div class="card section">
+        <h2>Preview</h2>
+        <p class="muted" style="margin-top:0">Shown at the real label size, updating as you change things.</p>
+        <div class="badge-preview-wrap">
+          <div class="badge-preview" id="badge-preview"></div>
+          <div>
+            <div class="row"><button class="btn" id="badge-save">Save badge settings</button>
+              <button class="btn subtle" id="badge-test">Print a test badge</button></div>
+            <p class="muted" style="max-width:32rem">Connect the label printer to the device showing the kiosk and make
+              it the default printer. In Chrome or Edge set margins to <b>None</b>, turn headers and footers off and
+              background graphics on. On iPad, AirPrint remembers the printer you pick. Print a test badge and adjust the
+              size until it lines up.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card section">
+        <h2>Reprint a badge</h2>
+        <p class="muted" style="margin-top:0">Badges from the last week. Reprinting does not change the visit — it
+          prints the same badge again, issuing a number first if that visit never had one.</p>
+        <div class="row">
+          <input class="input" id="badge-q" placeholder="Search name, company or badge number" style="max-width:20rem">
+        </div>
+        <div class="table-wrap" id="badge-list"></div>
+      </div>`;
+
+    const drawList = () => {
+      const q = ($('#badge-q').value || '').toLowerCase();
+      const rows = data.issued.filter((r) => !q
+        || (r.full_name || '').toLowerCase().includes(q)
+        || (r.company || '').toLowerCase().includes(q)
+        || (r.badge_no || '').toLowerCase().includes(q));
+      $('#badge-list').innerHTML = rows.length ? `<table>
+        <thead><tr><th></th><th>Name</th><th>Company</th><th>Badge</th><th>Signed in</th><th>Status</th><th></th></tr></thead>
+        <tbody>${rows.map((r) => `<tr>
+          <td>${r.photo_path ? `<img class="avatar" src="${esc(r.photo_path)}" alt="">` : '<div class="avatar"></div>'}</td>
+          <td><b>${esc(r.full_name)}</b></td>
+          <td>${esc(r.company || '')}</td>
+          <td>${esc(r.badge_no || '—')}</td>
+          <td>${fmtDate(r.signed_in_at)}</td>
+          <td><span class="pill ${r.status === 'onsite' ? 'on' : 'off'}">${esc(r.status)}</span></td>
+          <td><button class="btn ghost" data-reprint="${r.id}">Reprint</button></td></tr>`).join('')}</tbody></table>`
+        : '<p class="empty">No badges issued in the last week.</p>';
+      $$('[data-reprint]').forEach((btn) => btn.addEventListener('click', () => reprintBadge(btn.dataset.reprint)));
+    };
+    drawList();
+    $('#badge-q').addEventListener('input', drawList);
+
+    // The preset and the custom boxes stay in step with each other.
+    $('#label-preset').addEventListener('change', (e) => {
+      if (e.target.value === 'custom') return;
+      const [w, h] = e.target.value.split('x');
+      $('[data-set="badge.label_width_mm"]').value = w;
+      $('[data-set="badge.label_height_mm"]').value = h;
+      drawBadgePreview();
+    });
+    $$('[data-set^="badge."]').forEach((input) => input.addEventListener('input', () => {
+      if (input.id === 'badge-scale') $('#scale-value').textContent = input.value;
+      drawBadgePreview();
+    }));
+
+    $('#badge-test').addEventListener('click', printTestBadge);
+    $('#badge-save').addEventListener('click', async () => {
+      const patch = {};
+      $$('[data-set^="badge."]').forEach((input) => {
+        const value = input.type === 'checkbox' ? input.checked
+          : (input.type === 'number' || input.type === 'range') ? Number(input.value)
+          : input.value;
+        setPath(patch, input.dataset.set, value);
+      });
+      SETTINGS = await api('/settings', { method: 'PUT', body: patch });
+      toast('Badge settings saved');
+    });
+
+    drawBadgePreview();
+  };
+
+  /** Print one visitor's badge again, using the current design. */
+  async function reprintBadge(visitId) {
+    const { visit, badge, org } = await api(`/visits/${visitId}/badge`, { method: 'POST' });
+    const meta = [
+      badge.show_host && visit.host_name ? `Visiting: ${visit.host_name}` : '',
+      badge.show_date ? new Date(visit.signed_in_at).toLocaleDateString(org.date_format || 'en-GB') : '',
+      badge.show_time ? new Date(visit.signed_in_at).toLocaleTimeString(org.date_format || 'en-GB', { hour: '2-digit', minute: '2-digit' }) : '',
+      badge.show_badge_no && visit.badge_no ? visit.badge_no : ''
+    ].filter(Boolean).join('<br>');
+
+    openBadgeWindow(badge, `
+      ${badge.show_logo && org.logo_path ? `<img class="logo" src="${esc(org.logo_path)}">` : ''}
+      <div class="type">${esc(badge.title_text || String(visit.visit_type).toUpperCase())}</div>
+      ${badge.show_photo && visit.photo_path ? `<img class="photo" src="${esc(visit.photo_path)}">` : ''}
+      <div class="name">${esc(visit.full_name)}</div>
+      ${badge.show_company && visit.company ? `<div class="company">${esc(visit.company)}</div>` : ''}
+      <div class="meta">${meta}</div>
+      ${badge.show_qr && visit.checkout_code ? `<div class="qr"><img src="/api/qr?text=${encodeURIComponent(visit.checkout_code)}"></div>` : ''}
+      <div class="foot">${esc(badge.footer_text || '')}</div>`);
+    toast(`Reprinting badge ${visit.badge_no}`);
+  }
+
+  /** A print window sized to the label, sharing one layout with the kiosk. */
+  function openBadgeWindow(b, innerHtml) {
+    const w = window.open('', '_blank', 'width=420,height=640');
+    w.document.write(`<!doctype html><title>Badge</title><style>
+      @page { size: ${b.label_width_mm}mm ${b.label_height_mm}mm; margin: 0; }
+      body { margin:0; font-family: system-ui, "Segoe UI", Arial, sans-serif; }
+      .card { width:${b.label_width_mm}mm; height:${b.label_height_mm}mm; padding:4mm; display:flex;
+              flex-direction:column; align-items:center; text-align:center; box-sizing:border-box; overflow:hidden; }
+      .logo { max-height:10mm; max-width:40mm; }
+      .type { font-weight:800; letter-spacing:.18em; font-size:calc(4.4mm * ${b.font_scale || 1}); }
+      .photo { width:30mm; height:30mm; object-fit:cover; border-radius:2mm; margin:2mm 0; }
+      .name { font-weight:800; font-size:calc(5.6mm * ${b.font_scale || 1}); line-height:1.15; margin-top:1mm; }
+      .company { font-size:calc(3.6mm * ${b.font_scale || 1}); margin-top:1mm; }
+      .meta { font-size:calc(3.2mm * ${b.font_scale || 1}); margin-top:1.5mm; line-height:1.4; }
+      .qr { width:22mm; margin-top:auto; } .qr img { width:100%; }
+      .foot { font-size:calc(2.6mm * ${b.font_scale || 1}); margin-top:1.5mm; }
+    </style><div class="card">${innerHtml}</div>`);
+    w.document.close();
+    // Give the photo and QR a moment to load, or they print blank.
+    setTimeout(() => w.print(), 700);
   }
 
   /* ---------------------------------------------------------------- staff */
@@ -1393,7 +1593,7 @@
     ['purpose', 'Reason for visit', ''],
     ['vehicle', 'Vehicle registration', ''],
     ['reference', 'Load or order reference', 'Order, docket or PO number'],
-    ['movement', 'Delivering or collecting', '']
+    ['movement', 'Pick-Up or Delivery', '']
   ];
   const DETAIL_TYPES = [['visitor', 'Visitors'], ['contractor', 'Contractors'], ['interview', 'Interviews'],
     ['driver', 'Drivers']];
@@ -1582,42 +1782,8 @@
       </div>
 
       <div class="card section"><h2>ID badge printing</h2>
-        <p class="muted">Badge printing is optional. Turn it on only when a label printer is connected — everything else keeps working either way.</p>
-        ${chk('badge.enabled', 'Print a badge when someone signs in')}
-        <div id="badge-setup" class="${s.badge.enabled ? '' : 'hidden'}">
-          <div class="badge-preview-wrap" style="margin-top:1rem">
-            <div style="flex:1;min-width:280px">
-              <div class="form-grid">
-                ${txt('badge.label_width_mm', 'Label width (mm)', 'number')}
-                ${txt('badge.label_height_mm', 'Label height (mm)', 'number')}
-                ${txt('badge.title_text', 'Header text')}
-                ${txt('badge.badge_prefix', 'Badge number prefix')}
-                ${txt('badge.footer_text', 'Footer text')}
-                ${txt('badge.font_scale', 'Font scale (1 = normal)', 'number')}
-              </div>
-              <div class="form-grid">
-                ${chk('badge.auto_print', 'Print automatically (no extra tap)')}
-                ${chk('badge.show_logo', 'Show logo')}
-                ${chk('badge.show_photo', 'Show photo')}
-                ${chk('badge.show_company', 'Show company')}
-                ${chk('badge.show_host', 'Show host')}
-                ${chk('badge.show_date', 'Show date')}
-                ${chk('badge.show_time', 'Show time')}
-                ${chk('badge.show_qr', 'Show sign-out QR code')}
-                ${chk('badge.show_badge_no', 'Show badge number')}
-              </div>
-              <div class="row"><button class="btn subtle" id="badge-test">Print a test badge</button></div>
-              <p class="muted">Setup: connect the label printer to the tablet or the kiosk PC, set it as the default printer,
-                choose the matching label size in the printer driver, then print a test badge. In Chrome/Edge, turn off
-                “Headers and footers” and set margins to <b>None</b> so the label fills the whole area. On iPad, AirPrint
-                shows the print dialog — pick the label printer once and it is remembered.</p>
-            </div>
-            <div>
-              <span class="muted">Preview</span>
-              <div class="badge-preview" id="badge-preview"></div>
-            </div>
-          </div>
-        </div>
+        <p class="muted">Badge design, label size and reprinting now live in their own <b>Badges</b> tab.</p>
+        <button class="btn subtle" id="go-badges">Open Badges</button>
       </div>
 
       <div class="card section"><h2>Induction</h2>
@@ -1911,8 +2077,11 @@
         ? '<div class="notice"><b>Webhook delivered.</b></div>'
         : `<div class="notice error"><b>Webhook failed.</b> ${esc(r.detail || '')}</div>`;
     });
-    const badgeTest = $('#badge-test');
-    if (badgeTest) badgeTest.addEventListener('click', printTestBadge);
+    const goBadges = $('#go-badges');
+    if (goBadges) goBadges.addEventListener('click', () => {
+      const btn = $('#nav button[data-view="badges"]');
+      if (btn) btn.click();
+    });
 
     $('#u-add').addEventListener('click', async () => {
       try {
