@@ -315,6 +315,8 @@ async function sendTest(to) {
   const n = settings.getSection('notify');
   const t = transport();
   if (!t) {
+    // Recorded too, so the log explains why a test produced nothing.
+    log({ channel: 'email', target: to, subject: 'test', status: 'skipped_disabled' });
     return { ok: false, error: 'Email is switched off, or no SMTP host is set. Save those settings, then test.' };
   }
   if (!to) return { ok: false, error: 'No address to send the test to.' };

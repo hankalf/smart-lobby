@@ -449,6 +449,11 @@ Teams. The format dropdown in Settings only applies to URLs that are not recogni
 You control which events fire on each channel: arrival, sign-out, and delivery are separate toggles,
 and SMS has its own arrival/delivery toggles so you can keep texts for arrivals only.
 
+**Settings → Notifications → What has been sent** lists the last 50 attempts on every channel, with the
+address or webhook, the result, and the reason for any failure — including ones skipped because a channel is
+switched off. Test messages go to the address in **Send test emails to** and nowhere else; a test can never
+reach a staff member or a visitor.
+
 Nothing is sent until you configure it — until then arrivals are logged and shown on the dashboard,
 and the notification log records `skipped_disabled`. A channel failing never blocks a sign-in: the
 visitor completes, and the reason is recorded against the visit (visible in **Visits → View**).

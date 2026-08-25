@@ -804,8 +804,20 @@ router.delete('/settings/backgrounds/:index', (req, res) => {
   res.json({ ok: true, backgrounds: list });
 });
 
+/** Every notification attempt, so it is clear what was sent and to whom. */
+router.get('/notifications', (req, res) => {
+  res.json(all(`SELECT n.*, p.full_name AS visitor_name
+                FROM notifications n
+                LEFT JOIN visits v ON v.id = n.visit_id
+                LEFT JOIN visitors p ON p.id = v.visitor_id
+                ORDER BY n.id DESC LIMIT 50`));
+});
+
 router.post('/settings/test-email', async (req, res) => {
-  const to = req.body.to || req.user.email;
+  // Fixed by configuration rather than taken from the request, so a test can
+  // never be aimed at a staff member or a visitor by accident.
+  const n = settings.getSection('notify');
+  const to = clean(n.test_email_to) || req.user.email;
   const result = await notify.sendTest(to);
   res.json({ ...result, to });
 });

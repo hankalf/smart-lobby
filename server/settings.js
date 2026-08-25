@@ -109,6 +109,8 @@ const DEFAULTS = {
     smtp_secure: false,
     smtp_user: '',
     smtp_pass: '',
+    // Tests always go here, never to a staff member or a visitor.
+    test_email_to: 'hank.alfred@naturestouch.ca',
     on_signin: true,
     on_signout: false,
     on_delivery: true,

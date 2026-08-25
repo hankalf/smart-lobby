@@ -2034,6 +2034,16 @@
           <button class="btn subtle" id="test-sms">Send test SMS</button>
           <input class="input" id="test-sms-to" placeholder="Number for the test SMS" style="max-width:15rem"></div>
         <div id="email-result"></div>
+        <label class="field" style="max-width:26rem;margin-top:.75rem"><span>Send test emails to</span>
+          <input class="input" data-set="notify.test_email_to" type="email"
+            value="${esc(s.notify.test_email_to || '')}" placeholder="${esc(ME.email)}">
+          <span class="muted">Every test goes here and nowhere else — never to a staff member or a visitor.
+            Left empty, tests go to whoever is signed in.</span></label>
+
+        <h3>What has been sent</h3>
+        <p class="muted" style="margin-top:0">The last 50 attempts on every channel, including the ones that were
+          skipped because a channel is switched off.</p>
+        <div class="table-wrap" id="notify-log"><p class="muted">Loading…</p></div>
       </div>
 
       <div class="card section"><h2>Data retention</h2>
@@ -2203,6 +2213,27 @@
       render('settings');
     });
 
+    // What was actually sent, so a test is not a black box.
+    const drawNotifications = async () => {
+      const rows = await api('/notifications').catch(() => []);
+      const status = (r) => {
+        if (r.status === 'sent') return '<span class="pill on">sent</span>';
+        if (String(r.status).startsWith('skipped')) return `<span class="pill off">${esc(r.status.replace('skipped_', 'skipped: '))}</span>`;
+        return `<span class="pill" style="background:#fdecea;color:var(--danger)">${esc(r.status)}</span>`;
+      };
+      $('#notify-log').innerHTML = rows.length ? `<table>
+        <thead><tr><th>When</th><th>Channel</th><th>Sent to</th><th>About</th><th>Result</th></tr></thead>
+        <tbody>${rows.map((r) => `<tr>
+          <td>${fmtDate(r.created_at)}</td>
+          <td>${esc(r.channel)}</td>
+          <td>${esc(r.target || '—')}</td>
+          <td>${esc(r.visitor_name || r.subject || '—')}</td>
+          <td>${status(r)}${r.error ? `<div class="muted">${esc(String(r.error).slice(0, 120))}</div>` : ''}</td>
+        </tr>`).join('')}</tbody></table>`
+        : '<p class="empty">Nothing has been sent yet.</p>';
+    };
+    drawNotifications();
+
     // Server settings for the common providers, so nobody has to look up a port.
     const SMTP_PRESETS = {
       gmail: { host: 'smtp.gmail.com', port: 587, secure: false },
@@ -2221,10 +2252,11 @@
     $('#test-email').addEventListener('click', async () => {
       const box = $('#email-result');
       box.innerHTML = '<p class="muted">Sending…</p>';
-      const r = await api('/settings/test-email', { method: 'POST', body: { to: ME.email } });
+      const r = await api('/settings/test-email', { method: 'POST' });
       box.innerHTML = r.ok
         ? `<div class="notice">Test email sent to <b>${esc(r.to)}</b>. If it does not arrive, check the spam folder.</div>`
         : `<div class="notice error"><b>Could not send.</b> ${esc(r.error || '')}</div>`;
+      drawNotifications();
     });
     $('#test-sms').addEventListener('click', async () => {
       const to = $('#test-sms-to').value.trim();
@@ -2239,6 +2271,7 @@
       box.innerHTML = r.ok
         ? '<div class="notice"><b>Webhook delivered.</b></div>'
         : `<div class="notice error"><b>Webhook failed.</b> ${esc(r.detail || '')}</div>`;
+      drawNotifications();
     });
     const goBadges = $('#go-badges');
     if (goBadges) goBadges.addEventListener('click', () => {
