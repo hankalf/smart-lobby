@@ -55,10 +55,29 @@ function detectWebhookFormat(url) {
   return null;
 }
 
+/**
+ * Where a chat notification goes: the person's own webhook, and the company
+ * channel as well when that is switched on. With it off the channel is only a
+ * fallback for people who have no webhook of their own.
+ */
+function webhookTargets(ownUrl) {
+  const n = settings.getSection('notify');
+  const list = [];
+  if (ownUrl) list.push(ownUrl);
+  if (n.global_webhook_url && (n.webhook_channel_always !== false || !ownUrl)) list.push(n.global_webhook_url);
+  return [...new Set(list.filter(Boolean))];
+}
+
+/** Post to every destination for this recipient, and report on each. */
+function sendWebhooks({ ownUrl, title, lines, photoUrl, visit_id, delivery_id }) {
+  return Promise.all(webhookTargets(ownUrl).map((url) =>
+    sendWebhook({ url, title, lines, photoUrl, visit_id, delivery_id })));
+}
+
 async function sendWebhook({ url, title, lines, photoUrl, visit_id, delivery_id }) {
   const n = settings.getSection('notify');
-  const target = url || n.global_webhook_url;
-  if (!target) return false;
+  const target = url;
+  if (!target) return { ok: false, status: 0, detail: 'No webhook URL.' };
   const format = detectWebhookFormat(target) || n.webhook_format;
   const body = format === 'teams'
     // Teams Workflows (which replaced Office 365 connectors) rejects a bare
@@ -92,17 +111,42 @@ async function sendWebhook({ url, title, lines, photoUrl, visit_id, delivery_id 
         ]
       };
   try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
     const res = await fetch(target, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      signal: controller.signal
     });
-    log({ visit_id, delivery_id, channel: 'webhook', target, subject: title, status: res.ok ? 'sent' : `http_${res.status}` });
-    return res.ok;
+    clearTimeout(timer);
+
+    // Chat platforms explain refusals in the body, which is the useful part.
+    const text = await res.text().catch(() => '');
+    log({
+      visit_id, delivery_id, channel: 'webhook', target, subject: title,
+      status: res.ok ? 'sent' : `http_${res.status}`,
+      error: res.ok ? null : text.slice(0, 500)
+    });
+    return { ok: res.ok, status: res.status, detail: explainWebhookError(res.status, text, format) };
   } catch (err) {
-    log({ visit_id, delivery_id, channel: 'webhook', target, subject: title, status: 'error', error: String(err.message || err) });
-    return false;
+    const detail = /abort/i.test(String(err.message)) ? 'The server did not answer within 15 seconds.' : String(err.message || err);
+    log({ visit_id, delivery_id, channel: 'webhook', target, subject: title, status: 'error', error: detail });
+    return { ok: false, status: 0, detail };
   }
+}
+
+function explainWebhookError(status, body, format) {
+  if (status >= 200 && status < 300) return 'Delivered.';
+  const text = String(body || '').slice(0, 300);
+  if (status === 400 && format === 'teams') {
+    return 'Teams rejected the message (400). This usually means the flow expects a different payload — '
+      + `check the workflow is the webhook template rather than a custom one. Response: ${text}`;
+  }
+  if (status === 404 || status === 410) return 'That webhook no longer exists — it may have been deleted in Teams or Slack.';
+  if (status === 401 || status === 403) return 'The webhook refused the request. It may have been revoked, or your tenant blocks it.';
+  if (status === 429) return 'Rate limited — too many messages too quickly.';
+  return `The server answered ${status}. ${text}`;
 }
 
 /**
@@ -193,7 +237,7 @@ async function notifyArrival(visitId) {
 
   await Promise.all([
     sendEmail({ to: v.host_email, subject: title, html, text: lines.join('\n'), visit_id: visitId }),
-    sendWebhook({ url: v.host_webhook, title, lines, photoUrl, visit_id: visitId }),
+    sendWebhooks({ ownUrl: v.host_webhook, title, lines, photoUrl, visit_id: visitId }),
     n.sms_on_signin
       ? sendSms({ to: v.host_phone, message: `${title}. ${v.company ? v.company + '. ' : ''}Reception.`, visit_id: visitId })
       : Promise.resolve(false)
@@ -209,7 +253,7 @@ async function notifyDeparture(visitId) {
   const lines = [`Signed out: ${fmtTime(v.signed_out_at)}`, v.host_name ? `Staff member: ${v.host_name}` : null].filter(Boolean);
   await Promise.all([
     sendEmail({ to: v.host_email, subject: title, text: lines.join('\n'), html: `<p>${title}</p><p>${lines.join('<br>')}</p>`, visit_id: visitId }),
-    sendWebhook({ url: v.host_webhook, title, lines, visit_id: visitId })
+    sendWebhooks({ ownUrl: v.host_webhook, title, lines, visit_id: visitId })
   ]);
 }
 
@@ -234,7 +278,7 @@ async function notifyDelivery(deliveryId) {
     <ul>${lines.map((l) => `<li>${l}</li>`).join('')}</ul></div>`;
   await Promise.all([
     sendEmail({ to: d.host_email, subject: title, html, text: lines.join('\n'), delivery_id: deliveryId }),
-    sendWebhook({ url: d.host_webhook, title, lines, photoUrl, delivery_id: deliveryId }),
+    sendWebhooks({ ownUrl: d.host_webhook, title, lines, photoUrl, delivery_id: deliveryId }),
     n.sms_on_delivery
       ? sendSms({ to: d.host_phone, message: `${title}. ${d.parcel_count} parcel(s) at reception.`, delivery_id: deliveryId })
       : Promise.resolve(false)
@@ -296,4 +340,5 @@ async function sendTestSms(to) {
   return sendSms({ to, message: 'Smart Lobby test message. If you can read this, SMS notifications are working.' });
 }
 
-module.exports = { notifyArrival, notifyDeparture, notifyDelivery, sendTest, sendTestSms, sendWebhook, sendEmail, sendSms, toE164, baseUrl };
+module.exports = { notifyArrival, notifyDeparture, notifyDelivery, sendTest, sendTestSms, sendWebhook, sendWebhooks,
+  webhookTargets, sendEmail, sendSms, toE164, baseUrl };

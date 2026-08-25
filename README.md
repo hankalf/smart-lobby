@@ -355,6 +355,10 @@ from **Test unlock** in the dashboard. Every attempt is logged with who, when, w
 | **Generic JSON** | Any URL | `{event, details[], photo_url, timestamp}` — use it to drive anything else. |
 | **SMS** | Twilio Account SID, Auth Token, from-number | Texts the staff member's mobile. Numbers are converted to E.164, so `07700 900123` works. |
 
+Chat notifications go to two places at once: a **company channel** that sees every arrival, and each
+person's **own webhook** for their own visitors. Switch the channel off being always-on and it becomes a
+fallback for people who have no webhook of their own.
+
 Each staff member can have their own email address, mobile number and chat webhook, so alerts land with the
 right person rather than a shared inbox. Set them in **Staff**, which carries step-by-step setup
 instructions for Slack, Teams and Google Chat.

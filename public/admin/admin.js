@@ -784,7 +784,8 @@
             <td>${esc(h.phone || '')}</td>
             <td>${esc(h.department || '')}</td><td class="muted">${h.webhook_url ? 'configured' : '—'}</td>
             <td><span class="pill ${h.active ? 'on' : 'off'}">${h.active ? 'active' : 'off'}</span></td>
-            <td><button class="btn ghost" data-hdel="${h.id}">Remove</button></td></tr>`).join('')}</tbody></table>`
+            <td><button class="btn ghost" data-hedit="${h.id}">Edit</button>
+                <button class="btn ghost" data-hdel="${h.id}">Remove</button></td></tr>`).join('')}</tbody></table>`
           : '<p class="empty">No staff yet — add the people visitors come to see.</p>'}</div>
       </div>
 
@@ -897,8 +898,48 @@
         department: $('#h-dept').value.trim(), webhook_url: $('#h-hook').value.trim(), active: 1 } });
       render('staff');
     });
-    $$('[data-hdel]').forEach((b) => b.addEventListener('click', async () => {
-      await api(`/staff/${b.dataset.hdel}`, { method: 'DELETE' }); render('staff');
+    $$('[data-hdel]').forEach((b) => b.addEventListener('click', () => confirmAction(
+      'Remove this person? Past visits keep their name; they just stop being offered on the kiosk.',
+      async () => { await api(`/staff/${b.dataset.hdel}`, { method: 'DELETE' }); render('staff'); })));
+
+    $$('[data-hedit]').forEach((b) => b.addEventListener('click', () => {
+      const person = rows.find((x) => String(x.id) === b.dataset.hedit);
+      const m = modal(`Edit ${person.name}`, `
+        <div class="form-grid">
+          <label class="field"><span>Name</span><input class="input" id="se-name" value="${esc(person.name)}"></label>
+          <label class="field"><span>Email</span><input class="input" id="se-email" type="email" value="${esc(person.email || '')}"></label>
+          <label class="field"><span>Mobile (for SMS)</span><input class="input" id="se-phone" type="tel" value="${esc(person.phone || '')}"></label>
+          <label class="field"><span>Department</span><input class="input" id="se-dept" value="${esc(person.department || '')}"></label>
+        </div>
+        <label class="field"><span>Chat webhook</span>
+          <input class="input" id="se-hook" placeholder="Slack, Teams or Google Chat URL" value="${esc(person.webhook_url || '')}"></label>
+        <div class="row"><button class="btn subtle" type="button" id="se-test">Send a test to this webhook</button></div>
+        <div id="se-test-result"></div>
+        <label class="check"><input type="checkbox" id="se-active" ${person.active ? 'checked' : ''}>
+          <span>Offered on the kiosk<br><span class="muted">Switch off for someone who has left, without losing their history</span></span></label>`,
+        async (bg, close) => {
+          await api(`/staff/${person.id}`, { method: 'PATCH', body: {
+            name: $('#se-name', bg).value.trim(),
+            email: $('#se-email', bg).value.trim(),
+            phone: $('#se-phone', bg).value.trim(),
+            department: $('#se-dept', bg).value.trim(),
+            webhook_url: $('#se-hook', bg).value.trim(),
+            active: $('#se-active', bg).checked ? 1 : 0
+          } });
+          close(); render('staff');
+        });
+
+      // Tests whatever is currently in the box, so a URL can be proved before saving.
+      $('#se-test', m.bg).addEventListener('click', async () => {
+        const box = $('#se-test-result', m.bg);
+        box.innerHTML = '<p class="muted">Sending…</p>';
+        const r = await api(`/staff/${person.id}/test-webhook`, {
+          method: 'POST', body: { url: $('#se-hook', m.bg).value.trim() }
+        });
+        box.innerHTML = r.ok
+          ? '<div class="notice"><b>Delivered.</b> Check the chat it should have landed in.</div>'
+          : `<div class="notice error"><b>Not delivered.</b> ${esc(r.detail || r.error || '')}</div>`;
+      });
     }));
 
     $('#staff-file').addEventListener('change', async (e) => {
@@ -1471,8 +1512,12 @@
         ${chk('notify.on_signout', 'Notify the staff member on sign-out')}
         ${chk('notify.on_delivery', 'Notify on deliveries')}
         <h3>Chat</h3>
+        <p class="muted" style="margin-top:0">A company channel that sees everything, and each person's own webhook
+          for their own visitors. Set either, or both.</p>
+        ${chk('notify.webhook_channel_always', 'Post every arrival to the company channel',
+          'With this off, the channel is only used for people who have no webhook of their own')}
         <div class="form-grid">
-          ${txt('notify.global_webhook_url', 'Fallback chat webhook')}
+          ${txt('notify.global_webhook_url', 'Company channel webhook')}
           <label class="field"><span>Format for unrecognised URLs</span><select class="input" data-set="notify.webhook_format">
             ${[['slack', 'Slack'], ['teams', 'Microsoft Teams'], ['google_chat', 'Google Chat'], ['generic', 'Generic JSON']]
               .map(([v, l]) => `<option value="${v}" ${s.notify.webhook_format === v ? 'selected' : ''}>${l}</option>`).join('')}
@@ -1654,8 +1699,12 @@
       toast(r.ok ? `Test SMS sent to ${r.to}` : 'SMS failed — check the Twilio details (save first)');
     });
     $('#test-hook').addEventListener('click', async () => {
+      const box = $('#email-result');
+      box.innerHTML = '<p class="muted">Sending…</p>';
       const r = await api('/settings/test-webhook', { method: 'POST', body: { url: $('[data-set="notify.global_webhook_url"]').value } });
-      toast(r.ok ? 'Test message posted' : 'Webhook call failed');
+      box.innerHTML = r.ok
+        ? '<div class="notice"><b>Webhook delivered.</b></div>'
+        : `<div class="notice error"><b>Webhook failed.</b> ${esc(r.detail || '')}</div>`;
     });
     const badgeTest = $('#badge-test');
     if (badgeTest) badgeTest.addEventListener('click', printTestBadge);

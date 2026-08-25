@@ -97,6 +97,7 @@ const DEFAULTS = {
     on_signout: false,
     on_delivery: true,
     global_webhook_url: '',
+    webhook_channel_always: true,
     webhook_format: 'slack',
     sms_enabled: false,
     sms_provider: 'twilio',

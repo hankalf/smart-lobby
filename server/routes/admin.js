@@ -261,6 +261,28 @@ crud('agreements', 'agreements', ['name', 'body', 'version', 'required_for', 'qu
 crud('access-points', 'access_points', ['site_id', 'name', 'kind', 'url', 'method', 'headers', 'body',
   'unlock_seconds', 'auto_unlock_on_signin', 'auto_unlock_on_signout', 'enabled']);
 
+/** Send a test straight to one person's own webhook, so it can be proved before a visitor relies on it. */
+router.post('/staff/:id/test-webhook', async (req, res) => {
+  const person = get('SELECT * FROM hosts WHERE id = ?', req.params.id);
+  if (!person) return res.status(404).json({ error: 'not_found' });
+
+  const url = clean(req.body.url) || person.webhook_url;
+  if (!url) return res.json({ ok: false, detail: 'No chat webhook is set for this person yet.' });
+
+  const org = settings.getSection('org');
+  const result = await notify.sendWebhook({
+    url,
+    title: `Test from ${org.name} Smart Lobby`,
+    lines: [
+      `This is what ${person.name} will see when a visitor arrives for them.`,
+      'Visitor: Sam Taylor (Acme Roofing)',
+      'Type: contractor'
+    ]
+  });
+  audit(req, 'test_webhook', 'staff', person.id, { ok: result.ok, status: result.status });
+  res.json(result);
+});
+
 /* --------------------------------------------------------- staff import */
 
 const sheets = require('../spreadsheet');
@@ -670,12 +692,13 @@ router.post('/settings/test-sms', async (req, res) => {
 });
 
 router.post('/settings/test-webhook', async (req, res) => {
-  const ok = await notify.sendWebhook({
+  if (!clean(req.body.url)) return res.json({ ok: false, detail: 'Enter a webhook URL first.' });
+  const result = await notify.sendWebhook({
     url: req.body.url,
     title: 'Smart Lobby test notification',
     lines: ['If you can see this, your webhook is configured correctly.']
   });
-  res.json({ ok });
+  res.json(result);
 });
 
 /* ----------------------------------------------------------------- users */
