@@ -195,12 +195,19 @@
     const phone = PHONE[(org.phone_country || 'US').toUpperCase()] || PHONE.US;
     const byEmail = kiosk.returning_lookup_field === 'email';
 
-    $('#identify-label').textContent = byEmail ? 'Email address' : phone.label;
-    $('#identify-value').type = byEmail ? 'email' : 'tel';
+    const byName = !!kiosk.lookup_by_name;
+    $('#identify-label').textContent = byEmail
+      ? (byName ? 'Email address or name' : 'Email address')
+      : (byName ? `${phone.label} or name` : phone.label);
+    // A name needs a text keyboard, so only ask for the number pad when it is numbers only.
+    $('#identify-value').type = byEmail || byName ? 'text' : 'tel';
+    $('#identify-value').inputMode = byEmail || byName ? 'text' : 'tel';
     $('#identify-value').placeholder = byEmail ? 'you@company.com' : phone.example;
-    $('#identify-lead').textContent = byEmail
-      ? "Enter your email address and we'll speed things up."
-      : `Enter your ${phone.label.toLowerCase()} and we'll speed things up.`;
+    $('#identify-lead').textContent = byName
+      ? `Enter your ${byEmail ? 'email address' : phone.label.toLowerCase()} or your name and we'll speed things up.`
+      : (byEmail
+        ? "Enter your email address and we'll speed things up."
+        : `Enter your ${phone.label.toLowerCase()} and we'll speed things up.`);
     $('#f-phone').placeholder = phone.example;
     $('#w-phone').querySelector('span').textContent = phone.label;
     $('#signout-q').placeholder = 'Start typing…';
@@ -407,10 +414,41 @@
     state.agreement = state.agreements[0] || null;
   }
 
+  /** Letters mean they typed a name; digits mean a phone number. */
+  const looksLikeName = (value) => /[a-z]/i.test(value.replace(/^\+/, ''));
+
   $('#identify-continue').addEventListener('click', async () => {
     const value = $('#identify-value').value.trim();
     if (!value) return setScreen('details');
     const isEmail = value.includes('@');
+
+    // Name typed: offer the matches so they can pick themselves.
+    if (!isEmail && looksLikeName(value) && state.cfg.kiosk.lookup_by_name) {
+      const box = $('#identify-matches');
+      const r = await api('/lookup', { name: value, visit_type: state.visitType }).catch(() => ({ matches: [] }));
+      if (r.too_short) { box.innerHTML = '<p class="muted">Type at least three letters of your name.</p>'; return; }
+      if (!r.matches.length) {
+        box.innerHTML = '';
+        $('#f-name').value = value;
+        return setScreen('details');
+      }
+      box.innerHTML = r.matches.map((m) => `<div class="result">
+          <div class="result-photo initials">${escapeHtml(initials(m.full_name))}</div>
+          <div class="result-who"><b>${escapeHtml(m.full_name)}</b>
+            ${m.company ? `<span>${escapeHtml(m.company)}</span>` : ''}</div>
+          <button class="btn" data-pick="${m.id}">That's me</button>
+        </div>`).join('')
+        + `<div class="actions"><button class="btn ghost" id="not-listed">I'm not on this list</button></div>`;
+
+      $$('[data-pick]', box).forEach((b) => b.addEventListener('click', () => pickReturningVisitor(Number(b.dataset.pick))));
+      $('#not-listed', box).addEventListener('click', () => {
+        box.innerHTML = '';
+        $('#f-name').value = value;
+        setScreen('details');
+      });
+      return;
+    }
+
     try {
       const r = await api('/lookup', {
         [isEmail ? 'email' : 'phone']: value,
@@ -438,6 +476,26 @@
       setScreen('details');
     }
   });
+
+  /** They picked themselves from the name matches: fetch their details and carry on. */
+  async function pickReturningVisitor(visitorId) {
+    try {
+      const r = await api('/lookup', { visitor_id: visitorId, visit_type: state.visitType });
+      $('#identify-matches').innerHTML = '';
+      if (r.found && r.visitor) {
+        state.visitor = r.visitor;
+        state.induction = r.induction || state.induction;
+        $('#f-name').value = r.visitor.full_name || '';
+        $('#f-company').value = r.visitor.company || '';
+        $('#f-phone').value = r.visitor.phone || '';
+        $('#f-email').value = r.visitor.email || '';
+      }
+      setScreen('details');
+    } catch (err) {
+      if (err.status === 403) return toast('Please see reception.');
+      setScreen('details');
+    }
+  }
 
   $('#identify-skip').addEventListener('click', async () => {
     try { state.induction = await api('/induction', { visit_type: state.visitType }); } catch { /* ignore */ }

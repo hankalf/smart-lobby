@@ -1380,6 +1380,8 @@
           ${chk('kiosk.welcome_shows_menu', 'Skip “Touch to start”',
             'Put the sections straight on the home screen')}
           ${chk('kiosk.show_onsite_count', 'Show how many people are on site')}
+          ${chk('kiosk.lookup_by_name', 'Let returning visitors find themselves by name',
+            'They pick from matching names. Only a name and company are shown, never a phone number or email')}
           ${chk('kiosk.qr_signout_enabled', 'Let visitors scan their badge to sign out',
             'Only useful with badge printing on, and its QR code switched on')}
           ${chk('kiosk.auto_signout_enabled', 'Sign everyone out at the end of the day',
@@ -1392,6 +1394,7 @@
             <input class="input" data-set="kiosk.auto_signout_time" type="time"
               value="${esc(s.kiosk.auto_signout_time || '23:59')}"></label>
           <label class="field"><span>Returning-visitor lookup</span>
+            <span class="muted" style="font-weight:400">Also accepts a name when the box below is ticked</span>
             <select class="input" data-set="kiosk.returning_lookup_field">
               <option value="phone" ${s.kiosk.returning_lookup_field === 'phone' ? 'selected' : ''}>Mobile number</option>
               <option value="email" ${s.kiosk.returning_lookup_field === 'email' ? 'selected' : ''}>Email address</option>

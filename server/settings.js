@@ -38,6 +38,7 @@ const DEFAULTS = {
     show_onsite_count: false,
     idle_timeout_seconds: 90,
     returning_lookup_field: 'phone',
+    lookup_by_name: true,
     qr_signout_enabled: true,
     auto_signout_enabled: true,
     auto_signout_time: '23:59',

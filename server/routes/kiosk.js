@@ -117,9 +117,29 @@ router.post('/lookup', (req, res) => {
   const phone = normPhone(req.body.phone);
   const email = lower(req.body.email);
   const visitType = clean(req.body.visit_type) || 'visitor';
+  const name = lower(req.body.name);
+
+  /*
+   * Looking someone up by name is a search of everyone who has ever visited, on a
+   * screen anyone can walk up to. It is deliberately narrow: at least three
+   * characters, a handful of results, and only a name and company come back —
+   * never a phone number or email, which are what the search is meant to save
+   * them typing.
+   */
+  if (name) {
+    if (!settings.getSection('kiosk').lookup_by_name) return res.json({ found: false, matches: [] });
+    if (name.length < 3) return res.json({ found: false, matches: [], too_short: true });
+    const matches = all(
+      `SELECT id, full_name, company FROM visitors
+       WHERE blocked = 0 AND lower(full_name) LIKE ?
+       ORDER BY last_visit_at DESC LIMIT 8`, `%${name}%`);
+    return res.json({ found: false, matches });
+  }
+
   let visitor = null;
   if (phone && phone.length >= 6) visitor = get(`SELECT * FROM visitors WHERE ${PHONE_NORM_SQL} = ? ORDER BY id LIMIT 1`, phone);
   if (!visitor && email) visitor = get('SELECT * FROM visitors WHERE lower(email) = ? ORDER BY id LIMIT 1', email);
+  if (!visitor && req.body.visitor_id) visitor = get('SELECT * FROM visitors WHERE id = ?', Number(req.body.visitor_id));
 
   if (!visitor) return res.json({ found: false, induction: inductionStatus(null, visitType) });
   if (visitor.blocked) return res.status(403).json({ found: true, blocked: true, message: 'Please see reception.' });

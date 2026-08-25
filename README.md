@@ -116,7 +116,9 @@ The home screen is built from sections:
 The sections can sit straight on the home screen, or behind a "Touch to start" button
 (**Settings → Kiosk sign-in flow**). Background photos show behind both.
 
-- Recognises returning visitors by mobile number (or email) and pre-fills their details.
+- Recognises returning visitors by phone number, email, or name — one box takes any of them. Typing a
+  name offers the matches to pick from, showing only a name and company, never a phone number or email.
+  Switchable off in **Settings → Kiosk sign-in flow**.
 - Signature capture on the glass for NDAs and site rules.
 - The sign-out code and its QR go on the printed badge only, not on screen — a code seen for a few seconds is no use to anyone.
 - Visitors with a printed badge can scan it at the kiosk to sign out (**Settings → Kiosk sign-in flow**).
