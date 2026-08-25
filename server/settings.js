@@ -101,6 +101,26 @@ const DEFAULTS = {
   }
 };
 
+/** True for IANA zone names Intl actually understands, e.g. "America/New_York". */
+function isValidTimeZone(tz) {
+  if (!tz || typeof tz !== 'string') return false;
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: tz }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isValidLocale(tag) {
+  if (!tag || typeof tag !== 'string') return false;
+  try {
+    return Intl.DateTimeFormat.supportedLocalesOf([tag]).length > 0;
+  } catch {
+    return false;
+  }
+}
+
 function deepMerge(base, override) {
   if (override === undefined) return base;
   if (override === null) return null; // an explicit null clears a value (e.g. removing the logo)
@@ -156,4 +176,4 @@ function publicSettings() {
   };
 }
 
-module.exports = { DEFAULTS, getAll, getSection, setSection, setAll, publicSettings, deepMerge };
+module.exports = { DEFAULTS, getAll, getSection, setSection, setAll, publicSettings, deepMerge, isValidTimeZone, isValidLocale };

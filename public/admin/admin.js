@@ -810,7 +810,15 @@
           ${txt('org.goodbye_message', 'Sign-out message')}
           ${txt('org.primary_color', 'Primary colour', 'color')}
           ${txt('org.accent_color', 'Dark accent colour', 'color')}
-          ${txt('org.timezone', 'Time zone', 'text', 'Europe/London')}
+          <label class="field"><span>Time zone</span>
+            <select class="input" data-set="org.timezone" id="tz-select"></select></label>
+          <label class="field"><span>Date format</span>
+            <select class="input" data-set="org.date_format">
+              ${[['en-GB', 'UK — 25 Aug 2026, 14:30'], ['en-US', 'US — Aug 25, 2026, 2:30 PM'],
+                 ['en-AU', 'Australia — 25 Aug 2026'], ['en-CA', 'Canada — Aug 25, 2026'],
+                 ['en-IE', 'Ireland — 25 Aug 2026']]
+                .map(([v, l]) => `<option value="${v}" ${s.org.date_format === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select></label>
         </div>
         <div class="row"><label class="btn subtle">${s.org.logo_path ? 'Replace logo' : 'Upload logo'}<input type="file" hidden id="logo-file" accept="image/*"></label>
           ${s.org.logo_path
@@ -965,6 +973,7 @@
 
       <div class="row"><button class="btn" id="save-settings">Save settings</button></div>`;
 
+    fillTimezones(s.org.timezone);
     drawBadgePreview();
     $$('[data-set]').forEach((input) => input.addEventListener('input', () => {
       if (input.dataset.set === 'badge.enabled') $('#badge-setup').classList.toggle('hidden', !input.checked);
@@ -982,7 +991,9 @@
       patch.kiosk = patch.kiosk || {};
       patch.kiosk.visit_types = $$('[data-vtype]').filter((c) => c.checked).map((c) => c.dataset.vtype);
       SETTINGS = await api('/settings', { method: 'PUT', body: patch });
-      toast('Settings saved');
+      if (SETTINGS.warnings && SETTINGS.warnings.length) toast(SETTINGS.warnings.join(' '), 7000);
+      else toast('Settings saved');
+      $('#brand-name').textContent = SETTINGS.org.name || 'Smart Lobby';
     });
 
     $('#logo-file').addEventListener('change', async (e) => {
@@ -1029,6 +1040,34 @@
       await api(`/users/${b.dataset.udel}`, { method: 'DELETE' }); render('settings');
     }));
   };
+
+  /**
+   * Populate the time-zone picker from the browser's own IANA list, so an
+   * unusable name like "New York" cannot be entered in the first place.
+   */
+  function fillTimezones(current) {
+    const select = $('#tz-select');
+    if (!select) return;
+    let zones = [];
+    try { zones = Intl.supportedValuesOf('timeZone'); } catch { zones = []; }
+    if (!zones.length) {
+      zones = ['Europe/London', 'Europe/Dublin', 'America/New_York', 'America/Chicago', 'America/Denver',
+        'America/Los_Angeles', 'America/Toronto', 'Australia/Sydney', 'UTC'];
+    }
+    const device = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (device && !zones.includes(device)) zones.unshift(device);
+
+    const valid = zones.includes(current);
+    select.innerHTML =
+      (valid ? '' : `<option value="${esc(device || 'UTC')}" selected>${esc(device || 'UTC')} — this device</option>`) +
+      zones.map((z) => `<option value="${esc(z)}" ${z === current ? 'selected' : ''}>${esc(z.replace(/_/g, ' '))}</option>`).join('');
+
+    if (!valid) {
+      const note = el(`<p class="notice error" style="margin-top:.5rem">Saved time zone ${current ? `“${esc(current)}”` : ''}
+        is not a valid IANA name, so times fall back to UTC. Pick the right one below and save.</p>`);
+      select.parentElement.appendChild(note);
+    }
+  }
 
   function badgeFormValues() {
     const b = {};

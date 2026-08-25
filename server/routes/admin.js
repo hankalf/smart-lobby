@@ -420,6 +420,19 @@ router.get('/settings', (req, res) => res.json(maskSecrets(settings.getAll())));
 
 router.put('/settings', (req, res) => {
   const patch = req.body || {};
+  const warnings = [];
+
+  // A bad time zone silently breaks auto sign-out and every formatted timestamp,
+  // so drop it rather than storing it, and say so.
+  if (patch.org && patch.org.timezone !== undefined && !settings.isValidTimeZone(patch.org.timezone)) {
+    warnings.push(`"${patch.org.timezone}" is not a valid time zone name — it was not saved. Use an IANA name such as America/New_York.`);
+    delete patch.org.timezone;
+  }
+  if (patch.org && patch.org.date_format !== undefined && !settings.isValidLocale(patch.org.date_format)) {
+    warnings.push(`"${patch.org.date_format}" is not a recognised date format — it was not saved.`);
+    delete patch.org.date_format;
+  }
+
   // A masked secret means "unchanged" — never write the mask itself back.
   if (patch.notify) {
     for (const key of ['smtp_pass', 'twilio_auth_token']) {
@@ -428,7 +441,7 @@ router.put('/settings', (req, res) => {
   }
   const updated = settings.setAll(patch);
   audit(req, 'update', 'settings', null, Object.keys(patch));
-  res.json(maskSecrets(updated));
+  res.json({ ...maskSecrets(updated), warnings });
 });
 
 router.post('/settings/logo', files.memoryUpload.single('file'), (req, res) => {
