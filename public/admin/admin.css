@@ -121,14 +121,25 @@ td .btn { padding: .35rem .7rem; font-size: .82rem; }
   border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
   background-size: cover; background-position: center;
 }
+.bg-preview.no-bg { background: linear-gradient(160deg, var(--brand-soft), var(--bg) 60%); }
 .bg-scrim { position: absolute; inset: 0; }
 .bg-text {
-  position: absolute; inset: 0; display: flex; flex-direction: column;
+  position: absolute; inset: 0; padding: 1.25rem 1.5rem;
+  display: flex; flex-direction: column; gap: .3rem;
   align-items: center; justify-content: center; color: #fff; text-align: center;
   text-shadow: 0 1px 12px rgba(0,0,0,.5);
 }
-.bg-text b { font-size: 1.9rem; }
-.bg-text span { font-size: .95rem; opacity: .92; }
+.bg-preview.no-bg .bg-text { color: var(--brand-dark); text-shadow: none; }
+.bg-text b { font-size: 1.7rem; line-height: 1.1; }
+.bg-text span { font-size: .9rem; opacity: .92; }
+.bg-text .pv-btn {
+  margin-top: .5rem; font-style: normal; font-size: .8rem; font-weight: 600;
+  background: var(--brand); color: #fff; padding: .35rem .9rem; border-radius: 999px; text-shadow: none;
+}
+.bg-preview[data-align="left"]   .bg-text { align-items: flex-start; text-align: left; }
+.bg-preview[data-align="right"]  .bg-text { align-items: flex-end; text-align: right; }
+.bg-preview[data-valign="top"]    .bg-text { justify-content: flex-start; }
+.bg-preview[data-valign="bottom"] .bg-text { justify-content: flex-end; }
 input[type="range"] { width: 100%; accent-color: var(--brand); }
 
 .howto { border-top: 1px solid var(--line); padding: .9rem 0; }

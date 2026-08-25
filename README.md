@@ -155,6 +155,11 @@ brand colours, time zone and date format.
 
 - **Logo** — appears on the kiosk welcome screen, on printed badges, in the dashboard sidebar and on
   the admin sign-in page. PNG or SVG with a transparent background works best.
+- **Welcome text position** — place the headline, sub-heading and button left, centre or right, and
+  top, middle or bottom, so they sit clear of whatever is in the background photo. A live preview in
+  Settings mirrors the kiosk.
+- **Welcome footer** — the time and organisation name along the bottom of the welcome screen, off by
+  default.
 - **Kiosk background** — a photo behind the welcome screen. A slider controls how much it is darkened
   so the welcome text stays readable, with a live preview beside it. Landscape, 1600px wide or more.
   Leave it unset for the plain gradient.

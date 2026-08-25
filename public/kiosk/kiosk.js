@@ -129,6 +129,9 @@
 
     // Optional photo behind the welcome screen, with a scrim so the text stays readable.
     const idle = document.querySelector('.idle');
+    idle.dataset.align = org.welcome_align || 'center';
+    idle.dataset.valign = org.welcome_valign || 'middle';
+    show(document.querySelector('.idle-foot'), !!org.show_welcome_footer);
     if (org.background_path) {
       idle.classList.add('has-bg');
       idle.style.backgroundImage = `url("${org.background_path}")`;
@@ -173,6 +176,7 @@
 
   function tickClock() {
     const org = state.cfg ? state.cfg.org : {};
+    if (!org.show_welcome_footer) return;
     try {
       $('#idle-clock').textContent = new Date().toLocaleString(org.date_format || 'en-GB',
         { weekday: 'long', hour: '2-digit', minute: '2-digit', timeZone: org.timezone || undefined });

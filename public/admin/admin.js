@@ -934,6 +934,24 @@
                <button class="btn ghost" id="logo-remove">Remove logo</button>`
             : '<span class="muted">No logo set — PNG or SVG with a transparent background works best</span>'}</div>
 
+        <h3>Welcome text position</h3>
+        <p class="muted" style="margin-top:0">Move the headline, sub-heading and button clear of whatever is in your
+          background photo. The preview below updates as you change it.</p>
+        <div class="form-grid" style="max-width:34rem">
+          <label class="field"><span>Across</span>
+            <select class="input" data-set="org.welcome_align" id="wal">
+              ${[['left', 'Left'], ['center', 'Centre'], ['right', 'Right']]
+                .map(([v, l]) => `<option value="${v}" ${s.org.welcome_align === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select></label>
+          <label class="field"><span>Down</span>
+            <select class="input" data-set="org.welcome_valign" id="wval">
+              ${[['top', 'Top'], ['middle', 'Middle'], ['bottom', 'Bottom']]
+                .map(([v, l]) => `<option value="${v}" ${s.org.welcome_valign === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select></label>
+        </div>
+
+        ${chk('org.show_welcome_footer', 'Show the time and organisation name along the bottom of the welcome screen')}
+
         <h3>Kiosk background</h3>
         <p class="muted" style="margin-top:0">A photo behind the welcome screen — a site shot or a finished build works well.
           Landscape, at least 1600px wide. Leave it unset for the plain gradient.</p>
@@ -942,11 +960,17 @@
           ${s.org.background_path
             ? `<button class="btn ghost" id="bg-remove">Remove background</button>`
             : '<span class="muted">No background set</span>'}</div>
-        ${s.org.background_path ? `
-          <div class="bg-preview" id="bg-preview" style="background-image:url('${esc(s.org.background_path)}')">
-            <div class="bg-scrim" id="bg-scrim"></div>
-            <div class="bg-text"><b>Welcome</b><span>Please tap below to sign in</span></div>
+        <div class="bg-preview${s.org.background_path ? '' : ' no-bg'}" id="bg-preview"
+             data-align="${esc(s.org.welcome_align)}" data-valign="${esc(s.org.welcome_valign)}"
+             ${s.org.background_path ? `style="background-image:url('${esc(s.org.background_path)}')"` : ''}>
+          <div class="bg-scrim" id="bg-scrim"></div>
+          <div class="bg-text">
+            <b id="pv-title">${esc(s.org.welcome_title || 'Welcome')}</b>
+            <span id="pv-msg">${esc(s.org.welcome_message || '')}</span>
+            <i class="pv-btn">Touch to start</i>
           </div>
+        </div>
+        ${s.org.background_path ? `
           <label class="field" style="max-width:26rem;margin-top:1rem"><span>Darken the photo so the text stays readable
             — <b id="dim-value">${s.org.background_dim}</b>%</span>
             <input type="range" min="0" max="85" step="5" id="bg-dim" data-set="org.background_dim" value="${s.org.background_dim}"></label>
@@ -1132,6 +1156,18 @@
       toast('Logo updated');
       render('settings');
     });
+
+    // Keep the preview in step with the position, wording and dim controls.
+    const preview = $('#bg-preview');
+    const syncPreview = () => {
+      preview.dataset.align = $('#wal').value;
+      preview.dataset.valign = $('#wval').value;
+      $('#pv-title').textContent = $('[data-set="org.welcome_title"]').value || 'Welcome';
+      $('#pv-msg').textContent = $('[data-set="org.welcome_message"]').value || '';
+    };
+    ['#wal', '#wval', '[data-set="org.welcome_title"]', '[data-set="org.welcome_message"]']
+      .forEach((sel) => $(sel).addEventListener('input', syncPreview));
+    syncPreview();
 
     const bgFile = $('#bg-file');
     if (bgFile) bgFile.addEventListener('change', async (e) => {
