@@ -637,6 +637,73 @@
             <td><span class="pill ${h.active ? 'on' : 'off'}">${h.active ? 'active' : 'off'}</span></td>
             <td><button class="btn ghost" data-hdel="${h.id}">Remove</button></td></tr>`).join('')}</tbody></table>`
           : '<p class="empty">No hosts yet — add the people visitors come to see.</p>'}</div>
+      </div>
+
+      <div class="card section">
+        <h2>Setting up a chat webhook</h2>
+        <p class="muted" style="margin-top:0">A webhook posts arrivals straight into a Slack channel, a Teams
+          channel or a Google Chat space — no email needed. Paste the URL into a host's <b>Chat webhook</b> field
+          above and that host's arrivals go to that channel. Leave it blank and the fallback webhook in
+          <b>Settings → Notifications</b> is used instead. The format is detected from the URL, so different hosts
+          can be on different platforms.</p>
+
+        <details class="howto">
+          <summary><b>Slack</b> — posts with the visitor's photo</summary>
+          <ol>
+            <li>Go to <b>api.slack.com/apps</b> → <b>Create New App</b> → <b>From scratch</b>. Name it
+              “Smart Lobby” and pick your workspace.</li>
+            <li>In the left menu choose <b>Incoming Webhooks</b> and switch it <b>On</b>.</li>
+            <li>Click <b>Add New Webhook to Workspace</b>, choose the channel (or a direct message to the host),
+              then <b>Allow</b>.</li>
+            <li>Copy the URL — it looks like
+              <code class="token">https://hooks.slack.com/services/T00000/B00000/XXXX</code>.</li>
+            <li>Paste it into the host's <b>Chat webhook</b> box above and click <b>Add host</b> (or edit an
+              existing one).</li>
+          </ol>
+          <p class="muted">Repeat steps 3–5 for each channel you want to post to; one app can hold many webhooks.</p>
+        </details>
+
+        <details class="howto">
+          <summary><b>Microsoft Teams</b></summary>
+          <ol>
+            <li>In Teams, hover the channel → <b>⋯</b> → <b>Workflows</b>.</li>
+            <li>Choose the template <b>“Post to a channel when a webhook request is received”</b>.</li>
+            <li>Name it “Smart Lobby”, confirm the team and channel, then <b>Add workflow</b>.</li>
+            <li>Copy the HTTPS URL it shows you — you only get it once.</li>
+            <li>Paste it into the host's <b>Chat webhook</b> box above.</li>
+          </ol>
+          <p class="muted">Microsoft is retiring the older Office 365 connectors. If your tenant still offers
+            <b>⋯ → Connectors → Incoming Webhook</b> that works too, but Workflows is the route that will keep
+            working.</p>
+        </details>
+
+        <details class="howto">
+          <summary><b>Google Chat</b></summary>
+          <ol>
+            <li>Open the space in Google Chat and click the space name at the top.</li>
+            <li>Choose <b>Apps &amp; integrations</b> → <b>Webhooks</b> → <b>Add webhook</b>.</li>
+            <li>Name it “Smart Lobby” and click <b>Save</b>.</li>
+            <li>Copy the URL — it starts with
+              <code class="token">https://chat.googleapis.com/v1/spaces/…</code>.</li>
+            <li>Paste it into the host's <b>Chat webhook</b> box above.</li>
+          </ol>
+          <p class="muted">Webhooks are only available in spaces, not in one-to-one chats, and your Workspace
+            admin must allow them.</p>
+        </details>
+
+        <details class="howto">
+          <summary><b>Anything else</b> — Mattermost, n8n, Zapier, your own endpoint</summary>
+          <p>Paste any URL that accepts a JSON POST. Unrecognised URLs use the format set in
+            <b>Settings → Notifications</b>; choose <b>Generic JSON</b> there to receive:</p>
+          <pre class="token" style="white-space:pre-wrap">{ "event": "Sam Taylor has arrived to see Alex Green",
+  "details": ["Visitor: Sam Taylor (Acme Roofing)", "Type: contractor", "..."],
+  "photo_url": "https://…/media/private/photos/….jpg",
+  "timestamp": "2026-08-25T13:41:11.955Z" }</pre>
+        </details>
+
+        <p class="muted">To check a webhook before a real visitor uses it, paste it into
+          <b>Settings → Notifications → Fallback chat webhook</b> and press <b>Send test webhook</b>. Every attempt,
+          successful or not, is recorded against the visit under <b>Visits → View</b>.</p>
       </div>`;
     $('#h-add').addEventListener('click', async () => {
       if (!$('#h-name').value.trim()) return toast('Enter a name');
@@ -932,7 +999,7 @@
         <h3>Chat</h3>
         <div class="form-grid">
           ${txt('notify.global_webhook_url', 'Fallback chat webhook')}
-          <label class="field"><span>Webhook format</span><select class="input" data-set="notify.webhook_format">
+          <label class="field"><span>Format for unrecognised URLs</span><select class="input" data-set="notify.webhook_format">
             ${[['slack', 'Slack'], ['teams', 'Microsoft Teams'], ['google_chat', 'Google Chat'], ['generic', 'Generic JSON']]
               .map(([v, l]) => `<option value="${v}" ${s.notify.webhook_format === v ? 'selected' : ''}>${l}</option>`).join('')}
           </select></label>

@@ -216,7 +216,11 @@ from **Test unlock** in the dashboard. Every attempt is logged with who, when, w
 | **SMS** | Twilio Account SID, Auth Token, from-number | Texts the host's mobile. Numbers are converted to E.164, so `07700 900123` works. |
 
 Each host can have their own email address, mobile number and chat webhook, so alerts land with the
-right person rather than a shared inbox. Set them in **Hosts**.
+right person rather than a shared inbox. Set them in **Hosts**, which carries step-by-step setup
+instructions for Slack, Teams and Google Chat.
+
+The payload format is detected from the webhook URL, so one host can be on Slack and another on
+Teams. The format dropdown in Settings only applies to URLs that are not recognised.
 
 You control which events fire on each channel: arrival, sign-out, and delivery are separate toggles,
 and SMS has its own arrival/delivery toggles so you can keep texts for arrivals only.

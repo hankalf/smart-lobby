@@ -42,11 +42,25 @@ async function sendEmail({ to, subject, html, text, visit_id, delivery_id }) {
   }
 }
 
+/**
+ * Work out the payload shape from the webhook URL itself, so one host can be on
+ * Slack and another on Teams. Falls back to the configured format for URLs we
+ * do not recognise (self-hosted Mattermost, n8n, custom endpoints).
+ */
+function detectWebhookFormat(url) {
+  const u = String(url || '').toLowerCase();
+  if (u.includes('hooks.slack.com')) return 'slack';
+  if (u.includes('webhook.office.com') || u.includes('logic.azure.com') || u.includes('powerplatform.com')) return 'teams';
+  if (u.includes('chat.googleapis.com')) return 'google_chat';
+  return null;
+}
+
 async function sendWebhook({ url, title, lines, photoUrl, visit_id, delivery_id }) {
   const n = settings.getSection('notify');
   const target = url || n.global_webhook_url;
   if (!target) return false;
-  const body = n.webhook_format === 'teams'
+  const format = detectWebhookFormat(target) || n.webhook_format;
+  const body = format === 'teams'
     ? {
         '@type': 'MessageCard',
         '@context': 'https://schema.org/extensions',
@@ -55,9 +69,9 @@ async function sendWebhook({ url, title, lines, photoUrl, visit_id, delivery_id 
         title,
         text: lines.join('  \n')
       }
-    : n.webhook_format === 'google_chat'
+    : format === 'google_chat'
     ? { text: `*${title}*\n${lines.join('\n')}` }
-    : n.webhook_format === 'generic'
+    : format === 'generic'
     ? { event: title, details: lines, photo_url: photoUrl || null, timestamp: new Date().toISOString() }
     : {
         text: `*${title}*\n${lines.join('\n')}`,
