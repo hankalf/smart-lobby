@@ -450,28 +450,74 @@ router.put('/settings', (req, res) => {
   res.json({ ...maskSecrets(updated), warnings });
 });
 
-// Branding images: the logo shown on the kiosk, badges and dashboard, and the
-// background image behind the kiosk welcome screen.
-const BRAND_IMAGES = { logo: 'logo_path', background: 'background_path' };
+/* --------------------------------------------------------- branding images */
 
-router.post('/settings/:kind(logo|background)', files.imageUpload.single('file'), (req, res) => {
-  const field = BRAND_IMAGES[req.params.kind];
+router.post('/settings/logo', files.imageUpload.single('file'), (req, res) => {
   if (!req.file || !files.looksLikeImage(req.file.buffer)) return res.status(400).json({ error: 'not_an_image' });
-  const previous = settings.getSection('org')[field];
+  const previous = settings.getSection('org').logo_path;
   const web = files.saveBuffer(req.file.buffer, 'public', 'branding', req.file.originalname);
-  settings.setSection('org', { [field]: web });
+  settings.setSection('org', { logo_path: web });
   if (previous) files.removeFile(previous);
-  audit(req, 'upload', req.params.kind, null, { file: req.file.originalname });
-  res.json({ ok: true, [field]: web });
+  audit(req, 'upload', 'logo', null, { file: req.file.originalname });
+  res.json({ ok: true, logo_path: web });
 });
 
-router.delete('/settings/:kind(logo|background)', (req, res) => {
-  const field = BRAND_IMAGES[req.params.kind];
-  const current = settings.getSection('org')[field];
+router.delete('/settings/logo', (req, res) => {
+  const current = settings.getSection('org').logo_path;
   if (current) files.removeFile(current);
-  settings.setSection('org', { [field]: null });
-  audit(req, 'delete', req.params.kind, null);
+  settings.setSection('org', { logo_path: null });
+  audit(req, 'delete', 'logo', null);
   res.json({ ok: true });
+});
+
+const MAX_BACKGROUNDS = 20;
+const currentBackgrounds = () => (settings.getSection('org').backgrounds || []).slice();
+
+/** Store the list, keeping the legacy single field pointed at the first image. */
+function saveBackgrounds(list) {
+  settings.setSection('org', { backgrounds: list, background_path: list[0] || null });
+  return list;
+}
+
+// Accepts one file or many in a single request; the field name is "file" either way.
+router.post('/settings/backgrounds', files.imageUpload.array('file', MAX_BACKGROUNDS), (req, res) => {
+  const received = req.files || [];
+  const uploaded = received.filter((f) => files.looksLikeImage(f.buffer));
+  // Files multer turned away by mimetype, plus any that lied about their extension.
+  const rejected = (req.rejectedFiles || 0) + (received.length - uploaded.length);
+  if (!uploaded.length) return res.status(400).json({ error: 'not_an_image', rejected });
+
+  const list = currentBackgrounds();
+  const room = Math.max(0, MAX_BACKGROUNDS - list.length);
+  const accepted = uploaded.slice(0, room);
+  for (const f of accepted) list.push(files.saveBuffer(f.buffer, 'public', 'branding', f.originalname));
+  saveBackgrounds(list);
+  audit(req, 'upload', 'backgrounds', null, { added: accepted.length });
+  res.json({
+    ok: true,
+    backgrounds: list,
+    added: accepted.length,
+    skipped: uploaded.length - accepted.length,
+    rejected
+  });
+});
+
+router.delete('/settings/backgrounds', (req, res) => {
+  currentBackgrounds().forEach((p) => files.removeFile(p));
+  saveBackgrounds([]);
+  audit(req, 'delete', 'backgrounds', null);
+  res.json({ ok: true, backgrounds: [] });
+});
+
+router.delete('/settings/backgrounds/:index', (req, res) => {
+  const list = currentBackgrounds();
+  const i = Number(req.params.index);
+  if (!Number.isInteger(i) || i < 0 || i >= list.length) return res.status(404).json({ error: 'not_found' });
+  const [removed] = list.splice(i, 1);
+  files.removeFile(removed);
+  saveBackgrounds(list);
+  audit(req, 'delete', 'background', null, { index: i });
+  res.json({ ok: true, backgrounds: list });
 });
 
 router.post('/settings/test-email', async (req, res) => {

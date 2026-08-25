@@ -74,7 +74,12 @@ const memoryUpload = multer({
 const imageUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 12 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => cb(null, /^image\//.test(file.mimetype || ''))
+  fileFilter: (req, file, cb) => {
+    const ok = /^image\//.test(file.mimetype || '');
+    // Counted so callers can report how many of a batch were turned away.
+    if (!ok) req.rejectedFiles = (req.rejectedFiles || 0) + 1;
+    cb(null, ok);
+  }
 });
 
 /**

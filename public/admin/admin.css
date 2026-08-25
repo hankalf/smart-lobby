@@ -121,6 +121,21 @@ td .btn { padding: .35rem .7rem; font-size: .82rem; }
   border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
   background-size: cover; background-position: center;
 }
+.bg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .6rem; margin-top: .9rem; }
+.bg-thumb {
+  position: relative; aspect-ratio: 16/10; border-radius: 10px; border: 1px solid var(--line);
+  background-size: cover; background-position: center;
+}
+.bg-thumb .num {
+  position: absolute; top: 5px; left: 6px; background: rgba(0,0,0,.6); color: #fff;
+  font-size: .7rem; padding: 0 .4rem; border-radius: 4px;
+}
+.bg-thumb button {
+  position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,.6); color: #fff; border: 0;
+  border-radius: 4px; cursor: pointer; font-size: .75rem; padding: .1rem .35rem; line-height: 1.4;
+}
+.bg-thumb button:hover { background: var(--danger); }
+
 .bg-preview.no-bg { background: linear-gradient(160deg, var(--brand-soft), var(--bg) 60%); }
 .bg-scrim { position: absolute; inset: 0; }
 .bg-text {

@@ -903,6 +903,7 @@
       ${getPath(s, path) ? 'checked' : ''}> <span>${label}${help ? `<br><span class="muted">${help}</span>` : ''}</span></label>`;
     const txt = (path, label, type = 'text', placeholder = '') => `<label class="field"><span>${label}</span>
       <input class="input" data-set="${path}" type="${type}" placeholder="${placeholder}" value="${esc(getPath(s, path) ?? '')}"></label>`;
+    const bgs = s.org.backgrounds || [];
 
     root.innerHTML = `
       <h1 class="page">Settings</h1>
@@ -953,16 +954,32 @@
         ${chk('org.show_welcome_footer', 'Show the time and organisation name along the bottom of the welcome screen')}
 
         <h3>Kiosk background</h3>
-        <p class="muted" style="margin-top:0">A photo behind the welcome screen — a site shot or a finished build works well.
-          Landscape, at least 1600px wide. Leave it unset for the plain gradient.</p>
-        <div class="row"><label class="btn subtle">${s.org.background_path ? 'Replace background' : 'Upload background'}
-            <input type="file" hidden id="bg-file" accept="image/*"></label>
-          ${s.org.background_path
-            ? `<button class="btn ghost" id="bg-remove">Remove background</button>`
-            : '<span class="muted">No background set</span>'}</div>
-        <div class="bg-preview${s.org.background_path ? '' : ' no-bg'}" id="bg-preview"
+        <p class="muted" style="margin-top:0">Photos behind the welcome screen — site shots or finished builds work well.
+          Landscape, at least 1600px wide. Add several and the kiosk fades between them. Leave it empty for the plain gradient.</p>
+        <div class="row"><label class="btn subtle">${bgs.length ? 'Add more photos' : 'Upload photos'}
+            <input type="file" hidden id="bg-file" accept="image/*" multiple></label>
+          ${bgs.length ? `<button class="btn ghost" id="bg-remove">Remove all</button>
+            <span class="muted">${bgs.length} photo${bgs.length === 1 ? '' : 's'} — you can select several at once</span>`
+            : '<span class="muted">No photos yet — you can select several at once</span>'}</div>
+        ${bgs.length ? `<div class="bg-grid">${bgs.map((b, i) => `
+          <div class="bg-thumb" style="background-image:url('${esc(b)}')">
+            <span class="num">${i + 1}</span>
+            <button data-bgdel="${i}" title="Remove this photo">✕</button>
+          </div>`).join('')}</div>` : ''}
+        ${bgs.length > 1 ? `
+          <label class="field" style="max-width:26rem;margin-top:1rem"><span>Change photo every</span>
+            <select class="input" data-set="org.background_rotate_seconds">
+              ${(() => {
+                const presets = [[8, '8 seconds'], [12, '12 seconds'], [20, '20 seconds'], [30, '30 seconds'], [60, '1 minute'], [300, '5 minutes']];
+                const current = Number(s.org.background_rotate_seconds);
+                // Never show a preset as selected when the stored value is something else.
+                if (!presets.some(([v]) => v === current)) presets.unshift([current, `${current} seconds`]);
+                return presets.map(([v, l]) => `<option value="${v}" ${current === v ? 'selected' : ''}>${l}</option>`).join('');
+              })()}
+            </select></label>` : ''}
+        <div class="bg-preview${bgs.length ? '' : ' no-bg'}" id="bg-preview"
              data-align="${esc(s.org.welcome_align)}" data-valign="${esc(s.org.welcome_valign)}"
-             ${s.org.background_path ? `style="background-image:url('${esc(s.org.background_path)}')"` : ''}>
+             ${bgs.length ? `style="background-image:url('${esc(bgs[0])}')"` : ''}>
           <div class="bg-scrim" id="bg-scrim"></div>
           <div class="bg-text">
             <b id="pv-title">${esc(s.org.welcome_title || 'Welcome')}</b>
@@ -970,7 +987,7 @@
             <i class="pv-btn">Touch to start</i>
           </div>
         </div>
-        ${s.org.background_path ? `
+        ${bgs.length ? `
           <label class="field" style="max-width:26rem;margin-top:1rem"><span>Darken the photo so the text stays readable
             — <b id="dim-value">${s.org.background_dim}</b>%</span>
             <input type="range" min="0" max="85" step="5" id="bg-dim" data-set="org.background_dim" value="${s.org.background_dim}"></label>
@@ -1171,22 +1188,39 @@
 
     const bgFile = $('#bg-file');
     if (bgFile) bgFile.addEventListener('change', async (e) => {
-      if (!e.target.files[0]) return;
+      const chosen = [...e.target.files];
+      if (!chosen.length) return;
       try {
-        await upload('/settings/background', e.target.files[0]);
+        const fd = new FormData();
+        chosen.forEach((f) => fd.append('file', f));
+        const res = await fetch('/api/admin/settings/backgrounds', { method: 'POST', body: fd });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'failed');
+        const notes = [`${data.added} photo${data.added === 1 ? '' : 's'} added`];
+        if (data.rejected) notes.push(`${data.rejected} skipped — not an image`);
+        if (data.skipped) notes.push(`${data.skipped} skipped — 20 photo limit`);
         SETTINGS = await api('/settings');
-        toast('Background updated');
+        toast(notes.join(' · '), notes.length > 1 ? 6000 : 3000);
         render('settings');
-      } catch { toast('That file could not be used as a background'); }
+      } catch { toast('Those files could not be used as backgrounds'); }
     });
 
     const bgRemove = $('#bg-remove');
-    if (bgRemove) bgRemove.addEventListener('click', async () => {
-      await api('/settings/background', { method: 'DELETE' });
+    if (bgRemove) bgRemove.addEventListener('click', () => confirmAction(
+      'Remove every background photo? The kiosk goes back to the plain gradient.',
+      async () => {
+        await api('/settings/backgrounds', { method: 'DELETE' });
+        SETTINGS = await api('/settings');
+        toast('Backgrounds removed');
+        render('settings');
+      }));
+
+    $$('[data-bgdel]').forEach((b) => b.addEventListener('click', async () => {
+      await api(`/settings/backgrounds/${b.dataset.bgdel}`, { method: 'DELETE' });
       SETTINGS = await api('/settings');
-      toast('Background removed');
+      toast('Photo removed');
       render('settings');
-    });
+    }));
 
     const dim = $('#bg-dim');
     if (dim) dim.addEventListener('input', () => {

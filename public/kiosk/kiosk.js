@@ -127,19 +127,13 @@
     $('#idle-org').textContent = org.name || '';
     if (org.logo_path) { $('#idle-logo').src = org.logo_path; show($('#idle-logo'), true); }
 
-    // Optional photo behind the welcome screen, with a scrim so the text stays readable.
+    // Optional photos behind the welcome screen, with a scrim so the text stays readable.
     const idle = document.querySelector('.idle');
     idle.dataset.align = org.welcome_align || 'center';
     idle.dataset.valign = org.welcome_valign || 'middle';
     show(document.querySelector('.idle-foot'), !!org.show_welcome_footer);
-    if (org.background_path) {
-      idle.classList.add('has-bg');
-      idle.style.backgroundImage = `url("${org.background_path}")`;
-      idle.style.setProperty('--scrim', `rgba(8,18,14,${(Number(org.background_dim) || 0) / 100})`);
-    } else {
-      idle.classList.remove('has-bg');
-      idle.style.backgroundImage = '';
-    }
+    idle.style.setProperty('--scrim', `rgba(8,18,14,${(Number(org.background_dim) || 0) / 100})`);
+    startBackgrounds(org.backgrounds || [], Number(org.background_rotate_seconds) || 12);
     document.title = `${org.name} — Reception`;
 
     show($('#tile-delivery'), !!(kiosk.show_delivery_button && deliveries.enabled));
@@ -172,6 +166,47 @@
     refreshCount();
     tickClock();
     setInterval(tickClock, 20000);
+  }
+
+  /**
+   * Welcome-screen backgrounds. One image is simply shown; several crossfade on a
+   * timer using two stacked layers. Images are preloaded so a slow first paint
+   * never shows a blank screen mid-rotation.
+   */
+  let bgTimer = null;
+  function startBackgrounds(list, seconds) {
+    const idle = document.querySelector('.idle');
+    clearInterval(bgTimer);
+    idle.querySelectorAll('.idle-bg').forEach((el) => el.remove());
+
+    if (!list.length) { idle.classList.remove('has-bg'); return; }
+    idle.classList.add('has-bg');
+
+    const layers = [0, 1].map(() => {
+      const el = document.createElement('div');
+      el.className = 'idle-bg';
+      idle.prepend(el);
+      return el;
+    });
+
+    list.forEach((src) => { const img = new Image(); img.src = src; });
+
+    let index = 0;
+    let front = 0;
+    layers[front].style.backgroundImage = `url("${list[0]}")`;
+    layers[front].classList.add('on');
+    if (list.length < 2) return;
+
+    bgTimer = setInterval(() => {
+      // Nothing to see while the visitor is mid sign-in, so hold until they finish.
+      if (state.screen !== 'idle') return;
+      index = (index + 1) % list.length;
+      const back = 1 - front;
+      layers[back].style.backgroundImage = `url("${list[index]}")`;
+      layers[back].classList.add('on');
+      layers[front].classList.remove('on');
+      front = back;
+    }, Math.max(3, seconds) * 1000);
   }
 
   function tickClock() {

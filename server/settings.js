@@ -5,7 +5,9 @@ const DEFAULTS = {
   org: {
     name: "Nature's Touch Builds",
     logo_path: null,
-    background_path: null,
+    background_path: null,       // legacy single image, migrated into backgrounds on read
+    backgrounds: [],
+    background_rotate_seconds: 12,
     background_dim: 40,
     welcome_align: 'center',
     welcome_valign: 'middle',
@@ -143,7 +145,13 @@ function getAll() {
   for (const r of rows) {
     try { stored[r.key] = JSON.parse(r.value); } catch { stored[r.key] = r.value; }
   }
-  return deepMerge(DEFAULTS, stored);
+  const merged = deepMerge(DEFAULTS, stored);
+  // Installs made before backgrounds became a list keep working: the single
+  // image is presented as a one-item list everywhere downstream.
+  if (!Array.isArray(merged.org.backgrounds) || !merged.org.backgrounds.length) {
+    merged.org.backgrounds = merged.org.background_path ? [merged.org.background_path] : [];
+  }
+  return merged;
 }
 
 function getSection(section) {

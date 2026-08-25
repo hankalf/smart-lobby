@@ -22,10 +22,20 @@ body { background: var(--bg); }
   text-align: center;
   background: linear-gradient(160deg, var(--brand-soft), var(--bg) 60%);
 }
-.idle.has-bg { background-size: cover; background-position: center; }
-.idle.has-bg::before { content: ''; position: absolute; inset: 0; background: var(--scrim, rgba(8,18,14,.4)); }
-.idle.has-bg .idle-inner { position: relative; z-index: 1; }
-.idle.has-bg .idle-foot { z-index: 1; } /* stays absolutely positioned at the foot */
+/* Stacked photo layers so several backgrounds can crossfade on a timer. */
+.idle-bg {
+  position: absolute; inset: 0; z-index: 0;
+  background-size: cover; background-position: center;
+  opacity: 0; transition: opacity 1.4s ease-in-out;
+}
+.idle-bg.on { opacity: 1; }
+.idle.has-bg::before { content: ''; position: absolute; inset: 0; z-index: 1; background: var(--scrim, rgba(8,18,14,.4)); }
+.idle.has-bg .idle-inner { position: relative; z-index: 2; }
+.idle.has-bg .idle-foot { z-index: 2; } /* stays absolutely positioned at the foot */
+
+@media (prefers-reduced-motion: reduce) {
+  .idle-bg { transition: none; }
+}
 .idle.has-bg h1,
 .idle.has-bg .lead,
 .idle.has-bg .idle-foot,

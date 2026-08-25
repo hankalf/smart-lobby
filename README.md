@@ -160,9 +160,10 @@ brand colours, time zone and date format.
   Settings mirrors the kiosk.
 - **Welcome footer** — the time and organisation name along the bottom of the welcome screen, off by
   default.
-- **Kiosk background** — a photo behind the welcome screen. A slider controls how much it is darkened
-  so the welcome text stays readable, with a live preview beside it. Landscape, 1600px wide or more.
-  Leave it unset for the plain gradient.
+- **Kiosk background** — one photo behind the welcome screen, or several that crossfade on a timer
+  (8 seconds to 5 minutes, up to 20 photos, selectable in one go). A slider controls how much they are
+  darkened so the welcome text stays readable, with a live preview beside it. Landscape, 1600px wide
+  or more. Leave it empty for the plain gradient. Rotation pauses while somebody is signing in.
 
 Uploads are checked by their actual bytes rather than their file extension, so a mislabelled file is
 rejected instead of becoming a broken image on the kiosk. Replacing an image deletes the old file.
