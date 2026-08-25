@@ -67,7 +67,22 @@ td .btn { padding: .35rem .7rem; font-size: .82rem; }
 /* ----------------------------------------------------------------- forms */
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0 1rem; }
 .check { display: flex; align-items: center; gap: .55rem; padding: .4rem 0; font-size: .92rem; }
-.check input { width: 18px; height: 18px; accent-color: var(--brand); }
+.check input { width: 18px; height: 18px; accent-color: var(--brand); flex: 0 0 auto; }
+
+/* Options read as a list, one per line, rather than a grid of ragged columns. */
+.check-list { display: flex; flex-direction: column; margin: .25rem 0 1.5rem; }
+.check-list .check {
+  align-items: flex-start; gap: .65rem; padding: .6rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.check-list .check:last-child { border-bottom: 0; }
+.check-list .check input { margin-top: .1rem; }
+.check-list .check .muted { display: block; margin-top: .15rem; }
+
+/* The inputs that go with them, stacked and a readable width. */
+.field-list { display: flex; flex-direction: column; gap: 1rem; max-width: 26rem; margin-bottom: 1.5rem; }
+.field-list .field { margin-bottom: 0; }
+.field-list .field .muted { display: block; margin-top: .3rem; font-weight: 400; }
 .inline-form { display: flex; gap: .6rem; flex-wrap: wrap; align-items: flex-end; }
 .inline-form .field { margin-bottom: 0; }
 

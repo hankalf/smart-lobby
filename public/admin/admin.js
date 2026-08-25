@@ -386,6 +386,93 @@
     });
   }
 
+  /* -------------------------------------------------------------- drivers */
+
+  VIEWS.drivers = async (root) => {
+    const params = new URLSearchParams();
+    ['q', 'from', 'to'].forEach((k) => { if (VIEWS.drivers[k]) params.set(k, VIEWS.drivers[k]); });
+    const data = await api(`/drivers?${params}`);
+    const cfg = await api('/settings');
+
+    const movementPill = (m) => (m ? `<span class="pill ${m === 'Collecting' ? 'wait' : 'on'}">${esc(m)}</span>` : '—');
+    const minutes = (r) => (r.signed_out_at
+      ? `${Math.round((new Date(r.signed_out_at) - new Date(r.signed_in_at)) / 60000)} min`
+      : `<span class="muted">on site</span>`);
+
+    root.innerHTML = `
+      <h1 class="page">Drivers</h1>
+      <p class="page-sub">Truck drivers delivering and collecting. Everything they sign in with — haulier, vehicle,
+        reference — is kept here.</p>
+
+      ${cfg.kiosk.show_driver_button ? '' : `<div class="notice">The <b>Driver</b> card is switched off, so nobody can
+        check in as one yet. Turn it on in <b>Settings → Sections on the home screen</b>.</div>`}
+
+      <div class="grid cards" style="margin-bottom:1.25rem">
+        ${[['On site now', data.stats.onsite], ['Arrived today', data.stats.today],
+           ['Delivering today', data.stats.delivering_today], ['Collecting today', data.stats.collecting_today],
+           ['Average turnaround', data.stats.avg_minutes ? `${Math.round(data.stats.avg_minutes)} min` : '—']]
+          .map(([l, n]) => `<div class="card stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('')}
+      </div>
+
+      <div class="card section">
+        <h2>On site now (${data.onsite.length})</h2>
+        ${data.onsite.length ? `<div class="table-wrap"><table>
+          <thead><tr><th>Driver</th><th>Haulier</th><th>Vehicle</th><th>Reference</th><th>Doing</th><th>Gate</th><th>Arrived</th><th></th></tr></thead>
+          <tbody>${data.onsite.map((r) => `<tr>
+            <td><b>${esc(r.full_name)}</b>${r.phone ? `<div class="muted">${esc(r.phone)}</div>` : ''}</td>
+            <td>${esc(r.company || '')}</td>
+            <td><b>${esc(r.vehicle_reg || '—')}</b></td>
+            <td>${esc(r.reference || '—')}</td>
+            <td>${movementPill(r.movement)}</td>
+            <td>${esc(r.location_name || '—')}</td>
+            <td>${fmtTime(r.signed_in_at)}</td>
+            <td><button class="btn ghost" data-signout="${r.id}">Sign out</button></td></tr>`).join('')}</tbody>
+        </table></div>` : '<p class="empty">No drivers on site.</p>'}
+      </div>
+
+      <div class="card section">
+        <div class="row between">
+          <h2 style="margin:0">Driver log</h2>
+          <a class="btn ghost" id="dr-csv" href="/api/admin/drivers?format=csv&${params}">Export CSV</a>
+        </div>
+        <div class="row">
+          <input class="input" id="dr-q" placeholder="Driver, haulier, vehicle or reference" style="max-width:20rem"
+            value="${esc(VIEWS.drivers.q || '')}">
+          <input class="input" id="dr-from" type="date" style="max-width:11rem" value="${esc(VIEWS.drivers.from || '')}">
+          <input class="input" id="dr-to" type="date" style="max-width:11rem" value="${esc(VIEWS.drivers.to || '')}">
+          <button class="btn" id="dr-search">Search</button>
+          ${VIEWS.drivers.q || VIEWS.drivers.from || VIEWS.drivers.to ? '<button class="btn ghost" id="dr-clear">Clear</button>' : ''}
+        </div>
+        ${data.log.length ? `<div class="table-wrap"><table>
+          <thead><tr><th>Arrived</th><th>Driver</th><th>Haulier</th><th>Vehicle</th><th>Reference</th><th>Doing</th><th>Gate</th><th>Turnaround</th></tr></thead>
+          <tbody>${data.log.map((r) => `<tr>
+            <td>${fmtDate(r.signed_in_at)}</td>
+            <td><b>${esc(r.full_name)}</b></td>
+            <td>${esc(r.company || '')}</td>
+            <td>${esc(r.vehicle_reg || '—')}</td>
+            <td>${esc(r.reference || '—')}</td>
+            <td>${movementPill(r.movement)}</td>
+            <td>${esc(r.location_name || '—')}</td>
+            <td>${minutes(r)}</td></tr>`).join('')}</tbody>
+        </table></div>` : '<p class="empty">No driver check-ins match.</p>'}
+      </div>`;
+
+    bindSignoutButtons(root, () => render('drivers'));
+    const runSearch = () => {
+      VIEWS.drivers.q = $('#dr-q').value.trim();
+      VIEWS.drivers.from = $('#dr-from').value;
+      VIEWS.drivers.to = $('#dr-to').value;
+      render('drivers');
+    };
+    $('#dr-search').addEventListener('click', runSearch);
+    $('#dr-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') runSearch(); });
+    const clear = $('#dr-clear');
+    if (clear) clear.addEventListener('click', () => {
+      VIEWS.drivers.q = VIEWS.drivers.from = VIEWS.drivers.to = '';
+      render('drivers');
+    });
+  };
+
   /* ----------------------------------------------------------- deliveries */
 
   VIEWS.deliveries = async (root) => {
@@ -1413,7 +1500,7 @@
       </div>
 
       <div class="card section"><h2>Kiosk sign-in flow</h2>
-        <div class="form-grid">
+        <div class="check-list">
           ${chk('kiosk.welcome_shows_menu', 'Skip “Touch to start”',
             'Put the sections straight on the home screen')}
           ${chk('kiosk.show_onsite_count', 'Show how many people are on site')}
@@ -1424,33 +1511,36 @@
           ${chk('kiosk.auto_signout_enabled', 'Sign everyone out at the end of the day',
             'People forget to sign out, and a roll call is worthless with yesterday&rsquo;s visitors still on it')}
         </div>
-        <div class="form-grid">
+
+        <div class="field-list">
           ${txt('kiosk.idle_timeout_seconds', 'Return to the welcome screen after (seconds)', 'number')}
           ${txt('kiosk.thank_you_seconds', 'Hold the thank-you screen for (seconds)', 'number')}
           <label class="field"><span>Sign everyone out at</span>
             <input class="input" data-set="kiosk.auto_signout_time" type="time"
               value="${esc(s.kiosk.auto_signout_time || '23:59')}"></label>
           <label class="field"><span>Returning-visitor lookup</span>
-            <span class="muted" style="font-weight:400">Also accepts a name when the box below is ticked</span>
             <select class="input" data-set="kiosk.returning_lookup_field">
               <option value="phone" ${s.kiosk.returning_lookup_field === 'phone' ? 'selected' : ''}>Mobile number</option>
               <option value="email" ${s.kiosk.returning_lookup_field === 'email' ? 'selected' : ''}>Email address</option>
-            </select></label>
+            </select>
+            <span class="muted">A name is also accepted while “find themselves by name” is ticked above</span></label>
         </div>
+
         <h3>Sections on the home screen</h3>
         <p class="muted" style="margin-top:0">Sign in and sign out always share the first card. Switch the rest off
           for sites that do not need them.</p>
-        <div class="form-grid">
+        <div class="check-list">
           ${chk('kiosk.show_interview_button', 'Interview', 'For candidates arriving to meet the hiring team')}
           ${chk('kiosk.show_driver_button', 'Driver', 'Truck drivers delivering or collecting at a warehouse')}
           ${chk('kiosk.show_delivery_button', 'Delivery', 'Courier drop-off — also needs Deliveries enabled below')}
         </div>
         <p class="muted">A “Request entry” card appears too when you switch it on under <b>Access control</b>.</p>
 
-        <span class="muted">Visit types offered on the kiosk</span>
-        <div class="form-grid" style="margin-top:.5rem">
-          ${['visitor', 'contractor', 'interview'].map((t) => `<label class="check">
-            <input type="checkbox" data-vtype="${t}" ${s.kiosk.visit_types.includes(t) ? 'checked' : ''}> ${t}</label>`).join('')}
+        <h3>Visit types offered on the kiosk</h3>
+        <p class="muted" style="margin-top:0">Shown when somebody taps Sign in, unless only one is ticked.</p>
+        <div class="check-list">
+          ${[['visitor', 'Visitor'], ['contractor', 'Contractor'], ['interview', 'Interview']].map(([t, label]) => `<label class="check">
+            <input type="checkbox" data-vtype="${t}" ${s.kiosk.visit_types.includes(t) ? 'checked' : ''}> <span>${label}</span></label>`).join('')}
         </div>
       </div>
 

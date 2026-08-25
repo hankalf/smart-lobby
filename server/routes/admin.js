@@ -125,6 +125,61 @@ router.get('/rollcall', (req, res) => {
   res.json({ generated_at: nowISO(), count: rows.length, rows });
 });
 
+/* --------------------------------------------------------------- drivers */
+
+/** Everything about truck drivers in one place: who is on site, and the log. */
+router.get('/drivers', (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const base = `SELECT v.*, p.full_name, p.company, p.phone, l.name AS location_name, d.name AS device_name
+                FROM visits v JOIN visitors p ON p.id = v.visitor_id
+                LEFT JOIN locations l ON l.id = v.location_id
+                LEFT JOIN devices d ON d.id = v.device_id
+                WHERE v.visit_type = 'driver'`;
+
+  const onsite = all(`${base} AND v.status = 'onsite' ORDER BY v.signed_in_at DESC`);
+
+  const where = [];
+  const params = [];
+  if (req.query.from) { where.push('v.signed_in_at >= ?'); params.push(req.query.from); }
+  if (req.query.to) { where.push('v.signed_in_at <= ?'); params.push(`${req.query.to}T23:59:59.999Z`); }
+  if (req.query.q) {
+    where.push('(lower(p.full_name) LIKE ? OR lower(p.company) LIKE ? OR lower(v.vehicle_reg) LIKE ? OR lower(v.reference) LIKE ?)');
+    const like = `%${String(req.query.q).toLowerCase()}%`;
+    params.push(like, like, like, like);
+  }
+  const log = all(`${base} ${where.length ? 'AND ' + where.join(' AND ') : ''}
+                   ORDER BY v.signed_in_at DESC LIMIT ?`, ...params, Number(req.query.limit) || 300);
+
+  if (req.query.format === 'csv') {
+    const body = csv(log, [
+      { label: 'Driver', key: 'full_name' }, { label: 'Haulier', key: 'company' }, { label: 'Phone', key: 'phone' },
+      { label: 'Vehicle', key: 'vehicle_reg' }, { label: 'Reference', key: 'reference' },
+      { label: 'Delivering/collecting', key: 'movement' }, { label: 'Gate', key: 'location_name' },
+      { label: 'Arrived', key: 'signed_in_at' }, { label: 'Left', key: 'signed_out_at' },
+      { label: 'On site (minutes)', value: (r) => (r.signed_out_at
+        ? Math.round((new Date(r.signed_out_at) - new Date(r.signed_in_at)) / 60000) : '') },
+      { label: 'Status', key: 'status' }
+    ]);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="drivers-${Date.now()}.csv"`);
+    return res.send(body);
+  }
+
+  const count = (sql, ...p) => get(sql, ...p).n;
+  res.json({
+    onsite,
+    log,
+    stats: {
+      onsite: onsite.length,
+      today: count("SELECT COUNT(*) AS n FROM visits WHERE visit_type = 'driver' AND substr(signed_in_at,1,10) = ?", today),
+      delivering_today: count("SELECT COUNT(*) AS n FROM visits WHERE visit_type = 'driver' AND movement IN ('Delivering','Both') AND substr(signed_in_at,1,10) = ?", today),
+      collecting_today: count("SELECT COUNT(*) AS n FROM visits WHERE visit_type = 'driver' AND movement IN ('Collecting','Both') AND substr(signed_in_at,1,10) = ?", today),
+      avg_minutes: get(`SELECT AVG((julianday(signed_out_at) - julianday(signed_in_at)) * 1440) AS m
+                        FROM visits WHERE visit_type = 'driver' AND signed_out_at IS NOT NULL`).m
+    }
+  });
+});
+
 /* ---------------------------------------------------------------- visits */
 
 router.get('/visits', (req, res) => {
