@@ -751,6 +751,23 @@
   }
 
   /**
+   * Why the camera did not open, in words reception can act on. A kiosk app that
+   * never forwards the permission request looks exactly like a refusal, which is
+   * the most common cause on a locked-down tablet.
+   */
+  function cameraProblem(err) {
+    const name = (err && err.name) || '';
+    if (!window.isSecureContext) return 'The camera needs an https:// address.';
+    if (name === 'NotAllowedError' || name === 'SecurityError') {
+      return 'The camera was blocked. If this tablet runs a kiosk app, allow the camera for that app in '
+        + 'iOS Settings — some kiosk apps never ask.';
+    }
+    if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'No camera was found on this device.';
+    if (name === 'NotReadableError') return 'The camera is already in use by another app.';
+    return 'The camera could not be opened.';
+  }
+
+  /**
    * Start a video element and wait until it actually has a picture. Safari needs
    * play() called explicitly, and reports zero dimensions until the first frame,
    * which is what everything downstream measures.
@@ -781,11 +798,9 @@
       // video has no dimensions, so a captured frame would come out blank.
       await playVideo(videoEl);
     } catch (e) {
-      // Live preview is unavailable (insecure origin, or permission refused).
-      // Fall back to the device's own camera app, which works everywhere on iPadOS.
-      $('#cam-error').textContent = window.isSecureContext
-        ? 'Live preview is unavailable — tap “Open camera” to take the photo with the camera app.'
-        : 'The live preview needs an https:// address. Tap “Open camera” to use the camera app instead, or skip this step.';
+      // Live preview is unavailable. Fall back to the device's own camera app,
+      // which works even where a kiosk app refuses the in-page camera.
+      $('#cam-error').textContent = `${cameraProblem(e)} Tap “Open camera” to use the camera app instead.`;
       show($('#cam-error'), true);
       show($('#btn-photo-native'), true);
       show($('#d-native'), true);
@@ -1201,14 +1216,12 @@
       await playVideo($('#scan-cam'));
       status.textContent = 'Hold your badge up to the camera, or type your name below.';
       scanTimer = setInterval(scanFrame, 180);
-    } catch {
+    } catch (err) {
       // No camera here: fold the scanner away and leave the search, with the
-      // button available in case it was only a refused permission.
+      // button available in case a second tap is what it takes.
       show($('#scan-panel'), false);
       show($('#scan-row'), true);
-      toast(window.isSecureContext
-        ? 'No camera available — search for your name instead'
-        : 'The scanner needs an https:// address — search for your name instead', 4000);
+      toast(`${cameraProblem(err)} Search for your name instead.`, 6000);
     }
   }
 
