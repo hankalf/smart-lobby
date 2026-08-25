@@ -119,7 +119,10 @@ The sections can sit straight on the home screen, or behind a "Touch to start" b
 - Recognises returning visitors by mobile number (or email) and pre-fills their details.
 - Signature capture on the glass for NDAs and site rules.
 - QR code on screen and on the badge for one-tap sign-out.
-- Times out back to the welcome screen; signs out anyone left on site at a time you set (23:59 by default),
+- An abandoned sign-in is wiped when the kiosk returns to the welcome screen: every field, the captured
+  photo and any answers given, so nothing of one visitor is left on screen for the next.
+- Times out back to the welcome screen after 90 seconds of nobody touching it (12 on the thank-you
+  screen), both configurable; signs out anyone left on site at a time you set (23:59 by default),
   in the site time zone, and only during that minute so a late arrival is not signed straight back out.
 
 ### Admin (`/admin/`)

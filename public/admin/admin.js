@@ -1313,7 +1313,8 @@
         <div class="table-wrap"><table class="fields-table">
           <thead><tr><th>Field</th>${DETAIL_TYPES.map(([, l]) => `<th>${l}</th>`).join('')}</tr></thead>
           <tbody>${DETAIL_FIELDS.map(([field, label, hint]) => `<tr>
-            <td><b>${label}</b>${hint ? `<div class="muted">${hint}</div>` : ''}</td>
+            <td><b>${label}</b>${hint ? `<div class="muted">${hint}</div>` : ''}
+              <div><button class="btn link" type="button" data-rowoff="${field}">Turn off for everyone</button></div></td>
             ${DETAIL_TYPES.map(([type]) => {
               const value = ((s.details[type] || {})[field]) || 'off';
               return `<td><select class="input" data-set="details.${type}.${field}">
@@ -1478,6 +1479,17 @@
       </div>
 
       <div class="row"><button class="btn" id="save-settings">Save settings</button></div>`;
+
+    // One tap to switch a field off for every visitor type — turning the selfie
+    // off everywhere should not mean four separate changes.
+    $$('[data-rowoff]').forEach((b) => b.addEventListener('click', () => {
+      const field = b.dataset.rowoff;
+      DETAIL_TYPES.forEach(([type]) => {
+        const select = $(`[data-set="details.${type}.${field}"]`);
+        if (select) select.value = 'off';
+      });
+      toast('Switched off for every type — remember to save');
+    }));
 
     fillTimezones(s.org.timezone);
     drawBadgePreview();

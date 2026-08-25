@@ -101,8 +101,25 @@
     $('#d-count').value = '1';
     show($('#identify-result'), false);
     show($('#details-error'), false);
-    show($('#shot'), false);
-    show($('#d-shot'), false);
+    show($('#questions-error'), false);
+
+    // Wipe the captured images themselves, not just their visibility: an
+    // abandoned sign-in must never leave a face on screen for the next person.
+    for (const sel of ['#shot', '#d-shot']) {
+      const img = $(sel);
+      if (img) { img.removeAttribute('src'); show(img, false); }
+    }
+
+    // Put the photo step back to its starting state, or the next visitor arrives
+    // to "Retake" and "Looks good" left over from someone else's attempt.
+    show($('#btn-capture'), true);
+    show($('#btn-retake'), false);
+    show($('#btn-photo-continue'), false);
+    show($('#btn-photo-native'), false);
+    show($('#btn-photo-skip'), true);
+    show($('#cam-error'), false);
+
+    $('#agreement-questions').innerHTML = '';
     $('#signout-results').innerHTML = '';
     clearSignature();
   }
