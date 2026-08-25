@@ -1308,8 +1308,39 @@
         <button class="btn ghost" data-apedit="${p.id}">Edit</button>
         <button class="btn ghost" data-apdel="${p.id}">Delete</button></div></div>
         <p class="muted">Auto-unlock on sign-in: ${p.auto_unlock_on_signin ? 'yes' : 'no'} ·
-          on sign-out: ${p.auto_unlock_on_signout ? 'yes' : 'no'} · hold ${p.unlock_seconds}s</p></div>`).join('')
+          on sign-out: ${p.auto_unlock_on_signout ? 'yes' : 'no'} · hold ${p.unlock_seconds}s</p>
+        ${p.notes ? `<pre class="muted" style="white-space:pre-wrap;margin:.5rem 0 0">${esc(p.notes)}</pre>` : ''}</div>`).join('')
         : '<div class="card section"><p class="empty">No doors configured.</p></div>'}
+      <div class="card section">
+        <h2>Wiring this to an access control panel</h2>
+        <p class="muted" style="margin-top:0">Smart Lobby only ever makes an HTTP call. A panel — Honeywell, Paxton,
+          Net2 or anything else — is reached through a small relay module on the same network: Smart Lobby calls the
+          relay, the relay closes a contact for a moment, and the panel treats it exactly like a button on the wall.
+          Nothing needs to be added to the panel's own software.</p>
+        <details class="howto">
+          <summary><b>Honeywell panel — how it goes together</b></summary>
+          <ol>
+            <li>Fit a network relay module (a Shelly 1 or similar dry-contact relay) near the panel, on the same
+              network as this server.</li>
+            <li>Wire its output contacts across the door's <b>REX / request-to-exit</b> input, or a spare auxiliary
+              input configured to release that door — the same terminals a push-to-exit button uses.</li>
+            <li>Set the relay to <b>momentary</b>, matching the unlock hold you set here, so it pulses rather than
+              latching the door open.</li>
+            <li>Add the door here with <b>Honeywell panel via relay module</b> and the relay's address, then press
+              <b>Test unlock</b>. Every attempt is logged below with what came back.</li>
+          </ol>
+          <p class="muted">Wiring into a REX input keeps the panel in charge of the door: its own schedules,
+            interlocks and fire release still apply, and the panel's log still records the release. Have your
+            installer confirm which terminals to use — that is a decision about the door, not about this software.</p>
+        </details>
+        <details class="howto">
+          <summary><b>Setting it up before it is wired</b></summary>
+          <p>Add the door now with a name and whatever you know, write the panel, door and terminals into the
+            wiring notes, and leave <b>Enabled</b> unticked. It stays listed, appears in no kiosk, and is never
+            called. When the relay goes in, put its address in and tick Enabled.</p>
+        </details>
+      </div>
+
       <div class="card section"><h2>Recent unlock events</h2>
         ${events.length ? `<div class="table-wrap"><table><thead><tr><th>When</th><th>Door</th><th>Actor</th><th>Source</th><th>Result</th></tr></thead>
         <tbody>${events.map((e) => `<tr><td>${fmtDate(e.created_at)}</td><td>${esc(e.access_point_name || '')}</td>
@@ -1328,12 +1359,53 @@
     }));
   };
 
+  /*
+   * Ways a door gets opened. Smart Lobby only ever makes an HTTP call, so any
+   * panel is reached through a relay module that closes a contact — which is how
+   * a Honeywell, Paxton or any other board is wired to a third-party trigger.
+   */
+  const DOOR_TEMPLATES = {
+    honeywell: {
+      label: 'Honeywell panel via relay module',
+      url: 'http://192.168.1.50/relay/0?turn=on&timer={{seconds}}',
+      method: 'GET', headers: '', body: '',
+      notes: 'Relay output wired across the REX (request-to-exit) or auxiliary input on the Honeywell panel.\n'
+        + 'Panel: \nDoor / reader: \nTerminals: \nRelay module IP: '
+    },
+    shelly: {
+      label: 'Shelly relay',
+      url: 'http://192.168.1.50/relay/0?turn=on&timer={{seconds}}',
+      method: 'GET', headers: '', body: '', notes: ''
+    },
+    tasmota: {
+      label: 'Tasmota relay',
+      url: 'http://192.168.1.50/cm?cmnd=Power%20On',
+      method: 'GET', headers: '', body: '', notes: ''
+    },
+    homeassistant: {
+      label: 'Home Assistant',
+      url: 'http://192.168.1.10:8123/api/services/lock/unlock',
+      method: 'POST',
+      headers: '{"Authorization":"Bearer YOUR_LONG_LIVED_TOKEN"}',
+      body: '{"entity_id":"lock.front_door"}', notes: ''
+    },
+    webhook: { label: 'Something else', url: '', method: 'POST', headers: '', body: '', notes: '' }
+  };
+
   function doorEditor(p) {
-    modal(p ? 'Edit door' : 'Add door', `
+    const m = modal(p ? 'Edit door' : 'Add door', `
       <div class="form-grid">
         <label class="field"><span>Name</span><input class="input" id="ap-name" value="${esc(p ? p.name : 'Front door')}"></label>
+        <label class="field"><span>How it is opened</span><select class="input" id="ap-template">
+          <option value="">— choose to fill in the rest —</option>
+          ${Object.entries(DOOR_TEMPLATES).map(([k, t]) => `<option value="${k}">${t.label}</option>`).join('')}
+        </select></label>
+      </div>
+      <div class="form-grid">
         <label class="field"><span>Method</span><select class="input" id="ap-method">
           ${['POST', 'GET', 'PUT'].map((m) => `<option ${p && p.method === m ? 'selected' : ''}>${m}</option>`).join('')}</select></label>
+        <label class="field"><span>Unlock hold (seconds)</span>
+          <input class="input" id="ap-secs" type="number" min="1" value="${p ? p.unlock_seconds : 5}"></label>
       </div>
       <label class="field"><span>URL</span><input class="input" id="ap-url" placeholder="http://192.168.1.50/relay/0?turn=on&amp;timer={{seconds}}"
         value="${esc(p ? p.url || '' : '')}"></label>
@@ -1341,16 +1413,20 @@
         placeholder='{"Authorization":"Bearer …"}' value="${esc(p ? p.headers || '' : '')}"></label>
       <label class="field"><span>Body template (optional)</span><textarea class="input" id="ap-body" rows="3"
         placeholder='{"action":"unlock","seconds":{{seconds}}}'>${esc(p ? p.body || '' : '')}</textarea></label>
-      <div class="form-grid">
-        <label class="field"><span>Unlock hold (seconds)</span><input class="input" id="ap-secs" type="number" min="1" value="${p ? p.unlock_seconds : 5}"></label>
-      </div>
+      <label class="field"><span>Wiring notes</span>
+        <textarea class="input" id="ap-notes" rows="4"
+          placeholder="Panel, door, terminals, relay address — whatever the installer will need">${esc(p ? p.notes || '' : '')}</textarea>
+        <span class="muted">For your own record. Nothing here is sent anywhere.</span></label>
+
       <label class="check"><input type="checkbox" id="ap-in" ${p && p.auto_unlock_on_signin ? 'checked' : ''}> Unlock automatically when a visitor signs in</label>
       <label class="check"><input type="checkbox" id="ap-out" ${p && p.auto_unlock_on_signout ? 'checked' : ''}> Unlock automatically when a visitor signs out</label>
-      <label class="check"><input type="checkbox" id="ap-en" ${!p || p.enabled ? 'checked' : ''}> Enabled</label>`,
+      <label class="check"><input type="checkbox" id="ap-en" ${!p || p.enabled ? 'checked' : ''}>
+        <span>Enabled<br><span class="muted">Leave this off until it is wired — the door is listed but never called</span></span></label>`,
       async (bg, close) => {
         const body = {
           name: $('#ap-name', bg).value, method: $('#ap-method', bg).value, url: $('#ap-url', bg).value,
           headers: $('#ap-headers', bg).value, body: $('#ap-body', bg).value,
+          notes: $('#ap-notes', bg).value,
           unlock_seconds: Number($('#ap-secs', bg).value) || 5,
           auto_unlock_on_signin: $('#ap-in', bg).checked ? 1 : 0,
           auto_unlock_on_signout: $('#ap-out', bg).checked ? 1 : 0,
@@ -1360,6 +1436,17 @@
         else await api('/access-points', { method: 'POST', body });
         close(); render('access');
       });
+
+    // Picking how the door is opened fills in the rest, leaving the address to change.
+    $('#ap-template', m.bg).addEventListener('change', (e) => {
+      const t = DOOR_TEMPLATES[e.target.value];
+      if (!t) return;
+      $('#ap-url', m.bg).value = t.url;
+      $('#ap-method', m.bg).value = t.method;
+      $('#ap-headers', m.bg).value = t.headers;
+      $('#ap-body', m.bg).value = t.body;
+      if (t.notes && !$('#ap-notes', m.bg).value.trim()) $('#ap-notes', m.bg).value = t.notes;
+    });
   }
 
   /* ------------------------------------------------------------ locations */

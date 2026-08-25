@@ -312,6 +312,7 @@ function migrate() {
   addColumn('visits', 'movement', 'TEXT');    // pick-up or delivery
   addColumn('visits', 'door', 'TEXT');        // which door a driver is on, set at the desk
   addColumn('devices', 'sections', 'TEXT');   // which home-screen cards this device shows
+  addColumn('access_points', 'notes', 'TEXT'); // panel, terminal and wiring notes for the installer
   addColumn('agreements', 'questions', 'TEXT');
   addColumn('agreements', 'require_signature', 'INTEGER NOT NULL DEFAULT 1');
   addColumn('signatures', 'answers', 'TEXT');

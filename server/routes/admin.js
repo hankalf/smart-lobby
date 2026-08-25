@@ -384,7 +384,7 @@ crud('staff', 'hosts', ['site_id', 'name', 'email', 'phone', 'department', 'webh
 crud('sites', 'sites', ['name', 'address', 'max_occupancy', 'active']);
 crud('agreements', 'agreements', ['name', 'body', 'version', 'required_for', 'questions', 'require_signature', 'active']);
 crud('access-points', 'access_points', ['site_id', 'name', 'kind', 'url', 'method', 'headers', 'body',
-  'unlock_seconds', 'auto_unlock_on_signin', 'auto_unlock_on_signout', 'enabled']);
+  'unlock_seconds', 'auto_unlock_on_signin', 'auto_unlock_on_signout', 'enabled', 'notes']);
 
 /** Send a test straight to one person's own webhook, so it can be proved before a visitor relies on it. */
 router.post('/staff/:id/test-webhook', async (req, res) => {
