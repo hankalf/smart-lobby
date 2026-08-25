@@ -1339,6 +1339,8 @@
           ${chk('kiosk.welcome_shows_menu', 'Skip “Touch to start”',
             'Put the sections straight on the home screen')}
           ${chk('kiosk.show_onsite_count', 'Show how many people are on site')}
+          ${chk('kiosk.qr_signout_enabled', 'Let visitors scan their badge to sign out',
+            'Only useful with badge printing on, and its QR code switched on')}
           ${chk('kiosk.auto_signout_enabled', 'Sign everyone out at the end of the day',
             'People forget to sign out, and a roll call is worthless with yesterday&rsquo;s visitors still on it')}
         </div>

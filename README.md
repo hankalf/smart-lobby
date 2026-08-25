@@ -118,7 +118,10 @@ The sections can sit straight on the home screen, or behind a "Touch to start" b
 
 - Recognises returning visitors by mobile number (or email) and pre-fills their details.
 - Signature capture on the glass for NDAs and site rules.
-- QR code on screen and on the badge for one-tap sign-out.
+- The sign-out code and its QR go on the printed badge only, not on screen — a code seen for a few seconds is no use to anyone.
+- Visitors with a printed badge can scan it at the kiosk to sign out (**Settings → Kiosk sign-in flow**).
+  Browsers with a native barcode reader use it; iPad Safari and WKWebView kiosk apps get a bundled
+  decoder, fetched only when the scanner is opened, so it works offline.
 - An abandoned sign-in is wiped when the kiosk returns to the welcome screen: every field, the captured
   photo and any answers given, so nothing of one visitor is left on screen for the next.
 - Times out back to the welcome screen after 90 seconds of nobody touching it (12 on the thank-you

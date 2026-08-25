@@ -67,6 +67,8 @@
     $$('.screen').forEach((s) => { s.hidden = s.dataset.screen !== name; });
     updateBackdrop();
     if (name !== 'photo' && name !== 'delivery') stopCamera();
+    if (name !== 'signout' && scanStream) stopScanner();
+    if (name === 'signout') show($('#scan-row'), !!(state.cfg && state.cfg.kiosk.qr_signout_enabled));
     if (name === 'idle') resetVisit();
     if (name === 'details') applyDetailFields();
     if (name === 'agreement') sizeSignaturePad();
@@ -876,8 +878,10 @@
     $('#done-sub').textContent = result.visit.host_name
       ? `${result.visit.host_name} has been notified and will be with you shortly.`
       : 'Reception has been notified.';
-    $('#done-code').textContent = `Sign-out code: ${result.checkout_code}`;
-    $('#done-qr').innerHTML = `<img src="/api/qr?text=${encodeURIComponent(result.checkout_code)}" alt="Sign out QR code">`;
+    // The code and its QR belong on the badge, not on screen — nobody can use a
+    // code they only saw for a few seconds.
+    $('#done-code').textContent = '';
+    $('#done-qr').innerHTML = '';
 
     // Badges are on for the account, but a kiosk with no printer attached opts out.
     const deviceCanPrint = !state.device || state.device.print_enabled;
@@ -962,6 +966,109 @@
       }));
     }, 140);
   });
+
+  /* --------------------------------------------------------- badge scanner */
+
+  /*
+   * Scanning the QR code on a printed badge to sign out. Chrome has a native
+   * BarcodeDetector; iPad Safari and the WKWebView kiosk apps do not, so jsQR is
+   * bundled — and only fetched when somebody actually opens the scanner.
+   */
+  let scanStream = null;
+  let scanTimer = null;
+  let detector = null;
+  let jsQrLoading = null;
+
+  function loadJsQr() {
+    if (window.jsQR) return Promise.resolve(window.jsQR);
+    if (jsQrLoading) return jsQrLoading;
+    jsQrLoading = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'vendor/jsQR.js';
+      script.onload = () => resolve(window.jsQR);
+      script.onerror = () => reject(new Error('jsqr_failed'));
+      document.head.appendChild(script);
+    });
+    return jsQrLoading;
+  }
+
+  async function startScanner() {
+    const status = $('#scan-status');
+    show($('#scan-panel'), true);
+    show($('#scan-row'), false);
+    status.textContent = 'Starting the camera…';
+
+    try {
+      if ('BarcodeDetector' in window && !detector) {
+        detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+      }
+      if (!detector) await loadJsQr();
+    } catch {
+      status.textContent = 'The scanner could not load. Please type your name instead.';
+      return;
+    }
+
+    try {
+      scanStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1280 } }, audio: false
+      });
+      $('#scan-cam').srcObject = scanStream;
+      status.textContent = 'Hold your badge up to the camera.';
+      scanTimer = setInterval(scanFrame, 180);
+    } catch {
+      status.textContent = window.isSecureContext
+        ? 'No camera available here. Please type your name instead.'
+        : 'The camera needs an https:// address. Please type your name instead.';
+    }
+  }
+
+  function stopScanner() {
+    clearInterval(scanTimer);
+    scanTimer = null;
+    if (scanStream) { scanStream.getTracks().forEach((t) => t.stop()); scanStream = null; }
+    show($('#scan-panel'), false);
+    show($('#scan-row'), !!(state.cfg && state.cfg.kiosk.qr_signout_enabled));
+  }
+
+  async function scanFrame() {
+    const video = $('#scan-cam');
+    if (!video.videoWidth) return;
+    const canvas = $('#scan-canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    let text = null;
+    try {
+      if (detector) {
+        const found = await detector.detect(canvas);
+        if (found.length) text = found[0].rawValue;
+      } else if (window.jsQR) {
+        const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const found = window.jsQR(image.data, image.width, image.height, { inversionAttempts: 'dontInvert' });
+        if (found) text = found.data;
+      }
+    } catch { /* keep trying on the next frame */ }
+
+    if (!text) return;
+    const code = String(text).trim().toUpperCase();
+    if (!/^[0-9A-F]{8}$/.test(code)) {
+      $('#scan-status').textContent = 'That is not a badge from this building.';
+      return;
+    }
+
+    stopScanner();
+    // Hand the code to the ordinary search, so the visitor still sees their own
+    // name and photo before anything happens.
+    const input = $('#signout-q');
+    input.value = code;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    toast('Badge found');
+  }
+
+  $('#btn-scan').addEventListener('click', startScanner);
+  $('#btn-scan-stop').addEventListener('click', stopScanner);
 
   /* -------------------------------------------------------------- delivery */
 
