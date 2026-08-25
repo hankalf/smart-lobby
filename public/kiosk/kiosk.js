@@ -750,6 +750,23 @@
     return { ...base, deviceId: { ideal: choice } };
   }
 
+  /**
+   * Start a video element and wait until it actually has a picture. Safari needs
+   * play() called explicitly, and reports zero dimensions until the first frame,
+   * which is what everything downstream measures.
+   */
+  async function playVideo(videoEl) {
+    videoEl.setAttribute('playsinline', '');
+    videoEl.muted = true;
+    try { await videoEl.play(); } catch { /* some browsers resolve without it */ }
+    if (videoEl.videoWidth) return;
+    await new Promise((resolve) => {
+      const done = () => { videoEl.removeEventListener('loadedmetadata', done); resolve(); };
+      videoEl.addEventListener('loadedmetadata', done);
+      setTimeout(done, 3000);
+    });
+  }
+
   let stream = null;
   async function startCamera(videoEl) {
     stopCamera();
@@ -760,6 +777,9 @@
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: cameraConstraint(), audio: false });
       videoEl.srcObject = stream;
+      // iOS will not start the stream from the attribute alone, and a paused
+      // video has no dimensions, so a captured frame would come out blank.
+      await playVideo(videoEl);
     } catch (e) {
       // Live preview is unavailable (insecure origin, or permission refused).
       // Fall back to the device's own camera app, which works everywhere on iPadOS.
@@ -1178,6 +1198,7 @@
         video: { facingMode: 'user', width: { ideal: 1280 } }, audio: false
       });
       $('#scan-cam').srcObject = scanStream;
+      await playVideo($('#scan-cam'));
       status.textContent = 'Hold your badge up to the camera, or type your name below.';
       scanTimer = setInterval(scanFrame, 180);
     } catch {

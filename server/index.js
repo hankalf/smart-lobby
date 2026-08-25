@@ -61,6 +61,16 @@ app.use('/media/private', (req, res, next) => {
 /* ------------------------------------------------------------ front end */
 
 const PUBLIC_WEB = path.join(__dirname, '..', 'public');
+
+// An iPad kiosk added to the home screen caches hard, and would keep running an
+// old copy of the app after a deploy. These files must always be revalidated;
+// they are small, and uploaded media is cached separately above.
+app.use((req, res, next) => {
+  if (/\.(html|js|css)$/.test(req.path) || req.path.endsWith('/')) {
+    res.setHeader('Cache-Control', 'no-cache');
+  }
+  next();
+});
 app.use(express.static(PUBLIC_WEB, { extensions: ['html'] }));
 app.get('/', (req, res) => res.redirect('/kiosk/'));
 app.get('/kiosk', (req, res) => res.redirect('/kiosk/'));
