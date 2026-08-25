@@ -912,16 +912,24 @@
   /* -------------------------------------------------------------- sign out */
 
   let signoutTimer = null;
+  const initials = (name) => String(name || '').split(/\s+/).filter(Boolean).slice(0, 2)
+    .map((w) => w[0].toUpperCase()).join('');
+
   $('#signout-q').addEventListener('input', () => {
     clearTimeout(signoutTimer);
     signoutTimer = setTimeout(async () => {
       const q = $('#signout-q').value.trim();
-      if (q.length < 2) return ($('#signout-results').innerHTML = '');
+      // Matches appear from the first letter typed.
+      if (!q) return ($('#signout-results').innerHTML = '');
       const isCode = /^[0-9A-F]{8}$/i.test(q);
       const rows = await api('/signout/search', isCode ? { code: q } : { q }).catch(() => []);
       $('#signout-results').innerHTML = rows.length
-        ? rows.map((r) => `<div class="result"><div><b>${r.full_name}</b>
-            <span>${r.company ? r.company + ' · ' : ''}in since ${new Date(r.signed_in_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${r.host_name ? ' · ' + r.host_name : ''}</span></div>
+        ? rows.map((r) => `<div class="result">
+            ${r.photo_url
+              ? `<img class="result-photo" src="${escapeHtml(r.photo_url)}" alt="">`
+              : `<div class="result-photo initials">${escapeHtml(initials(r.full_name))}</div>`}
+            <div class="result-who"><b>${escapeHtml(r.full_name)}</b>
+            <span>${r.company ? escapeHtml(r.company) + ' · ' : ''}in since ${new Date(r.signed_in_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${r.host_name ? ' · ' + escapeHtml(r.host_name) : ''}</span></div>
             <button class="btn" data-signout="${r.id}">Sign out</button></div>`).join('')
         : '<p class="muted">No matching visitor is signed in.</p>';
       $$('#signout-results [data-signout]').forEach((b) => b.addEventListener('click', async () => {
@@ -935,7 +943,7 @@
         show($('#done-badge-note'), false);
         setScreen('done');
       }));
-    }, 220);
+    }, 140);
   });
 
   /* -------------------------------------------------------------- delivery */

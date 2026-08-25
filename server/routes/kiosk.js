@@ -259,21 +259,67 @@ router.post('/signin', async (req, res) => {
 
 /* -------------------------------------------------------------- sign out */
 
+/*
+ * Visitor photos live behind the admin login. To show a face in the sign-out
+ * list without opening that up, each search result carries a short-lived signed
+ * link: it only works for that visit, only while they are on site, and only for
+ * a few minutes after the search that produced it. The key is per-process, so
+ * links do not survive a restart either.
+ */
+const PHOTO_KEY = crypto.randomBytes(32);
+const PHOTO_TTL_MS = 5 * 60 * 1000;
+
+function photoToken(visitId) {
+  const expires = Date.now() + PHOTO_TTL_MS;
+  const mac = crypto.createHmac('sha256', PHOTO_KEY).update(`${visitId}.${expires}`).digest('hex').slice(0, 32);
+  return `${expires}.${mac}`;
+}
+
+function photoTokenValid(visitId, token) {
+  const [expires, mac] = String(token || '').split('.');
+  if (!expires || !mac || !Number(expires) || Number(expires) < Date.now()) return false;
+  const expected = crypto.createHmac('sha256', PHOTO_KEY).update(`${visitId}.${expires}`).digest('hex').slice(0, 32);
+  // timingSafeEqual throws on a length mismatch, so check that first.
+  if (mac.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(expected));
+}
+
+router.get('/visit-photo/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (!photoTokenValid(id, req.query.t)) return res.status(403).end();
+  const visit = get("SELECT photo_path FROM visits WHERE id = ? AND status = 'onsite'", id);
+  if (!visit || !visit.photo_path) return res.status(404).end();
+  const abs = files.absoluteFor(visit.photo_path);
+  if (!abs) return res.status(404).end();
+  res.setHeader('Cache-Control', 'private, max-age=60');
+  res.sendFile(abs);
+});
+
+const withPhotos = (rows) => rows.map((r) => ({
+  id: r.id,
+  signed_in_at: r.signed_in_at,
+  full_name: r.full_name,
+  company: r.company,
+  host_name: r.host_name,
+  photo_url: r.photo_path ? `/api/kiosk/visit-photo/${r.id}?t=${photoToken(r.id)}` : null
+}));
+
 router.post('/signout/search', (req, res) => {
   const q = lower(req.body.q);
   const code = String(req.body.code || '').trim().toUpperCase();
   if (code) {
-    const v = get(`SELECT v.id, v.signed_in_at, p.full_name, p.company, h.name AS host_name
+    const v = get(`SELECT v.id, v.signed_in_at, v.photo_path, p.full_name, p.company, h.name AS host_name
                    FROM visits v JOIN visitors p ON p.id = v.visitor_id LEFT JOIN hosts h ON h.id = v.host_id
                    WHERE v.checkout_code = ? AND v.status = 'onsite'`, code);
-    return res.json(v ? [v] : []);
+    return res.json(withPhotos(v ? [v] : []));
   }
-  if (!q || q.length < 2) return res.json([]);
+  if (!q) return res.json([]);
   // Matches any part of the name, so a first name, a surname or a phone number all work.
-  res.json(all(`SELECT v.id, v.signed_in_at, p.full_name, p.company, h.name AS host_name
-                FROM visits v JOIN visitors p ON p.id = v.visitor_id LEFT JOIN hosts h ON h.id = v.host_id
-                WHERE v.status = 'onsite' AND (lower(p.full_name) LIKE ? OR ${PHONE_NORM_SQL.replace(/phone/g, 'p.phone')} LIKE ?)
-                ORDER BY v.signed_in_at DESC LIMIT 25`, `%${q}%`, `%${normPhone(q) || q}%`));
+  res.json(withPhotos(all(
+    `SELECT v.id, v.signed_in_at, v.photo_path, p.full_name, p.company, h.name AS host_name
+     FROM visits v JOIN visitors p ON p.id = v.visitor_id LEFT JOIN hosts h ON h.id = v.host_id
+     WHERE v.status = 'onsite' AND (lower(p.full_name) LIKE ? OR ${PHONE_NORM_SQL.replace(/phone/g, 'p.phone')} LIKE ?)
+     ORDER BY v.signed_in_at DESC LIMIT 25`, `%${q}%`, `%${normPhone(q) || q}%`)));
 });
 
 router.post('/signout', async (req, res) => {

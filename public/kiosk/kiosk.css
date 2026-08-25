@@ -207,11 +207,19 @@ body.has-bg .screen:not(.dark) > .bar .btn.ghost {
 
 /* ---------------------------------------------------------- result list */
 .result-list div.result {
-  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
-  padding: 1rem; border: 1px solid var(--line); border-radius: 12px; margin-bottom: .6rem; background: var(--surface);
+  display: flex; align-items: center; gap: 1rem;
+  padding: .8rem 1rem; border: 1px solid var(--line); border-radius: 12px; margin-bottom: .6rem; background: var(--surface);
 }
+.result-who { flex: 1 1 auto; min-width: 0; }
 .result b { display: block; font-size: 1.1rem; }
 .result span { color: var(--ink-soft); font-size: .9rem; }
+.result-photo {
+  flex: 0 0 auto; width: 56px; height: 56px; border-radius: 10px; object-fit: cover;
+  background: var(--brand-soft);
+}
+.result-photo.initials {
+  display: grid; place-items: center; color: var(--brand-dark); font-weight: 700; font-size: 1.1rem;
+}
 
 /* --------------------------------------------------------------- toast */
 .toast {
