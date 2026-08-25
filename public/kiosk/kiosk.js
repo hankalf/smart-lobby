@@ -448,8 +448,18 @@
     $('#agreement-title').textContent = many
       ? `${state.agreement.name} (${index + 1} of ${state.agreements.length})`
       : state.agreement.name;
-    $('#agreement-body').textContent = state.agreement.body;
-    $('#agreement-continue').textContent = index < state.agreements.length - 1 ? 'I agree — next document' : 'I agree & continue';
+    // A questionnaire may have no text to read at all.
+    $('#agreement-body').textContent = state.agreement.body || '';
+    show($('#agreement-body'), !!String(state.agreement.body || '').trim());
+    // A questionnaire is a document that only asks questions — no signature box.
+    const needsSignature = state.agreement.require_signature !== 0;
+    show($('.sig-label'), needsSignature);
+    show($('.sig-wrap'), needsSignature);
+    show($('#sig-clear'), needsSignature);
+    const last = index === state.agreements.length - 1;
+    $('#agreement-continue').textContent = needsSignature
+      ? (last ? 'I agree & continue' : 'I agree — next document')
+      : (last ? 'Continue' : 'Next');
     renderQuestions();
     clearSignature();
     setScreen('agreement');
@@ -688,11 +698,12 @@
       return;
     }
     show(err, false);
-    if (!hasInk) return toast('Please sign in the box to continue');
+    const needsSignature = state.agreement.require_signature !== 0;
+    if (needsSignature && !hasInk) return toast('Please sign in the box to continue');
 
     state.signedDocs.push({
       agreement_id: state.agreement.id,
-      signature: pad.toDataURL('image/png'),
+      signature: needsSignature ? pad.toDataURL('image/png') : null,
       answers: Object.keys(state.answers).length ? state.answers : null
     });
 

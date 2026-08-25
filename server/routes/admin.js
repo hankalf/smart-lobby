@@ -257,7 +257,7 @@ function crud(resource, table, fields) {
 
 crud('staff', 'hosts', ['site_id', 'name', 'email', 'phone', 'department', 'webhook_url', 'active']);
 crud('sites', 'sites', ['name', 'address', 'max_occupancy', 'active']);
-crud('agreements', 'agreements', ['name', 'body', 'version', 'required_for', 'questions', 'active']);
+crud('agreements', 'agreements', ['name', 'body', 'version', 'required_for', 'questions', 'require_signature', 'active']);
 crud('access-points', 'access_points', ['site_id', 'name', 'kind', 'url', 'method', 'headers', 'body',
   'unlock_seconds', 'auto_unlock_on_signin', 'auto_unlock_on_signout', 'enabled']);
 

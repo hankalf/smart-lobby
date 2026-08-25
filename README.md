@@ -202,7 +202,54 @@ A document can also carry its own **questions**, asked on the kiosk just above t
 - **Short answer** — free text
 - **Choose one** — your own options
 
-Mark a question as required and the visitor cannot sign until it is answered. Answers are stored
+A document with questions and the signature switched off is a **questionnaire — leave the signature off**
+and the visitor simply answers and carries on; the text body can be left empty too.
+
+Mark a question as required and the visitor cannot continue until it is answered. Answers are stored
+against that visit alongside the signature, and shown on the visit record with the wording used at
+the time — so a later edit to a question never changes what a past answer appears to mean.
+
+Where more than one document applies to a category, they are signed one after another, titled
+"Site rules (1 of 2)" and so on, each with its own questions and signature.
+
+---
+
+## Staff
+
+The people visitors ask for. Each can have an email address, a mobile number for SMS and their own
+chat webhook, so alerts reach them directly.
+
+**Add several at once from a spreadsheet** — upload an `.xlsx` or `.csv`. The first row should be
+headings; only *Name* is required, and headings are matched loosely, so "Full name", "Phone",
+"Mobile", "Team" and similar all work. Someone already on the list is updated rather than
+duplicated — matched on email, or on name where there is no email — so a corrected sheet can simply
+be uploaded again. A template is downloadable from that panel.
+
+---
+
+## Documents and questions
+
+Each document in **Documents** is assigned to the categories that must sign it, matching the kiosk
+home-screen cards:
+
+| Category | Card |
+| --- | --- |
+| Visitors, Contractors | Sign in / Sign out |
+| Interviews | Interview |
+| Staff | if you sign employees in |
+
+Deliveries sign nothing.
+
+A document can also carry its own **questions**, asked on the kiosk just above the signature:
+
+- **Yes / No** — a tap
+- **Short answer** — free text
+- **Choose one** — your own options
+
+A document with questions and the signature switched off is a **questionnaire — leave the signature off**
+and the visitor simply answers and carries on; the text body can be left empty too.
+
+Mark a question as required and the visitor cannot continue until it is answered. Answers are stored
 against that visit alongside the signature, and shown on the visit record with the wording used at
 the time — so a later edit to a question never changes what a past answer appears to mean.
 

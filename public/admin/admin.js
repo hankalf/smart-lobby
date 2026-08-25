@@ -663,9 +663,14 @@
       </div>
 
       <h3>Questions</h3>
-      <p class="muted" style="margin-top:0">Asked on the kiosk just above the signature. Answers are stored against the visit.</p>
+      <p class="muted" style="margin-top:0">Asked on the kiosk before they finish. Answers are stored against the visit.</p>
       <div id="q-list"></div>
       <button class="btn subtle" id="q-add" type="button">Add a question</button>
+
+      <h3>Signature</h3>
+      <label class="check"><input type="checkbox" id="ag-sig" ${!doc || doc.require_signature !== 0 ? 'checked' : ''}>
+        <span>Ask for a signature<br><span class="muted">Leave this off for a questionnaire — the visitor just answers
+          the questions and carries on.</span></span></label>
 
       <label class="check" style="margin-top:1rem"><input type="checkbox" id="ag-active" ${!doc || doc.active ? 'checked' : ''}> Active</label>
       ${doc ? '<p class="muted">Saving bumps the version, so copies already signed stay exactly as they were signed.</p>' : ''}`,
@@ -675,6 +680,7 @@
           body: $('#ag-body', bg).value,
           required_for: JSON.stringify($$('[data-t]', bg).filter((c) => c.checked).map((c) => c.dataset.t)),
           questions: JSON.stringify(collectQuestions(bg)),
+          require_signature: $('#ag-sig', bg).checked ? 1 : 0,
           active: $('#ag-active', bg).checked ? 1 : 0
         };
         if (!body.name.trim()) return toast('Give the document a title');

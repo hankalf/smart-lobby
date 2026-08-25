@@ -309,6 +309,7 @@ function migrate() {
   addColumn('devices', 'print_enabled', 'INTEGER NOT NULL DEFAULT 1');
   addColumn('visits', 'location_id', 'INTEGER REFERENCES locations(id) ON DELETE SET NULL');
   addColumn('agreements', 'questions', 'TEXT');
+  addColumn('agreements', 'require_signature', 'INTEGER NOT NULL DEFAULT 1');
   addColumn('signatures', 'answers', 'TEXT');
 }
 
