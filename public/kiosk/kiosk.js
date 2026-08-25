@@ -32,7 +32,8 @@
     deviceId: null,
     device: null,
     configRev: null,
-    configPending: false
+    configPending: false,
+    appliedSections: undefined
   };
 
   /* ------------------------------------------------------------- helpers */
@@ -105,7 +106,7 @@
     state.flow = [];
     state.flowIndex = -1;
     ['#f-name', '#f-company', '#f-phone', '#f-email', '#f-host-search', '#f-host-id', '#f-purpose', '#f-vehicle',
-     '#identify-value', '#signout-q', '#d-name', '#d-company', '#d-host-search', '#d-host-id', '#d-tracking'].forEach((s) => {
+     '#f-reference', '#f-movement', '#identify-value', '#signout-q', '#d-name', '#d-company', '#d-host-search', '#d-host-id', '#d-tracking'].forEach((s) => {
       const el = $(s); if (el) el.value = '';
     });
     $('#d-count').value = '1';
@@ -321,6 +322,15 @@
       state.deviceId = d.device_id;
       state.device = d.device_id ? d : null;
 
+      // The cards are built before the first check-in, so the kiosk does not yet
+      // know which device it is. Rebuild them once that answer arrives, and again
+      // if the device's card list is changed in the dashboard.
+      const sectionSig = JSON.stringify((state.device && state.device.sections) || null);
+      if (sectionSig !== state.appliedSections) {
+        state.appliedSections = sectionSig;
+        if (state.cfg) buildSections();
+      }
+
       // Something changed in the dashboard: pick it up without anyone walking
       // over to the tablet, but never mid sign-in.
       if (d.config_rev !== undefined && state.configRev !== null && d.config_rev !== state.configRev) {
@@ -358,6 +368,10 @@
       cards.push(`<button class="tile" data-action="interview">
         <span class="tile-icon">💼</span><span>Interview</span><small>Here to meet the hiring team</small></button>`);
     }
+    if (kiosk.show_driver_button) {
+      cards.push(`<button class="tile" data-action="driver">
+        <span class="tile-icon">🚚</span><span>Driver</span><small>Delivering or collecting a load</small></button>`);
+    }
     if (kiosk.show_delivery_button && deliveries.enabled) {
       cards.push(`<button class="tile" data-action="delivery">
         <span class="tile-icon">📦</span><span>Delivery</span><small>Courier drop-off</small></button>`);
@@ -371,6 +385,15 @@
 
   function wireSections(container) {
     container.innerHTML = sectionsHtml();
+
+    // A device can be limited to some of the cards — a warehouse gate showing
+    // drivers and deliveries, reception showing visitors and interviews.
+    const only = state.device && state.device.sections;
+    if (Array.isArray(only) && only.length) {
+      $$('[data-action]', container).forEach((el) => {
+        if (!only.includes(el.dataset.action)) el.remove();
+      });
+    }
     $$('[data-action]', container).forEach((el) => el.addEventListener('click', (e) => {
       e.stopPropagation();
       runAction(el.dataset.action);
@@ -378,10 +401,11 @@
   }
 
   async function runAction(action) {
-    if (action === 'interview') {
-      state.visitType = 'interview';
+    // Cards that go straight into a sign-in as a particular type.
+    if (action === 'interview' || action === 'driver') {
+      state.visitType = action;
       await loadAgreement();
-      state.induction = await api('/induction', { visit_type: 'interview' }).catch(() => state.induction);
+      state.induction = await api('/induction', { visit_type: action }).catch(() => state.induction);
       return setScreen('identify');
     }
     if (action === 'signin') {
@@ -539,7 +563,8 @@
    */
   const DETAIL_WIDGETS = {
     company: '#w-company', phone: '#w-phone', email: '#w-email',
-    staff: '#w-host', purpose: '#w-purpose', vehicle: '#w-vehicle'
+    staff: '#w-host', purpose: '#w-purpose', vehicle: '#w-vehicle',
+    reference: '#w-reference', movement: '#w-movement'
   };
 
   function detailFields() {
@@ -572,6 +597,9 @@
     if (fields.email === 'required' && !$('#f-email').value.trim()) return fail('Please enter an email address.');
     if (fields.company === 'required' && !$('#f-company').value.trim()) return fail('Please enter your company.');
     if (fields.staff === 'required' && !$('#f-host-id').value) return fail('Please choose who you are here to see.');
+    if (fields.vehicle === 'required' && !$('#f-vehicle').value.trim()) return fail('Please enter your vehicle registration.');
+    if (fields.reference === 'required' && !$('#f-reference').value.trim()) return fail('Please enter your load or order reference.');
+    if (fields.movement === 'required' && !$('#f-movement').value) return fail('Please choose whether you are delivering or collecting.');
     show(err, false);
 
     if (!state.visitor) {
@@ -961,6 +989,8 @@
       visit_type: state.visitType,
       purpose: $('#f-purpose').value.trim(),
       vehicle_reg: $('#f-vehicle').value.trim().toUpperCase(),
+      reference: $('#f-reference').value.trim(),
+      movement: $('#f-movement').value,
       photo: state.photo,
       documents: state.signedDocs,
       device_id: state.deviceId,

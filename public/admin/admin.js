@@ -299,6 +299,7 @@
           <span class="muted">${esc(v.company || '')} ${v.phone ? '· ' + esc(v.phone) : ''} ${v.email ? '· ' + esc(v.email) : ''}</span></p>
           <p class="muted">${esc(v.visit_type)} · ${esc(v.purpose || 'no reason given')}<br>
           Staff member: ${esc(v.host_name || '—')} · Badge: ${esc(v.badge_no || '—')} ${v.vehicle_reg ? '· Vehicle: ' + esc(v.vehicle_reg) : ''}<br>
+          ${v.reference ? `Reference: ${esc(v.reference)}${v.movement ? ' · ' + esc(v.movement) : ''}<br>` : ''}
           ${v.location_name ? `Signed in at: ${esc(v.location_name)}${v.device_name ? ` (${esc(v.device_name)})` : ''}<br>` : ''}
           In: ${fmtDate(v.signed_in_at)} · Out: ${fmtDate(v.signed_out_at)}</p>
         </div>
@@ -616,6 +617,7 @@
     ['visitor', 'Visitors', 'Sign in / Sign out card'],
     ['contractor', 'Contractors', 'Sign in / Sign out card'],
     ['interview', 'Interviews', 'Interview card — candidates'],
+    ['driver', 'Drivers', 'Driver card — deliveries and collections'],
     ['staff', 'Staff', 'Employees, if you sign them in']
   ];
   const categoryLabel = (t) => (CATEGORIES.find(([v]) => v === t) || [t, t])[1];
@@ -1100,6 +1102,12 @@
 
   const CAMERA_LABEL = { front: 'Front camera', rear: 'Rear camera' };
 
+  // The home-screen cards a device can be limited to.
+  const DEVICE_SECTIONS = [
+    ['signin', 'Sign in'], ['signout', 'Sign out'], ['interview', 'Interview'],
+    ['driver', 'Driver'], ['delivery', 'Delivery'], ['unlock', 'Request entry']
+  ];
+
   VIEWS.devices = async (root) => {
     const [rows, locations] = await Promise.all([api('/devices'), api('/locations')]);
     const origin = location.origin;
@@ -1172,6 +1180,18 @@
             <option value="kiosk" ${d.mode === 'kiosk' ? 'selected' : ''}>Kiosk — visitor sign-in</option>
           </select></label>
         </div>
+
+        <h3>Cards shown on this device</h3>
+        <p class="muted" style="margin-top:0">A warehouse gate can show drivers and deliveries while reception shows
+          visitors and interviews. Leave all of them ticked to show whatever is switched on in Settings.</p>
+        <div class="form-grid">
+          ${DEVICE_SECTIONS.map(([key, label]) => {
+            let chosen = null;
+            try { chosen = JSON.parse(d.sections || 'null'); } catch { chosen = null; }
+            const on = !Array.isArray(chosen) || !chosen.length || chosen.includes(key);
+            return `<label class="check"><input type="checkbox" data-dsec="${key}" ${on ? 'checked' : ''}> ${label}</label>`;
+          }).join('')}
+        </div>
         <p class="muted">${reported.length
           ? `${reported.length} camera${reported.length === 1 ? '' : 's'} reported by this device.`
           : 'This device has not reported its cameras yet — it does so once it has been opened and allowed camera access. Front/rear still work.'}</p>
@@ -1180,11 +1200,14 @@
             Settings. Turn it off for a device with no printer attached.</span></span></label>
         <p class="muted">More operational modes are coming; every device runs in kiosk mode for now.</p>`,
         async (bg, close) => {
+          const picked = $$('[data-dsec]', bg).filter((c) => c.checked).map((c) => c.dataset.dsec);
           await api(`/devices/${d.id}`, { method: 'PATCH', body: {
             name: $('#de-name', bg).value,
             location_id: $('#de-loc', bg).value || null,
             default_camera: $('#de-cam', bg).value,
             mode: $('#de-mode', bg).value,
+            // All ticked means "no restriction", so a new card added later still appears.
+            sections: picked.length === DEVICE_SECTIONS.length ? null : JSON.stringify(picked),
             print_enabled: $('#de-print', bg).checked } });
           close(); render('devices');
         });
@@ -1246,9 +1269,12 @@
     ['email', 'Email address', ''],
     ['staff', 'Who they are seeing', ''],
     ['purpose', 'Reason for visit', ''],
-    ['vehicle', 'Vehicle registration', '']
+    ['vehicle', 'Vehicle registration', ''],
+    ['reference', 'Load or order reference', 'Order, docket or PO number'],
+    ['movement', 'Delivering or collecting', '']
   ];
-  const DETAIL_TYPES = [['visitor', 'Visitors'], ['contractor', 'Contractors'], ['interview', 'Interviews'], ['staff', 'Staff']];
+  const DETAIL_TYPES = [['visitor', 'Visitors'], ['contractor', 'Contractors'], ['interview', 'Interviews'],
+    ['driver', 'Drivers'], ['staff', 'Staff']];
 
   VIEWS.settings = async (root) => {
     SETTINGS = await api('/settings');
@@ -1418,6 +1444,7 @@
           for sites that do not need them.</p>
         <div class="form-grid">
           ${chk('kiosk.show_interview_button', 'Interview', 'For candidates arriving to meet the hiring team')}
+          ${chk('kiosk.show_driver_button', 'Driver', 'Truck drivers delivering or collecting at a warehouse')}
           ${chk('kiosk.show_delivery_button', 'Delivery', 'Courier drop-off — also needs Deliveries enabled below')}
         </div>
         <p class="muted">A “Request entry” card appears too when you switch it on under <b>Access control</b>.</p>

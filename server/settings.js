@@ -24,10 +24,13 @@ const DEFAULTS = {
   // What the "Your details" form asks, per visitor type. Each field is
   // off / optional / required, so an interview need not ask why they are here.
   details: {
-    visitor: { photo: 'required', company: 'optional', phone: 'required', email: 'off', staff: 'required', purpose: 'optional', vehicle: 'off' },
-    contractor: { photo: 'required', company: 'required', phone: 'required', email: 'off', staff: 'required', purpose: 'optional', vehicle: 'optional' },
-    interview: { photo: 'required', company: 'off', phone: 'required', email: 'optional', staff: 'required', purpose: 'off', vehicle: 'off' },
-    staff: { photo: 'off', company: 'off', phone: 'optional', email: 'off', staff: 'off', purpose: 'off', vehicle: 'off' }
+    visitor: { photo: 'required', company: 'optional', phone: 'required', email: 'off', staff: 'required', purpose: 'optional', vehicle: 'off', reference: 'off', movement: 'off' },
+    contractor: { photo: 'required', company: 'required', phone: 'required', email: 'off', staff: 'required', purpose: 'optional', vehicle: 'optional', reference: 'off', movement: 'off' },
+    interview: { photo: 'required', company: 'off', phone: 'required', email: 'optional', staff: 'required', purpose: 'off', vehicle: 'off', reference: 'off', movement: 'off' },
+    // A driver at a warehouse gate: the haulier, the vehicle and the paperwork
+    // matter; who they are visiting usually does not.
+    driver: { photo: 'optional', company: 'required', phone: 'required', email: 'off', staff: 'off', purpose: 'off', vehicle: 'required', reference: 'required', movement: 'required' },
+    staff: { photo: 'off', company: 'off', phone: 'optional', email: 'off', staff: 'off', purpose: 'off', vehicle: 'off', reference: 'off', movement: 'off' }
   },
   /*
    * The order the sign-in steps are asked in, per visitor type. Finding the
@@ -40,12 +43,14 @@ const DEFAULTS = {
     visitor: ['details', 'photo', 'documents', 'induction'],
     contractor: ['details', 'photo', 'documents', 'induction'],
     interview: ['details', 'photo', 'documents', 'induction'],
+    driver: ['details', 'photo', 'documents', 'induction'],
     staff: ['details', 'photo', 'documents', 'induction']
   },
   kiosk: {
     visit_types: ['visitor', 'contractor', 'interview'],
     welcome_shows_menu: true,
     show_interview_button: true,
+    show_driver_button: false,
     show_delivery_button: true,
     show_staff_button: false,
     show_onsite_count: false,
@@ -151,7 +156,9 @@ const DETAIL_FIELDS = [
   ['email', 'Email address'],
   ['staff', 'Who they are seeing'],
   ['purpose', 'Reason for visit'],
-  ['vehicle', 'Vehicle registration']
+  ['vehicle', 'Vehicle registration'],
+  ['reference', 'Load or order reference'],
+  ['movement', 'Delivering or collecting']
 ];
 
 /** The form configuration for one visitor type, falling back to the visitor one. */

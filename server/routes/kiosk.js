@@ -195,6 +195,9 @@ router.post('/signin', async (req, res) => {
     if (fields.email === 'required' && !email) return res.status(400).json({ error: 'email_required' });
     if (fields.staff === 'required' && !b.host_id) return res.status(400).json({ error: 'host_required' });
     if (fields.company === 'required' && !clean(b.company)) return res.status(400).json({ error: 'company_required' });
+    if (fields.vehicle === 'required' && !clean(b.vehicle_reg)) return res.status(400).json({ error: 'vehicle_required' });
+    if (fields.reference === 'required' && !clean(b.reference)) return res.status(400).json({ error: 'reference_required' });
+    if (fields.movement === 'required' && !clean(b.movement)) return res.status(400).json({ error: 'movement_required' });
 
     const site = b.site_id ? get('SELECT * FROM sites WHERE id = ?', Number(b.site_id)) : defaultSite();
 
@@ -226,12 +229,12 @@ router.post('/signin', async (req, res) => {
 
     const visitRes = run(`INSERT INTO visits
       (site_id, visitor_id, host_id, visit_type, purpose, vehicle_reg, badge_no, checkout_code, photo_path,
-       induction_shown, signed_in_at, status, device_id, location_id, created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,'onsite',?,?,?)`,
+       induction_shown, signed_in_at, status, device_id, location_id, reference, movement, created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,'onsite',?,?,?,?,?)`,
       site ? site.id : null, visitor.id, b.host_id ? Number(b.host_id) : null, visitType,
       clean(b.purpose) || null, (clean(b.vehicle_reg) || '').toUpperCase() || null, badgeNo, code, photoPath,
       b.induction_completed ? 1 : 0, nowISO(), device ? device.id : null,
-      device ? device.location_id : null, nowISO());
+      device ? device.location_id : null, clean(b.reference) || null, clean(b.movement) || null, nowISO());
     const visitId = Number(visitRes.lastInsertRowid);
 
     // One row per document signed, each with the answers given to its questions.
@@ -412,6 +415,7 @@ router.post('/ping', (req, res) => {
         location_name: location ? location.name : null,
         mode: device.mode,
         default_camera: device.default_camera || 'front',
+        sections: (() => { try { return JSON.parse(device.sections || 'null'); } catch { return null; } })(),
         print_enabled: !!device.print_enabled
       });
     }

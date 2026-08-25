@@ -103,7 +103,8 @@ router.get('/dashboard', (req, res) => {
 });
 
 router.get('/rollcall', (req, res) => {
-  const rows = all(`SELECT v.id, v.signed_in_at, v.visit_type, v.badge_no, v.vehicle_reg, p.full_name, p.company, p.phone,
+  const rows = all(`SELECT v.id, v.signed_in_at, v.visit_type, v.badge_no, v.vehicle_reg, v.reference, v.movement,
+                           p.full_name, p.company, p.phone,
                            h.name AS host_name, s.name AS site_name, l.name AS location_name
                     FROM visits v JOIN visitors p ON p.id = v.visitor_id
                     LEFT JOIN hosts h ON h.id = v.host_id LEFT JOIN sites s ON s.id = v.site_id
@@ -113,7 +114,8 @@ router.get('/rollcall', (req, res) => {
     const body = csv(rows, [
       { label: 'Name', key: 'full_name' }, { label: 'Company', key: 'company' }, { label: 'Phone', key: 'phone' },
       { label: 'Type', key: 'visit_type' }, { label: 'Staff member', key: 'host_name' }, { label: 'Badge', key: 'badge_no' },
-      { label: 'Vehicle', key: 'vehicle_reg' }, { label: 'Signed in at', key: 'location_name' },
+      { label: 'Vehicle', key: 'vehicle_reg' }, { label: 'Reference', key: 'reference' },
+      { label: 'Signed in at', key: 'location_name' },
       { label: 'Signed in', key: 'signed_in_at' }, { label: 'Site', key: 'site_name' }
     ]);
     res.setHeader('Content-Type', 'text/csv');
@@ -146,6 +148,7 @@ router.get('/visits', (req, res) => {
       { label: 'Name', key: 'full_name' }, { label: 'Company', key: 'company' }, { label: 'Phone', key: 'phone' },
       { label: 'Email', key: 'email' }, { label: 'Type', key: 'visit_type' }, { label: 'Purpose', key: 'purpose' },
       { label: 'Staff member', key: 'host_name' }, { label: 'Badge', key: 'badge_no' }, { label: 'Vehicle', key: 'vehicle_reg' },
+      { label: 'Reference', key: 'reference' }, { label: 'Delivering/collecting', key: 'movement' },
       { label: 'Signed in', key: 'signed_in_at' }, { label: 'Signed out', key: 'signed_out_at' },
       { label: 'Status', key: 'status' }, { label: 'Site', key: 'site_name' }
     ]);
@@ -566,7 +569,7 @@ router.post('/devices', (req, res) => {
 
 router.patch('/devices/:id', (req, res) => {
   const b = req.body || {};
-  const fields = ['site_id', 'location_id', 'name', 'mode', 'default_camera', 'print_enabled'];
+  const fields = ['site_id', 'location_id', 'name', 'mode', 'default_camera', 'print_enabled', 'sections'];
   const cols = fields.filter((f) => b[f] !== undefined);
   if (cols.length) {
     run(`UPDATE devices SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`,

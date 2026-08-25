@@ -76,6 +76,15 @@
       </label>
       <label class="field" id="w-purpose"><span>Reason for visit</span><input class="input" id="f-purpose" placeholder="Meeting, delivery, site works…"></label>
       <label class="field" id="w-vehicle"><span>Vehicle registration</span><input class="input" id="f-vehicle" style="text-transform:uppercase"></label>
+      <label class="field" id="w-reference"><span>Load or order reference</span>
+        <input class="input" id="f-reference" placeholder="Order, docket or PO number" autocomplete="off"></label>
+      <label class="field" id="w-movement"><span>Delivering or collecting</span>
+        <select class="input" id="f-movement">
+          <option value="">— choose —</option>
+          <option value="Delivering">Delivering</option>
+          <option value="Collecting">Collecting</option>
+          <option value="Both">Both</option>
+        </select></label>
       <div id="details-error" class="notice error hidden"></div>
       <div class="actions"><button class="btn big" id="details-continue">Continue</button></div>
     </div>
