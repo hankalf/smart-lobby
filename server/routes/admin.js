@@ -100,7 +100,7 @@ router.get('/rollcall', (req, res) => {
   if (req.query.format === 'csv') {
     const body = csv(rows, [
       { label: 'Name', key: 'full_name' }, { label: 'Company', key: 'company' }, { label: 'Phone', key: 'phone' },
-      { label: 'Type', key: 'visit_type' }, { label: 'Host', key: 'host_name' }, { label: 'Badge', key: 'badge_no' },
+      { label: 'Type', key: 'visit_type' }, { label: 'Staff member', key: 'host_name' }, { label: 'Badge', key: 'badge_no' },
       { label: 'Vehicle', key: 'vehicle_reg' }, { label: 'Signed in at', key: 'location_name' },
       { label: 'Signed in', key: 'signed_in_at' }, { label: 'Site', key: 'site_name' }
     ]);
@@ -133,7 +133,7 @@ router.get('/visits', (req, res) => {
     const body = csv(rows, [
       { label: 'Name', key: 'full_name' }, { label: 'Company', key: 'company' }, { label: 'Phone', key: 'phone' },
       { label: 'Email', key: 'email' }, { label: 'Type', key: 'visit_type' }, { label: 'Purpose', key: 'purpose' },
-      { label: 'Host', key: 'host_name' }, { label: 'Badge', key: 'badge_no' }, { label: 'Vehicle', key: 'vehicle_reg' },
+      { label: 'Staff member', key: 'host_name' }, { label: 'Badge', key: 'badge_no' }, { label: 'Vehicle', key: 'vehicle_reg' },
       { label: 'Signed in', key: 'signed_in_at' }, { label: 'Signed out', key: 'signed_out_at' },
       { label: 'Status', key: 'status' }, { label: 'Site', key: 'site_name' }
     ]);
@@ -152,7 +152,8 @@ router.get('/visits/:id', (req, res) => {
                      LEFT JOIN locations l ON l.id = v.location_id
                      LEFT JOIN devices d ON d.id = v.device_id WHERE v.id = ?`, req.params.id);
   if (!visit) return res.status(404).json({ error: 'not_found' });
-  visit.signatures = all(`SELECT sg.*, a.name AS agreement_name FROM signatures sg
+  visit.signatures = all(`SELECT sg.*, a.name AS agreement_name, a.questions AS agreement_questions
+                          FROM signatures sg
                           LEFT JOIN agreements a ON a.id = sg.agreement_id WHERE sg.visit_id = ?`, visit.id);
   visit.inductions = all(`SELECT sv.*, ss.name AS slideshow_name FROM slide_views sv
                           LEFT JOIN slideshows ss ON ss.id = sv.slideshow_id WHERE sv.visit_id = ?`, visit.id);
@@ -254,11 +255,79 @@ function crud(resource, table, fields) {
   });
 }
 
-crud('hosts', 'hosts', ['site_id', 'name', 'email', 'phone', 'department', 'webhook_url', 'active']);
+crud('staff', 'hosts', ['site_id', 'name', 'email', 'phone', 'department', 'webhook_url', 'active']);
 crud('sites', 'sites', ['name', 'address', 'max_occupancy', 'active']);
-crud('agreements', 'agreements', ['name', 'body', 'version', 'required_for', 'active']);
+crud('agreements', 'agreements', ['name', 'body', 'version', 'required_for', 'questions', 'active']);
 crud('access-points', 'access_points', ['site_id', 'name', 'kind', 'url', 'method', 'headers', 'body',
   'unlock_seconds', 'auto_unlock_on_signin', 'auto_unlock_on_signout', 'enabled']);
+
+/* --------------------------------------------------------- staff import */
+
+const sheets = require('../spreadsheet');
+
+router.get('/staff/template.csv', (req, res) => {
+  const body = ['Name,Email,Mobile,Department,Chat webhook',
+    'Alex Green,alex@example.com,07700 900123,Site office,',
+    'Priya Shah,priya@example.com,07700 900456,Estimating,'].join('\r\n');
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="staff-template.csv"');
+  res.send(body);
+});
+
+/**
+ * Bulk add or update staff from a spreadsheet. Matches an existing person by
+ * email, falling back to name, so re-importing a corrected sheet updates rather
+ * than duplicating.
+ */
+router.post('/staff/import', files.memoryUpload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'no_file' });
+
+  let rows;
+  try {
+    rows = sheets.parseSpreadsheet(req.file.buffer, req.file.originalname);
+  } catch (err) {
+    return res.status(400).json({ error: String(err.message || err) });
+  }
+  if (!rows.length) return res.status(400).json({ error: 'empty_file' });
+
+  const header = sheets.mapHeaders(rows[0]);
+  if (header.name === undefined) {
+    return res.status(400).json({ error: 'no_name_column', found: rows[0] });
+  }
+
+  const created = [];
+  const updated = [];
+  const skipped = [];
+  const cell = (row, key) => (header[key] === undefined ? '' : clean(row[header[key]] || ''));
+
+  rows.slice(1).forEach((row, i) => {
+    const name = cell(row, 'name');
+    if (!name) { skipped.push({ line: i + 2, reason: 'no name' }); return; }
+    const email = cell(row, 'email').toLowerCase();
+    const phone = cell(row, 'phone');
+    const department = cell(row, 'department');
+    const webhook = cell(row, 'webhook_url');
+
+    const existing = email
+      ? get('SELECT * FROM hosts WHERE lower(email) = ?', email)
+      : get('SELECT * FROM hosts WHERE lower(name) = ?', name.toLowerCase());
+
+    if (existing) {
+      run(`UPDATE hosts SET name = ?, email = COALESCE(NULLIF(?,''), email), phone = COALESCE(NULLIF(?,''), phone),
+             department = COALESCE(NULLIF(?,''), department), webhook_url = COALESCE(NULLIF(?,''), webhook_url), active = 1
+           WHERE id = ?`, name, email, phone, department, webhook, existing.id);
+      updated.push(name);
+    } else {
+      run(`INSERT INTO hosts (name, email, phone, department, webhook_url, active, created_at)
+           VALUES (?,?,?,?,?,1,?)`,
+        name, email || null, phone || null, department || null, webhook || null, nowISO());
+      created.push(name);
+    }
+  });
+
+  audit(req, 'import', 'staff', null, { file: req.file.originalname, created: created.length, updated: updated.length });
+  res.json({ ok: true, created: created.length, updated: updated.length, skipped, names: created.concat(updated).slice(0, 50) });
+});
 
 /* ------------------------------------------------------------- locations */
 

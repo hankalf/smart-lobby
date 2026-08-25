@@ -308,6 +308,8 @@ function migrate() {
   addColumn('devices', 'cameras', 'TEXT');
   addColumn('devices', 'print_enabled', 'INTEGER NOT NULL DEFAULT 1');
   addColumn('visits', 'location_id', 'INTEGER REFERENCES locations(id) ON DELETE SET NULL');
+  addColumn('agreements', 'questions', 'TEXT');
+  addColumn('signatures', 'answers', 'TEXT');
 }
 
 function addColumn(table, column, definition) {

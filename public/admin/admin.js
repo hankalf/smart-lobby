@@ -205,7 +205,7 @@
 
   function onsiteTable(rows) {
     if (!rows.length) return '<p class="empty">Nobody is signed in at the moment.</p>';
-    return `<table><thead><tr><th></th><th>Name</th><th>Company</th><th>Type</th><th>Host</th><th>Badge</th><th>Since</th><th></th></tr></thead>
+    return `<table><thead><tr><th></th><th>Name</th><th>Company</th><th>Type</th><th>Staff member</th><th>Badge</th><th>Since</th><th></th></tr></thead>
       <tbody>${rows.map((r) => `<tr>
         <td>${r.photo_path ? `<img class="avatar" src="${esc(r.photo_path)}" alt="">` : '<div class="avatar"></div>'}</td>
         <td><b>${esc(r.full_name)}</b>${r.phone ? `<div class="muted">${esc(r.phone)}</div>` : ''}</td>
@@ -229,7 +229,7 @@
     const data = await api('/rollcall');
     const html = `
       <p class="muted">Generated ${fmtDate(data.generated_at)} — ${data.count} people on site.</p>
-      <div class="table-wrap"><table><thead><tr><th>Name</th><th>Company</th><th>Phone</th><th>Host</th><th>Signed in at</th><th>In since</th></tr></thead>
+      <div class="table-wrap"><table><thead><tr><th>Name</th><th>Company</th><th>Phone</th><th>Staff member</th><th>Signed in at</th><th>In since</th></tr></thead>
       <tbody>${data.rows.map((r) => `<tr><td><b>${esc(r.full_name)}</b></td><td>${esc(r.company || '')}</td>
         <td>${esc(r.phone || '')}</td><td>${esc(r.host_name || '')}</td><td>${esc(r.location_name || '—')}</td>
         <td>${fmtTime(r.signed_in_at)}</td></tr>`).join('')}</tbody></table></div>`;
@@ -257,7 +257,7 @@
       <p class="page-sub">Every sign-in, searchable and exportable.</p>
       <div class="card section">
         <div class="row">
-          <input class="input" id="v-q" placeholder="Search name, company or host" style="max-width:16rem">
+          <input class="input" id="v-q" placeholder="Search name, company or staff member" style="max-width:16rem">
           <input class="input" id="v-from" type="date" style="max-width:11rem">
           <input class="input" id="v-to" type="date" style="max-width:11rem">
           <select class="input" id="v-status" style="max-width:10rem">
@@ -275,7 +275,7 @@
       const rows = await api(`/visits?${params}`);
       $('#v-csv').href = `/api/admin/visits?format=csv&${params}`;
       $('#v-results').innerHTML = rows.length ? `<table>
-        <thead><tr><th>Name</th><th>Company</th><th>Type</th><th>Host</th><th>In</th><th>Out</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Company</th><th>Type</th><th>Staff member</th><th>In</th><th>Out</th><th>Status</th><th></th></tr></thead>
         <tbody>${rows.map((r) => `<tr>
           <td><b>${esc(r.full_name)}</b></td><td>${esc(r.company || '')}</td><td>${esc(r.visit_type)}</td>
           <td>${esc(r.host_name || '')}</td><td>${fmtDate(r.signed_in_at)}</td><td>${fmtDate(r.signed_out_at)}</td>
@@ -298,7 +298,7 @@
           <p style="margin:0"><b>${esc(v.full_name)}</b><br>
           <span class="muted">${esc(v.company || '')} ${v.phone ? '· ' + esc(v.phone) : ''} ${v.email ? '· ' + esc(v.email) : ''}</span></p>
           <p class="muted">${esc(v.visit_type)} · ${esc(v.purpose || 'no reason given')}<br>
-          Host: ${esc(v.host_name || '—')} · Badge: ${esc(v.badge_no || '—')} ${v.vehicle_reg ? '· Vehicle: ' + esc(v.vehicle_reg) : ''}<br>
+          Staff member: ${esc(v.host_name || '—')} · Badge: ${esc(v.badge_no || '—')} ${v.vehicle_reg ? '· Vehicle: ' + esc(v.vehicle_reg) : ''}<br>
           ${v.location_name ? `Signed in at: ${esc(v.location_name)}${v.device_name ? ` (${esc(v.device_name)})` : ''}<br>` : ''}
           In: ${fmtDate(v.signed_in_at)} · Out: ${fmtDate(v.signed_out_at)}</p>
         </div>
@@ -307,9 +307,15 @@
       ${v.inductions.length ? v.inductions.map((i) => `<p class="muted">${esc(i.slideshow_name || 'Deck')} v${i.slideshow_version} — completed ${fmtDate(i.completed_at)}${i.seconds ? ` (${i.seconds}s)` : ''}</p>`).join('')
         : '<p class="muted">Not shown for this visit (already completed previously, or not required).</p>'}
       <h3>Signed documents</h3>
-      ${v.signatures.length ? v.signatures.map((s) => `<p class="muted">${esc(s.agreement_name || 'Agreement')} v${s.agreement_version} — ${fmtDate(s.signed_at)}</p>
-        ${s.signature_path ? `<img src="${esc(s.signature_path)}" style="max-width:260px;border:1px solid var(--line);border-radius:8px">` : ''}`).join('')
-        : '<p class="muted">Nothing signed.</p>'}
+      ${v.signatures.length ? v.signatures.map((s) => {
+        let answers = [];
+        try { answers = Object.entries(JSON.parse(s.answers || '{}')); } catch { answers = []; }
+        const labels = questionLabels(s.agreement_questions);
+        return `<p class="muted">${esc(s.agreement_name || 'Agreement')} v${s.agreement_version} — ${fmtDate(s.signed_at)}</p>
+          ${answers.length ? `<table style="margin-bottom:.6rem"><tbody>${answers.map(([k, val]) =>
+            `<tr><td>${esc(labels[k] || k)}</td><td><b>${esc(val)}</b></td></tr>`).join('')}</tbody></table>` : ''}
+          ${s.signature_path ? `<img src="${esc(s.signature_path)}" style="max-width:260px;border:1px solid var(--line);border-radius:8px">` : ''}`;
+      }).join('') : '<p class="muted">Nothing signed.</p>'}
       <h3>Notifications</h3>
       ${v.notifications.length ? `<table><tbody>${v.notifications.map((n) => `<tr><td>${esc(n.channel)}</td><td>${esc(n.target || '')}</td>
         <td><span class="pill ${n.status === 'sent' ? 'on' : 'off'}">${esc(n.status)}</span></td><td class="muted">${fmtDate(n.created_at)}</td></tr>`).join('')}</tbody></table>`
@@ -410,13 +416,13 @@
       toast('Recipient notified again');
     }));
     $('#d-add').addEventListener('click', async () => {
-      const hosts = await api('/hosts');
+      const hosts = await api('/staff');
       modal('Log a delivery', `
         <div class="form-grid">
           <label class="field"><span>Courier name</span><input class="input" id="nd-name"></label>
           <label class="field"><span>Courier company</span><input class="input" id="nd-company"></label>
           <label class="field"><span>For</span><select class="input" id="nd-host">
-            <option value="">— choose a host —</option>${hosts.map((h) => `<option value="${h.id}">${esc(h.name)}</option>`).join('')}</select></label>
+            <option value="">— choose a staff member —</option>${hosts.map((h) => `<option value="${h.id}">${esc(h.name)}</option>`).join('')}</select></label>
           <label class="field"><span>Parcels</span><input class="input" id="nd-count" type="number" value="1" min="1"></label>
           <label class="field"><span>Tracking</span><input class="input" id="nd-tracking"></label>
         </div>`, async (bg, close) => {
@@ -597,15 +603,37 @@
 
   /* ------------------------------------------------------------ documents */
 
+  // The kiosk home-screen cards these documents can be attached to.
+  const CATEGORIES = [
+    ['visitor', 'Visitors', 'Sign in / Sign out card'],
+    ['contractor', 'Contractors', 'Sign in / Sign out card'],
+    ['interview', 'Interviews', 'Interview card — candidates'],
+    ['staff', 'Staff', 'Employees, if you sign them in']
+  ];
+  const categoryLabel = (t) => (CATEGORIES.find(([v]) => v === t) || [t, t])[1];
+
+  /** Map question ids back to the wording used at the time, for reading answers. */
+  function questionLabels(questionsJson) {
+    try {
+      return JSON.parse(questionsJson || '[]').reduce((acc, q, i) => {
+        acc[q.id || `q${i + 1}`] = q.label;
+        return acc;
+      }, {});
+    } catch { return {}; }
+  }
+
   VIEWS.documents = async (root) => {
     const rows = await api('/agreements');
+    const countQuestions = (a) => { try { return JSON.parse(a.questions || '[]').length; } catch { return 0; } };
     root.innerHTML = `
       <h1 class="page">Documents to sign</h1>
-      <p class="page-sub">NDAs, site rules and safety policies. Visitors sign on the kiosk and the signature is stored against the visit.</p>
+      <p class="page-sub">NDAs, site rules and safety declarations. Each one is assigned to the categories that must sign it,
+        and can ask its own questions before the signature. Deliveries do not sign anything.</p>
       <div class="row"><button class="btn" id="a-new">New document</button></div>
       ${rows.map((a) => `<div class="card section">
         <div class="row between"><div><h2 style="margin:0">${esc(a.name)} <span class="pill ${a.active ? 'on' : 'off'}">${a.active ? 'active' : 'off'}</span></h2>
-        <span class="muted">v${a.version} · shown to ${esc(JSON.parse(a.required_for).join(', '))}</span></div>
+        <span class="muted">v${a.version} · signed by ${esc(JSON.parse(a.required_for).map(categoryLabel).join(', ') || 'nobody')}${
+          countQuestions(a) ? ` · ${countQuestions(a)} question${countQuestions(a) === 1 ? '' : 's'}` : ''}</span></div>
         <div class="row" style="margin:0"><button class="btn ghost" data-doc="${a.id}">Edit</button>
         <button class="btn ghost" data-docdel="${a.id}">Delete</button></div></div>
         <pre class="muted" style="white-space:pre-wrap;margin:0">${esc(a.body.slice(0, 400))}${a.body.length > 400 ? '…' : ''}</pre></div>`).join('')
@@ -618,37 +646,115 @@
   };
 
   function docEditor(doc) {
-    const types = ['visitor', 'contractor', 'interview', 'staff'];
     const req = doc ? JSON.parse(doc.required_for) : ['visitor', 'contractor'];
-    modal(doc ? 'Edit document' : 'New document', `
+    let questions = [];
+    try { questions = JSON.parse((doc && doc.questions) || '[]'); } catch { questions = []; }
+
+    const m = modal(doc ? 'Edit document' : 'New document', `
       <label class="field"><span>Title</span><input class="input" id="ag-name" value="${esc(doc ? doc.name : '')}"></label>
-      <label class="field"><span>Body</span><textarea class="input" id="ag-body" rows="12">${esc(doc ? doc.body : '')}</textarea></label>
-      <span class="muted">Required for</span>
-      <div class="form-grid" style="margin:.5rem 0">
-        ${types.map((t) => `<label class="check"><input type="checkbox" data-t="${t}" ${req.includes(t) ? 'checked' : ''}> ${t}</label>`).join('')}
+      <label class="field"><span>What they read and sign</span>
+        <textarea class="input" id="ag-body" rows="10">${esc(doc ? doc.body : '')}</textarea></label>
+
+      <h3>Who signs this</h3>
+      <p class="muted" style="margin-top:0">Matched to the cards on the kiosk home screen.</p>
+      <div class="form-grid" style="margin:.5rem 0 1rem">
+        ${CATEGORIES.map(([t, label, hint]) => `<label class="check"><input type="checkbox" data-t="${t}" ${req.includes(t) ? 'checked' : ''}>
+          <span>${label}<br><span class="muted">${hint}</span></span></label>`).join('')}
       </div>
-      <label class="check"><input type="checkbox" id="ag-active" ${!doc || doc.active ? 'checked' : ''}> Active</label>
-      ${doc ? '<p class="muted">Saving bumps the version so previously signed copies stay intact.</p>' : ''}`,
+
+      <h3>Questions</h3>
+      <p class="muted" style="margin-top:0">Asked on the kiosk just above the signature. Answers are stored against the visit.</p>
+      <div id="q-list"></div>
+      <button class="btn subtle" id="q-add" type="button">Add a question</button>
+
+      <label class="check" style="margin-top:1rem"><input type="checkbox" id="ag-active" ${!doc || doc.active ? 'checked' : ''}> Active</label>
+      ${doc ? '<p class="muted">Saving bumps the version, so copies already signed stay exactly as they were signed.</p>' : ''}`,
       async (bg, close) => {
         const body = {
           name: $('#ag-name', bg).value,
           body: $('#ag-body', bg).value,
           required_for: JSON.stringify($$('[data-t]', bg).filter((c) => c.checked).map((c) => c.dataset.t)),
+          questions: JSON.stringify(collectQuestions(bg)),
           active: $('#ag-active', bg).checked ? 1 : 0
         };
+        if (!body.name.trim()) return toast('Give the document a title');
         if (doc) { body.version = doc.version + 1; await api(`/agreements/${doc.id}`, { method: 'PATCH', body }); }
         else await api('/agreements', { method: 'POST', body });
         close(); render('documents');
       });
+
+    const list = $('#q-list', m.bg);
+    const drawQuestions = () => {
+      list.innerHTML = questions.map((q, i) => `
+        <div class="q-row" data-i="${i}">
+          <div class="q-row-top">
+            <input class="input" data-qlabel="${i}" placeholder="Question shown to the visitor" value="${esc(q.label || '')}">
+            <select class="input" data-qtype="${i}">
+              ${[['yesno', 'Yes / No'], ['text', 'Short answer'], ['choice', 'Choose one']]
+                .map(([v, l]) => `<option value="${v}" ${q.type === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+            <button class="btn ghost" type="button" data-qup="${i}" ${i === 0 ? 'disabled' : ''} title="Move up">↑</button>
+            <button class="btn ghost" type="button" data-qdown="${i}" ${i === questions.length - 1 ? 'disabled' : ''} title="Move down">↓</button>
+            <button class="btn ghost" type="button" data-qdel="${i}" title="Remove">✕</button>
+          </div>
+          ${q.type === 'choice' ? `<input class="input" data-qopts="${i}" style="margin-top:.5rem"
+            placeholder="Options, separated by commas" value="${esc((q.options || []).join(', '))}">` : ''}
+          <label class="check"><input type="checkbox" data-qreq="${i}" ${q.required ? 'checked' : ''}> Must be answered</label>
+        </div>`).join('') || '<p class="muted">No questions — the visitor just reads and signs.</p>';
+
+      $$('[data-qtype]', list).forEach((s) => s.addEventListener('change', () => {
+        sync(); questions[Number(s.dataset.qtype)].type = s.value; drawQuestions();
+      }));
+      $$('[data-qdel]', list).forEach((b) => b.addEventListener('click', () => {
+        sync(); questions.splice(Number(b.dataset.qdel), 1); drawQuestions();
+      }));
+      $$('[data-qup]', list).forEach((b) => b.addEventListener('click', () => {
+        sync(); const i = Number(b.dataset.qup);
+        [questions[i - 1], questions[i]] = [questions[i], questions[i - 1]]; drawQuestions();
+      }));
+      $$('[data-qdown]', list).forEach((b) => b.addEventListener('click', () => {
+        sync(); const i = Number(b.dataset.qdown);
+        [questions[i + 1], questions[i]] = [questions[i], questions[i + 1]]; drawQuestions();
+      }));
+    };
+
+    // Pull whatever is currently typed back into the array before redrawing.
+    const sync = () => {
+      $$('[data-qlabel]', list).forEach((input) => { questions[Number(input.dataset.qlabel)].label = input.value; });
+      $$('[data-qopts]', list).forEach((input) => {
+        questions[Number(input.dataset.qopts)].options = input.value.split(',').map((o) => o.trim()).filter(Boolean);
+      });
+      $$('[data-qreq]', list).forEach((input) => { questions[Number(input.dataset.qreq)].required = input.checked; });
+    };
+
+    function collectQuestions() {
+      sync();
+      return questions
+        .filter((q) => String(q.label || '').trim())
+        .map((q, i) => ({
+          id: q.id || `q${i + 1}`,
+          label: q.label.trim(),
+          type: q.type || 'yesno',
+          required: !!q.required,
+          ...(q.type === 'choice' ? { options: q.options || [] } : {})
+        }));
+    }
+
+    $('#q-add', m.bg).addEventListener('click', () => {
+      sync();
+      questions.push({ id: `q${questions.length + 1}`, label: '', type: 'yesno', required: true });
+      drawQuestions();
+    });
+    drawQuestions();
   }
 
-  /* ---------------------------------------------------------------- hosts */
+  /* ---------------------------------------------------------------- staff */
 
-  VIEWS.hosts = async (root) => {
-    const rows = await api('/hosts');
+  VIEWS.staff = async (root) => {
+    const rows = await api('/staff');
     root.innerHTML = `
-      <h1 class="page">Hosts</h1>
-      <p class="page-sub">The people visitors can ask for. Each host can have their own email and chat webhook for arrival alerts.</p>
+      <h1 class="page">Staff</h1>
+      <p class="page-sub">The people visitors can ask for. Each staff member can have their own email, mobile and chat webhook for arrival alerts.</p>
       <div class="card section">
         <div class="inline-form" style="margin-bottom:1rem">
           <label class="field"><span>Name</span><input class="input" id="h-name"></label>
@@ -656,7 +762,7 @@
           <label class="field"><span>Mobile (for SMS)</span><input class="input" id="h-phone" type="tel"></label>
           <label class="field"><span>Department</span><input class="input" id="h-dept"></label>
           <label class="field"><span>Chat webhook (optional)</span><input class="input" id="h-hook" placeholder="Slack / Teams URL"></label>
-          <button class="btn" id="h-add">Add host</button>
+          <button class="btn" id="h-add">Add staff member</button>
         </div>
         <div class="table-wrap">${rows.length ? `<table>
           <thead><tr><th>Name</th><th>Email</th><th>Mobile</th><th>Department</th><th>Webhook</th><th>Status</th><th></th></tr></thead>
@@ -665,15 +771,29 @@
             <td>${esc(h.department || '')}</td><td class="muted">${h.webhook_url ? 'configured' : '—'}</td>
             <td><span class="pill ${h.active ? 'on' : 'off'}">${h.active ? 'active' : 'off'}</span></td>
             <td><button class="btn ghost" data-hdel="${h.id}">Remove</button></td></tr>`).join('')}</tbody></table>`
-          : '<p class="empty">No hosts yet — add the people visitors come to see.</p>'}</div>
+          : '<p class="empty">No staff yet — add the people visitors come to see.</p>'}</div>
+      </div>
+
+      <div class="card section">
+        <h2>Add several at once from a spreadsheet</h2>
+        <p class="muted" style="margin-top:0">Upload an Excel file (<b>.xlsx</b>) or a <b>.csv</b>. The first row should be
+          headings — <i>Name</i>, <i>Email</i>, <i>Mobile</i>, <i>Department</i>, <i>Chat webhook</i>. Only Name is required,
+          and the headings can be worded your way (“Full name”, “Phone”, “Team” and similar are understood).</p>
+        <p class="muted">Someone already on the list is updated rather than duplicated, matched on email, or on name when
+          there is no email — so you can fix a sheet and upload it again.</p>
+        <div class="row">
+          <label class="btn subtle">Choose spreadsheet<input type="file" hidden id="staff-file" accept=".xlsx,.xlsm,.csv,.txt"></label>
+          <a class="btn ghost" href="/api/admin/staff/template.csv">Download a template</a>
+        </div>
+        <div id="import-result"></div>
       </div>
 
       <div class="card section">
         <h2>Setting up a chat webhook</h2>
         <p class="muted" style="margin-top:0">A webhook posts arrivals straight into a Slack channel, a Teams
-          channel or a Google Chat space — no email needed. Paste the URL into a host's <b>Chat webhook</b> field
-          above and that host's arrivals go to that channel. Leave it blank and the fallback webhook in
-          <b>Settings → Notifications</b> is used instead. The format is detected from the URL, so different hosts
+          channel or a Google Chat space — no email needed. Paste the URL into a staff member's <b>Chat webhook</b> field
+          above and that person's arrivals go to that channel. Leave it blank and the fallback webhook in
+          <b>Settings → Notifications</b> is used instead. The format is detected from the URL, so different people
           can be on different platforms.</p>
 
         <details class="howto">
@@ -682,11 +802,11 @@
             <li>Go to <b>api.slack.com/apps</b> → <b>Create New App</b> → <b>From scratch</b>. Name it
               “Smart Lobby” and pick your workspace.</li>
             <li>In the left menu choose <b>Incoming Webhooks</b> and switch it <b>On</b>.</li>
-            <li>Click <b>Add New Webhook to Workspace</b>, choose the channel (or a direct message to the host),
+            <li>Click <b>Add New Webhook to Workspace</b>, choose the channel (or a direct message to that person),
               then <b>Allow</b>.</li>
             <li>Copy the URL — it looks like
               <code class="token">https://hooks.slack.com/services/T00000/B00000/XXXX</code>.</li>
-            <li>Paste it into the host's <b>Chat webhook</b> box above and click <b>Add host</b> (or edit an
+            <li>Paste it into the host's <b>Chat webhook</b> box above and click <b>Add staff member</b> (or edit an
               existing one).</li>
           </ol>
           <p class="muted">Repeat steps 3–5 for each channel you want to post to; one app can hold many webhooks.</p>
@@ -700,7 +820,7 @@
             <li>Choose the template <b>“Post to a channel when a webhook request is received”</b>.</li>
             <li>Name it “Smart Lobby”, confirm the team and channel, then <b>Add workflow</b>.</li>
             <li>Copy the HTTPS URL it shows you — you only get it once.</li>
-            <li>Paste it into the host's <b>Chat webhook</b> box above.</li>
+            <li>Paste it into the staff member's <b>Chat webhook</b> box above.</li>
           </ol>
           <p><b>To one person (a DM)</b> — use this when a site manager should be pinged directly rather than
             in a shared channel.</p>
@@ -710,7 +830,7 @@
             <li>Choose the template <b>“Post to a chat when a webhook request is received”</b> — the
               <i>chat</i> one, not the channel one.</li>
             <li>Confirm the chat it will post into, then <b>Add workflow</b> and copy the URL.</li>
-            <li>Paste it into that host's <b>Chat webhook</b> box above. Only that host's visitors trigger it.</li>
+            <li>Paste it into that person's <b>Chat webhook</b> box above. Only their visitors trigger it.</li>
           </ol>
           <p class="muted">The message arrives from <b>Flow bot</b> rather than from a person, which is normal.
             Some tenants restrict the chat template — if you cannot see it, your IT admin controls that.
@@ -726,7 +846,7 @@
             <li>Name it “Smart Lobby” and click <b>Save</b>.</li>
             <li>Copy the URL — it starts with
               <code class="token">https://chat.googleapis.com/v1/spaces/…</code>.</li>
-            <li>Paste it into the host's <b>Chat webhook</b> box above.</li>
+            <li>Paste it into the staff member's <b>Chat webhook</b> box above.</li>
           </ol>
           <p class="muted">Webhooks are only available in spaces, not in one-to-one chats, and your Workspace
             admin must allow them.</p>
@@ -748,14 +868,39 @@
       </div>`;
     $('#h-add').addEventListener('click', async () => {
       if (!$('#h-name').value.trim()) return toast('Enter a name');
-      await api('/hosts', { method: 'POST', body: {
+      await api('/staff', { method: 'POST', body: {
         name: $('#h-name').value.trim(), email: $('#h-email').value.trim(), phone: $('#h-phone').value.trim(),
         department: $('#h-dept').value.trim(), webhook_url: $('#h-hook').value.trim(), active: 1 } });
-      render('hosts');
+      render('staff');
     });
     $$('[data-hdel]').forEach((b) => b.addEventListener('click', async () => {
-      await api(`/hosts/${b.dataset.hdel}`, { method: 'DELETE' }); render('hosts');
+      await api(`/staff/${b.dataset.hdel}`, { method: 'DELETE' }); render('staff');
     }));
+
+    $('#staff-file').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const box = $('#import-result');
+      box.innerHTML = '<p class="muted">Reading the spreadsheet…</p>';
+      try {
+        const r = await upload('/staff/import', file);
+        const bits = [`<b>${r.created}</b> added`, `<b>${r.updated}</b> updated`];
+        if (r.skipped.length) bits.push(`<b>${r.skipped.length}</b> skipped`);
+        box.innerHTML = `<div class="notice">${bits.join(' · ')}
+          ${r.skipped.length ? `<br><span class="muted">Skipped rows: ${r.skipped.map((s) => `line ${s.line} (${esc(s.reason)})`).join(', ')}</span>` : ''}</div>`;
+        setTimeout(() => render('staff'), 1200);
+      } catch (err) {
+        const reason = {
+          no_name_column: 'Could not find a Name column. The first row should be headings.',
+          unsupported_file_type: 'Please upload a .xlsx or .csv file.',
+          old_excel_format: 'That is the older .xls format — open it in Excel and save as .xlsx or .csv.',
+          empty_file: 'That spreadsheet appears to be empty.',
+          not_a_zip: 'That file could not be read as a spreadsheet.'
+        }[err.data && err.data.error] || 'That spreadsheet could not be read.';
+        box.innerHTML = `<div class="notice error">${esc(reason)}</div>`;
+      }
+      e.target.value = '';
+    });
   };
 
   /* --------------------------------------------------------------- access */
@@ -1132,7 +1277,7 @@
           ${chk('kiosk.require_photo', 'Take a photo', 'Needs https:// or localhost for the camera to open')}
           ${chk('kiosk.require_phone', 'Require a phone number')}
           ${chk('kiosk.require_email', 'Require an email address')}
-          ${chk('kiosk.require_host', 'Require choosing a host')}
+          ${chk('kiosk.require_host', 'Require choosing a staff member')}
           ${chk('kiosk.ask_purpose', 'Ask reason for visit')}
           ${chk('kiosk.ask_vehicle', 'Ask vehicle registration')}
           ${chk('kiosk.welcome_shows_menu', 'Skip “Touch to start”',
@@ -1236,8 +1381,8 @@
           ${txt('notify.smtp_pass', 'SMTP password', 'password')}
         </div>
         ${chk('notify.smtp_secure', 'Use TLS on connect (port 465)')}
-        ${chk('notify.on_signin', 'Notify the host on arrival')}
-        ${chk('notify.on_signout', 'Notify the host on sign-out')}
+        ${chk('notify.on_signin', 'Notify the staff member on arrival')}
+        ${chk('notify.on_signout', 'Notify the staff member on sign-out')}
         ${chk('notify.on_delivery', 'Notify on deliveries')}
         <h3>Chat</h3>
         <div class="form-grid">
@@ -1248,13 +1393,13 @@
           </select></label>
         </div>
         <h3>SMS (Twilio)</h3>
-        ${chk('notify.sms_enabled', 'Send text messages to hosts', 'Uses the phone number on each host record')}
+        ${chk('notify.sms_enabled', 'Send text messages to hosts', 'Uses the mobile number on each staff record')}
         <div class="form-grid">
           ${txt('notify.twilio_account_sid', 'Twilio Account SID')}
           ${txt('notify.twilio_auth_token', 'Twilio Auth Token', 'password')}
           ${txt('notify.sms_from', 'Send from number', 'text', '+441234567890')}
         </div>
-        ${chk('notify.sms_on_signin', 'Text the host when a visitor arrives')}
+        ${chk('notify.sms_on_signin', 'Text the staff member when a visitor arrives')}
         ${chk('notify.sms_on_delivery', 'Text the recipient when a parcel arrives')}
         <div class="row"><button class="btn subtle" id="test-email">Send test email</button>
           <button class="btn subtle" id="test-hook">Send test webhook</button>

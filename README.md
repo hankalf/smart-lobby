@@ -1,7 +1,7 @@
 # Smart Lobby
 
 A self-hosted visitor management and digital reception system. Covers what SmartLobby.co does —
-kiosk sign-in, host notifications, NDA/site-rule signing, QR sign-out, optional badge printing,
+kiosk sign-in, staff notifications, NDA/site-rule signing, QR sign-out, optional badge printing,
 multi-site, roll call, analytics — plus three additions:
 
 - **Induction slideshow** — upload a PowerPoint/PDF; first-time visitors watch it before they finish
@@ -123,8 +123,8 @@ The sections can sit straight on the home screen, or behind a "Touch to start" b
 | Visitor registry | Everyone on file, induction status per person, block a visitor, reset their induction |
 | Deliveries | Parcels awaiting collection, collect with signature, re-notify, CSV export |
 | Induction decks | Upload/replace decks, reorder and delete slides, preview, per-visit-type targeting |
-| Documents | NDAs and site rules, versioned — old signatures stay attached to the version signed |
-| Hosts | People visitors ask for, each with their own email and chat webhook |
+| Documents | NDAs, site rules and declarations — assigned to categories, each with its own questions, versioned |
+| Staff | People visitors ask for, each with their own email, mobile and chat webhook. Bulk import from Excel or CSV |
 | Access & doors | HTTP-controlled doors, test unlock, unlock audit trail |
 | Locations | Areas within a site — reception, yard gate, workshop entrance — with device and on-site counts |
 | Devices | Every tablet: name, location, default camera, operational mode, per-device badge printing, online status |
@@ -180,6 +180,47 @@ brand colours, time zone and date format.
 
 Uploads are checked by their actual bytes rather than their file extension, so a mislabelled file is
 rejected instead of becoming a broken image on the kiosk. Replacing an image deletes the old file.
+
+---
+
+## Documents and questions
+
+Each document in **Documents** is assigned to the categories that must sign it, matching the kiosk
+home-screen cards:
+
+| Category | Card |
+| --- | --- |
+| Visitors, Contractors | Sign in / Sign out |
+| Interviews | Interview |
+| Staff | if you sign employees in |
+
+Deliveries sign nothing.
+
+A document can also carry its own **questions**, asked on the kiosk just above the signature:
+
+- **Yes / No** — a tap
+- **Short answer** — free text
+- **Choose one** — your own options
+
+Mark a question as required and the visitor cannot sign until it is answered. Answers are stored
+against that visit alongside the signature, and shown on the visit record with the wording used at
+the time — so a later edit to a question never changes what a past answer appears to mean.
+
+Where more than one document applies to a category, they are signed one after another, titled
+"Site rules (1 of 2)" and so on, each with its own questions and signature.
+
+---
+
+## Staff
+
+The people visitors ask for. Each can have an email address, a mobile number for SMS and their own
+chat webhook, so alerts reach them directly.
+
+**Add several at once from a spreadsheet** — upload an `.xlsx` or `.csv`. The first row should be
+headings; only *Name* is required, and headings are matched loosely, so "Full name", "Phone",
+"Mobile", "Team" and similar all work. Someone already on the list is updated rather than
+duplicated — matched on email, or on name where there is no email — so a corrected sheet can simply
+be uploaded again. A template is downloadable from that panel.
 
 ---
 
@@ -248,13 +289,13 @@ from **Test unlock** in the dashboard. Every attempt is logged with who, when, w
 | --- | --- | --- |
 | **Email** | SMTP host, port, user, password | Any provider — Google Workspace, Microsoft 365, Fastmail, Postmark, SES. Includes the visitor's photo. |
 | **Slack** | Incoming webhook URL | Posts the arrival with the visitor's photo as a thumbnail. |
-| **Microsoft Teams** | Workflows URL | Posts to a channel, or as a direct message to one person — see the guide in **Hosts**. |
+| **Microsoft Teams** | Workflows URL | Posts to a channel, or as a direct message to one person — see the guide in **Staff**. |
 | **Google Chat** | Incoming webhook URL | Same webhook field, pick the format. |
 | **Generic JSON** | Any URL | `{event, details[], photo_url, timestamp}` — use it to drive anything else. |
-| **SMS** | Twilio Account SID, Auth Token, from-number | Texts the host's mobile. Numbers are converted to E.164, so `07700 900123` works. |
+| **SMS** | Twilio Account SID, Auth Token, from-number | Texts the staff member's mobile. Numbers are converted to E.164, so `07700 900123` works. |
 
-Each host can have their own email address, mobile number and chat webhook, so alerts land with the
-right person rather than a shared inbox. Set them in **Hosts**, which carries step-by-step setup
+Each staff member can have their own email address, mobile number and chat webhook, so alerts land with the
+right person rather than a shared inbox. Set them in **Staff**, which carries step-by-step setup
 instructions for Slack, Teams and Google Chat.
 
 The payload format is detected from the webhook URL, so one host can be on Slack and another on

@@ -14,9 +14,14 @@
     visitor: null,
     induction: { required: false, slideshow: null },
     agreement: null,
+    agreements: [],
+    agreementIndex: 0,
+    signedDocs: [],
     photo: null,
     signature: null,
     deliveryPhoto: null,
+    questions: [],
+    answers: {},
     deckIndex: 0,
     deckStart: null,
     lastResult: null,
@@ -75,6 +80,11 @@
   function resetVisit() {
     state.history = [];
     state.visitor = null;
+    state.agreements = [];
+    state.agreementIndex = 0;
+    state.signedDocs = [];
+    state.answers = {};
+    state.questions = [];
     state.photo = null;
     state.signature = null;
     state.deliveryPhoto = null;
@@ -330,8 +340,11 @@
 
   async function loadAgreement() {
     try {
-      state.agreement = await api(`/agreement/${encodeURIComponent(state.visitType)}`);
-    } catch { state.agreement = null; }
+      state.agreements = await api(`/agreements/${encodeURIComponent(state.visitType)}`);
+    } catch { state.agreements = []; }
+    state.agreementIndex = 0;
+    state.signedDocs = [];
+    state.agreement = state.agreements[0] || null;
   }
 
   $('#identify-continue').addEventListener('click', async () => {
@@ -382,7 +395,7 @@
       timer = setTimeout(async () => {
         const q = input.value.trim();
         if (q.length < 1) { list.innerHTML = ''; return; }
-        const hosts = await fetch(`/api/kiosk/hosts?q=${encodeURIComponent(q)}`).then((r) => r.json()).catch(() => []);
+        const hosts = await fetch(`/api/kiosk/staff?q=${encodeURIComponent(q)}`).then((r) => r.json()).catch(() => []);
         list.innerHTML = hosts.slice(0, 6).map((h) =>
           `<div data-id="${h.id}">${h.name}${h.department ? ` <span>${h.department}</span>` : ''}</div>`).join('');
         list.querySelectorAll('[data-id]').forEach((d) => d.addEventListener('click', () => {
@@ -423,13 +436,58 @@
   }
 
   function afterPhoto() {
-    if (state.agreement) {
-      $('#agreement-title').textContent = state.agreement.name;
-      $('#agreement-body').textContent = state.agreement.body;
-      return setScreen('agreement');
-    }
+    if (state.agreements && state.agreements.length) return showDocument(0);
     afterAgreement();
   }
+
+  /** Show one document: its text, its questions, and a signature box. */
+  function showDocument(index) {
+    state.agreementIndex = index;
+    state.agreement = state.agreements[index];
+    const many = state.agreements.length > 1;
+    $('#agreement-title').textContent = many
+      ? `${state.agreement.name} (${index + 1} of ${state.agreements.length})`
+      : state.agreement.name;
+    $('#agreement-body').textContent = state.agreement.body;
+    $('#agreement-continue').textContent = index < state.agreements.length - 1 ? 'I agree — next document' : 'I agree & continue';
+    renderQuestions();
+    clearSignature();
+    setScreen('agreement');
+  }
+
+  /** Declaration questions attached to the document, answered before signing. */
+  function renderQuestions() {
+    const box = $('#agreement-questions');
+    state.answers = {};
+    let questions = [];
+    try { questions = JSON.parse(state.agreement.questions || '[]'); } catch { questions = []; }
+    state.questions = questions;
+    show($('#questions-error'), false);
+
+    box.innerHTML = questions.map((q, i) => {
+      const id = q.id || `q${i + 1}`;
+      const label = `<span class="q-label">${escapeHtml(q.label)}${q.required ? ' <span class="req">*</span>' : ''}</span>`;
+      if (q.type === 'text') {
+        return `<div class="question">${label}<input class="input" data-q="${id}" autocomplete="off"></div>`;
+      }
+      const choices = q.type === 'choice' ? (q.options || []) : ['Yes', 'No'];
+      return `<div class="question">${label}<div class="q-choices" data-qgroup="${id}">
+        ${choices.map((c) => `<button type="button" data-q="${id}" data-value="${escapeHtml(c)}" aria-pressed="false">${escapeHtml(c)}</button>`).join('')}
+      </div></div>`;
+    }).join('');
+
+    $$('[data-qgroup] button', box).forEach((b) => b.addEventListener('click', () => {
+      const group = b.closest('[data-qgroup]');
+      $$('button', group).forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+      state.answers[b.dataset.q] = b.dataset.value;
+    }));
+    $$('input[data-q]', box).forEach((input) => input.addEventListener('input', () => {
+      state.answers[input.dataset.q] = input.value.trim();
+    }));
+  }
+
+  const escapeHtml = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
   function afterAgreement() {
     if (state.induction && state.induction.required && state.induction.slideshow &&
@@ -616,8 +674,30 @@
   $('#sig-clear').addEventListener('click', clearSignature);
 
   $('#agreement-continue').addEventListener('click', () => {
+    const missing = (state.questions || []).filter((q, i) => {
+      const id = q.id || `q${i + 1}`;
+      return q.required && !String(state.answers[id] || '').trim();
+    });
+    const err = $('#questions-error');
+    if (missing.length) {
+      err.textContent = missing.length === 1
+        ? `Please answer: ${missing[0].label}`
+        : `Please answer all ${missing.length} required questions.`;
+      show(err, true);
+      err.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    show(err, false);
     if (!hasInk) return toast('Please sign in the box to continue');
-    state.signature = pad.toDataURL('image/png');
+
+    state.signedDocs.push({
+      agreement_id: state.agreement.id,
+      signature: pad.toDataURL('image/png'),
+      answers: Object.keys(state.answers).length ? state.answers : null
+    });
+
+    const next = state.agreementIndex + 1;
+    if (next < state.agreements.length) return showDocument(next);
     afterAgreement();
   });
 
@@ -691,8 +771,7 @@
       purpose: $('#f-purpose').value.trim(),
       vehicle_reg: $('#f-vehicle').value.trim().toUpperCase(),
       photo: state.photo,
-      signature: state.signature,
-      agreement_id: state.agreement ? state.agreement.id : null,
+      documents: state.signedDocs,
       device_id: state.deviceId,
       induction_completed: inductionDone,
       slideshow_id: inductionDone && state.induction.slideshow ? state.induction.slideshow.id : null,

@@ -57,14 +57,16 @@ function inductionStatus(visitor, visitType) {
   };
 }
 
-function activeAgreementFor(visitType) {
-  const rows = all('SELECT * FROM agreements WHERE active = 1 ORDER BY id');
-  return rows.find((a) => {
+/** Every active document assigned to this category, in the order they were created. */
+function agreementsFor(visitType) {
+  return all('SELECT * FROM agreements WHERE active = 1 ORDER BY id').filter((a) => {
     let list = [];
     try { list = JSON.parse(a.required_for); } catch { list = []; }
     return !list.length || list.includes(visitType);
-  }) || null;
+  });
 }
+
+const activeAgreementFor = (visitType) => agreementsFor(visitType)[0] || null;
 
 function nextBadgeNo() {
   const badge = settings.getSection('badge');
@@ -99,7 +101,7 @@ router.get('/config', (req, res) => {
   });
 });
 
-router.get('/hosts', (req, res) => {
+router.get('/staff', (req, res) => {
   const q = lower(req.query.q);
   const rows = q
     ? all(`SELECT id, name, department FROM hosts WHERE active = 1 AND (lower(name) LIKE ? OR lower(department) LIKE ?)
@@ -147,6 +149,10 @@ router.post('/induction', (req, res) => {
 
 router.get('/agreement/:visitType', (req, res) => {
   res.json(activeAgreementFor(req.params.visitType) || null);
+});
+
+router.get('/agreements/:visitType', (req, res) => {
+  res.json(agreementsFor(req.params.visitType));
 });
 
 /* --------------------------------------------------------------- sign in */
@@ -203,12 +209,20 @@ router.post('/signin', async (req, res) => {
       device ? device.location_id : null, nowISO());
     const visitId = Number(visitRes.lastInsertRowid);
 
-    // Signed agreement (NDA / site rules)
-    if (b.signature) {
-      const agreement = b.agreement_id ? get('SELECT * FROM agreements WHERE id = ?', Number(b.agreement_id)) : activeAgreementFor(visitType);
-      const sigPath = files.saveDataUrl(b.signature, 'private', 'signatures');
-      run('INSERT INTO signatures (visit_id, agreement_id, agreement_version, signed_name, signature_path, signed_at) VALUES (?,?,?,?,?,?)',
-        visitId, agreement ? agreement.id : null, agreement ? agreement.version : null, fullName, sigPath, nowISO());
+    // One row per document signed, each with the answers given to its questions.
+    const signed = Array.isArray(b.documents) && b.documents.length
+      ? b.documents
+      : (b.signature || b.answers ? [{ agreement_id: b.agreement_id, signature: b.signature, answers: b.answers }] : []);
+
+    for (const doc of signed) {
+      const agreement = doc.agreement_id
+        ? get('SELECT * FROM agreements WHERE id = ?', Number(doc.agreement_id))
+        : activeAgreementFor(visitType);
+      const sigPath = files.saveDataUrl(doc.signature, 'private', 'signatures');
+      const answers = doc.answers && typeof doc.answers === 'object' ? JSON.stringify(doc.answers) : null;
+      run(`INSERT INTO signatures (visit_id, agreement_id, agreement_version, signed_name, signature_path, answers, signed_at)
+           VALUES (?,?,?,?,?,?,?)`,
+        visitId, agreement ? agreement.id : null, agreement ? agreement.version : null, fullName, sigPath, answers, nowISO());
     }
 
     // Induction completion

@@ -191,7 +191,7 @@ async function notifyDeparture(visitId) {
   const v = visitDetail(visitId);
   if (!v) return;
   const title = `${v.full_name} has signed out`;
-  const lines = [`Signed out: ${fmtTime(v.signed_out_at)}`, v.host_name ? `Host: ${v.host_name}` : null].filter(Boolean);
+  const lines = [`Signed out: ${fmtTime(v.signed_out_at)}`, v.host_name ? `Staff member: ${v.host_name}` : null].filter(Boolean);
   await Promise.all([
     sendEmail({ to: v.host_email, subject: title, text: lines.join('\n'), html: `<p>${title}</p><p>${lines.join('<br>')}</p>`, visit_id: visitId }),
     sendWebhook({ url: v.host_webhook, title, lines, visit_id: visitId })

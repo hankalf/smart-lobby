@@ -68,7 +68,7 @@
         <label class="field" id="w-phone"><span>Mobile number</span><input class="input" id="f-phone" type="tel" inputmode="tel"></label>
         <label class="field" id="w-email"><span>Email</span><input class="input" id="f-email" type="email" inputmode="email"></label>
       </div>
-      <label class="field" id="w-host"><span>Who are you visiting? *</span>
+      <label class="field" id="w-host"><span>Which member of staff are you here to see? *</span>
         <input class="input" id="f-host-search" placeholder="Start typing a name…" autocomplete="off">
         <input type="hidden" id="f-host-id">
         <div class="suggest" id="host-suggest"></div>
@@ -106,6 +106,8 @@
     <header class="bar"><h2 id="agreement-title">Site rules</h2><button class="btn ghost" data-back>Back</button></header>
     <div class="panel">
       <div class="doc" id="agreement-body"></div>
+      <div class="questions" id="agreement-questions"></div>
+      <div id="questions-error" class="notice error hidden"></div>
       <p class="sig-label">Please sign below</p>
       <div class="sig-wrap"><canvas id="sig-pad"></canvas></div>
       <div class="actions">
