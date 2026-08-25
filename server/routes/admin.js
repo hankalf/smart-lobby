@@ -151,6 +151,20 @@ router.post('/visits/:id/badge', (req, res) => {
   res.json({ visit, badge: settings.getSection('badge'), org: settings.getSection('org') });
 });
 
+/**
+ * Which door a driver has been sent to. Set from the desk after they arrive, so
+ * it is a small edit on a live visit rather than something they type themselves.
+ */
+router.patch('/visits/:id/door', (req, res) => {
+  const door = String(req.body.door == null ? '' : req.body.door).trim();
+  if (!/^\d{0,2}$/.test(door)) return res.status(400).json({ error: 'door_must_be_up_to_two_digits' });
+  const visit = get('SELECT id FROM visits WHERE id = ?', req.params.id);
+  if (!visit) return res.status(404).json({ error: 'not_found' });
+  run('UPDATE visits SET door = ? WHERE id = ?', door || null, visit.id);
+  audit(req, 'set_door', 'visit', visit.id, { door });
+  res.json({ ok: true, door: door || null });
+});
+
 /** Badges issued recently, for reprinting a lost or damaged one. */
 router.get('/badges', (req, res) => {
   const today = new Date().toISOString().slice(0, 10);
@@ -194,7 +208,8 @@ router.get('/drivers', (req, res) => {
     const body = csv(log, [
       { label: 'Driver', key: 'full_name' }, { label: 'Haulier', key: 'company' }, { label: 'Phone', key: 'phone' },
       { label: 'Vehicle', key: 'vehicle_reg' }, { label: 'Reference', key: 'reference' },
-      { label: 'Pick-Up / Delivery', key: 'movement' }, { label: 'Gate', key: 'location_name' },
+      { label: 'Pick-Up / Delivery', key: 'movement' }, { label: 'Door', key: 'door' },
+      { label: 'Location', key: 'location_name' },
       { label: 'Arrived', key: 'signed_in_at' }, { label: 'Left', key: 'signed_out_at' },
       { label: 'On site (minutes)', value: (r) => (r.signed_out_at
         ? Math.round((new Date(r.signed_out_at) - new Date(r.signed_in_at)) / 60000) : '') },

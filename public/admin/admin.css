@@ -139,6 +139,12 @@ td .btn { padding: .35rem .7rem; font-size: .82rem; }
   border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
   background-size: cover; background-position: center;
 }
+.door-input {
+  width: 4rem; text-align: center; font-weight: 700; font-size: 1.05rem;
+  padding: .35rem .4rem; transition: background .3s ease, border-color .3s ease;
+}
+.door-input.saved { border-color: var(--ok); background: #e8f6ee; }
+
 .section-order { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .section-row {
   display: flex; align-items: center; justify-content: space-between; gap: .75rem;

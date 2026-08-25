@@ -139,7 +139,7 @@ The sections can sit straight on the home screen, or behind a "Touch to start" b
 | Dashboard | Who is on site right now, today's numbers, 14-day trend, emergency roll call, sign-out-everyone |
 | Visits | Every sign-in, filterable, CSV export, per-visit detail with photo, signature and notification log |
 | Visitor registry | Everyone on file, induction status per person, block a visitor, reset their induction |
-| Drivers | Truck drivers on site and the full driver log, searchable by driver, haulier, vehicle or reference, with turnaround times and CSV export |
+| Drivers | Truck drivers on site with an editable door number, and the full driver log, searchable by driver, haulier, vehicle or reference, with turnaround times and CSV export |
 | Deliveries | Parcels awaiting collection, collect with signature, re-notify, CSV export |
 | Induction decks | Upload/replace decks, reorder and delete slides, preview, per-visit-type targeting |
 | Badges | Badge design, label size, live preview, test print and reprinting |

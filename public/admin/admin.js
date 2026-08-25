@@ -420,14 +420,15 @@
       <div class="card section">
         <h2>On site now (${data.onsite.length})</h2>
         ${data.onsite.length ? `<div class="table-wrap"><table>
-          <thead><tr><th>Driver</th><th>Haulier</th><th>Vehicle</th><th>Reference</th><th>Pick-Up / Delivery</th><th>Gate</th><th>Arrived</th><th></th></tr></thead>
+          <thead><tr><th>Driver</th><th>Haulier</th><th>Vehicle</th><th>Reference</th><th>Pick-Up / Delivery</th><th>Door</th><th>Arrived</th><th></th></tr></thead>
           <tbody>${data.onsite.map((r) => `<tr>
             <td><b>${esc(r.full_name)}</b>${r.phone ? `<div class="muted">${esc(r.phone)}</div>` : ''}</td>
             <td>${esc(r.company || '')}</td>
             <td><b>${esc(r.vehicle_reg || '—')}</b></td>
             <td>${esc(r.reference || '—')}</td>
             <td>${movementPill(r.movement)}</td>
-            <td>${esc(r.location_name || '—')}</td>
+            <td><input class="input door-input" data-door="${r.id}" value="${esc(r.door || '')}"
+                  inputmode="numeric" maxlength="2" placeholder="—" aria-label="Door number"></td>
             <td>${fmtTime(r.signed_in_at)}</td>
             <td><button class="btn ghost" data-signout="${r.id}">Sign out</button></td></tr>`).join('')}</tbody>
         </table></div>` : '<p class="empty">No drivers on site.</p>'}
@@ -447,7 +448,7 @@
           ${VIEWS.drivers.q || VIEWS.drivers.from || VIEWS.drivers.to ? '<button class="btn ghost" id="dr-clear">Clear</button>' : ''}
         </div>
         ${data.log.length ? `<div class="table-wrap"><table>
-          <thead><tr><th>Arrived</th><th>Driver</th><th>Haulier</th><th>Vehicle</th><th>Reference</th><th>Pick-Up / Delivery</th><th>Gate</th><th>Turnaround</th></tr></thead>
+          <thead><tr><th>Arrived</th><th>Driver</th><th>Haulier</th><th>Vehicle</th><th>Reference</th><th>Pick-Up / Delivery</th><th>Door</th><th>Turnaround</th></tr></thead>
           <tbody>${data.log.map((r) => `<tr>
             <td>${fmtDate(r.signed_in_at)}</td>
             <td><b>${esc(r.full_name)}</b></td>
@@ -455,12 +456,34 @@
             <td>${esc(r.vehicle_reg || '—')}</td>
             <td>${esc(r.reference || '—')}</td>
             <td>${movementPill(r.movement)}</td>
-            <td>${esc(r.location_name || '—')}</td>
+            <td>${esc(r.door || '—')}</td>
             <td>${minutes(r)}</td></tr>`).join('')}</tbody>
         </table></div>` : '<p class="empty">No driver check-ins match.</p>'}
       </div>`;
 
     bindSignoutButtons(root, () => render('drivers'));
+
+    // Door numbers are typed straight into the row and saved as they are entered.
+    $$('[data-door]').forEach((input) => {
+      input.addEventListener('input', () => {
+        const cleaned = input.value.replace(/\D/g, '').slice(0, 2);
+        if (cleaned !== input.value) input.value = cleaned;
+      });
+      const save = async () => {
+        if (input.value === input.dataset.saved) return;
+        try {
+          await api(`/visits/${input.dataset.door}/door`, { method: 'PATCH', body: { door: input.value } });
+          input.dataset.saved = input.value;
+          input.classList.add('saved');
+          setTimeout(() => input.classList.remove('saved'), 900);
+        } catch { toast('Could not save that door number'); }
+      };
+      input.dataset.saved = input.value;
+      input.addEventListener('change', save);
+      input.addEventListener('blur', save);
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
+    });
+
     const runSearch = () => {
       VIEWS.drivers.q = $('#dr-q').value.trim();
       VIEWS.drivers.from = $('#dr-from').value;

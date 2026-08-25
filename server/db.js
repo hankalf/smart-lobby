@@ -309,7 +309,8 @@ function migrate() {
   addColumn('devices', 'print_enabled', 'INTEGER NOT NULL DEFAULT 1');
   addColumn('visits', 'location_id', 'INTEGER REFERENCES locations(id) ON DELETE SET NULL');
   addColumn('visits', 'reference', 'TEXT');   // load / order / docket reference
-  addColumn('visits', 'movement', 'TEXT');    // delivering or collecting
+  addColumn('visits', 'movement', 'TEXT');    // pick-up or delivery
+  addColumn('visits', 'door', 'TEXT');        // which door a driver is on, set at the desk
   addColumn('devices', 'sections', 'TEXT');   // which home-screen cards this device shows
   addColumn('agreements', 'questions', 'TEXT');
   addColumn('agreements', 'require_signature', 'INTEGER NOT NULL DEFAULT 1');
