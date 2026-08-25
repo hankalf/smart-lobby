@@ -12,6 +12,7 @@
 <!-- LOGIN / SETUP -------------------------------------------------------- -->
 <div id="gate" class="gate hidden">
   <form class="card gate-card" id="gate-form">
+    <img id="gate-logo" class="gate-logo hidden" alt="">
     <h1 id="gate-title">Smart Lobby</h1>
     <p class="muted" id="gate-sub">Sign in to the admin dashboard</p>
     <label class="field" id="gate-org-wrap" hidden><span>Organisation name</span><input class="input" id="gate-org"></label>
@@ -26,7 +27,7 @@
 <!-- APP ------------------------------------------------------------------ -->
 <div id="shell" class="shell hidden">
   <aside class="side">
-    <div class="brand"><span class="brand-mark">SL</span><span id="brand-name">Smart Lobby</span></div>
+    <div class="brand"><span class="brand-mark" id="brand-mark">SL</span><span id="brand-name">Smart Lobby</span></div>
     <nav id="nav">
       <button data-view="dashboard" class="active">Dashboard</button>
       <button data-view="visits">Visits</button>

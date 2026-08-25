@@ -5,6 +5,8 @@ const DEFAULTS = {
   org: {
     name: "Nature's Touch Builds",
     logo_path: null,
+    background_path: null,
+    background_dim: 40,
     primary_color: '#2f7d5d',
     accent_color: '#123a2c',
     welcome_title: 'Welcome',

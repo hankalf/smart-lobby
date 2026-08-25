@@ -22,6 +22,15 @@ body { background: var(--bg); }
   text-align: center;
   background: linear-gradient(160deg, var(--brand-soft), var(--bg) 60%);
 }
+.idle.has-bg { background-size: cover; background-position: center; }
+.idle.has-bg::before { content: ''; position: absolute; inset: 0; background: var(--scrim, rgba(8,18,14,.4)); }
+.idle.has-bg .idle-inner { position: relative; z-index: 1; }
+.idle.has-bg .idle-foot { z-index: 1; } /* stays absolutely positioned at the foot */
+.idle.has-bg h1,
+.idle.has-bg .lead,
+.idle.has-bg .idle-foot,
+.idle.has-bg .onsite-count { color: #fff; text-shadow: 0 1px 14px rgba(0, 0, 0, .45); }
+
 .idle-inner { max-width: 42rem; }
 .logo { max-height: 110px; max-width: 70vw; margin-bottom: 1.5rem; }
 .idle h1 { font-size: clamp(2.6rem, 7vw, 4.4rem); margin: 0 0 .5rem; color: var(--brand-dark); letter-spacing: -.02em; }

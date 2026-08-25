@@ -116,7 +116,7 @@ photo → document signing → induction → badge + QR code.
 | Access & doors | HTTP-controlled doors, test unlock, unlock audit trail |
 | Kiosks | Register tablets, see which are online |
 | Reports | Visits per day, busiest hosts, top companies, arrival times, average time on site |
-| Settings | Branding, kiosk flow, badges, induction, deliveries, access, notifications, retention, users |
+| Settings | Branding (logo, kiosk background photo, colours, time zone), kiosk flow, badges, induction, deliveries, access, notifications, retention, users |
 
 ---
 
@@ -145,6 +145,22 @@ Who has to watch it:
 Set "minimum seconds per slide" if you need proof that people actually read it — the Next button
 stays disabled until the timer runs out. Completion is stored per person with the deck version and
 the number of seconds they took, and appears on the visit record.
+
+---
+
+## Branding
+
+**Settings → Branding** sets the organisation name, kiosk headline and sign-out message, the two
+brand colours, time zone and date format.
+
+- **Logo** — appears on the kiosk welcome screen, on printed badges, in the dashboard sidebar and on
+  the admin sign-in page. PNG or SVG with a transparent background works best.
+- **Kiosk background** — a photo behind the welcome screen. A slider controls how much it is darkened
+  so the welcome text stays readable, with a live preview beside it. Landscape, 1600px wide or more.
+  Leave it unset for the plain gradient.
+
+Uploads are checked by their actual bytes rather than their file extension, so a mislabelled file is
+rejected instead of becoming a broken image on the kiosk. Replacing an image deletes the old file.
 
 ---
 

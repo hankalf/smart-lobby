@@ -70,6 +70,22 @@
   const confirmAction = (message, onYes) =>
     modal('Please confirm', `<p>${esc(message)}</p>`, async (bg, close) => { await onYes(); close(); }, 'Yes, continue');
 
+  /** Put the uploaded logo (or initials as a fallback) in the sidebar. */
+  function applyBranding() {
+    const name = (SETTINGS && SETTINGS.org.name) || 'Smart Lobby';
+    const logo = SETTINGS && SETTINGS.org.logo_path;
+    $('#brand-name').textContent = name;
+    const mark = $('#brand-mark');
+    if (logo) {
+      mark.classList.add('has-logo');
+      mark.innerHTML = `<img src="${esc(logo)}" alt="">`;
+    } else {
+      mark.classList.remove('has-logo');
+      mark.textContent = name.replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean)
+        .slice(0, 2).map((w) => w[0].toUpperCase()).join('') || 'SL';
+    }
+  }
+
   /* ----------------------------------------------------------------- gate */
 
   async function showGate() {
@@ -77,6 +93,10 @@
     $('#shell').classList.add('hidden');
     $('#gate').classList.remove('hidden');
     const setup = boot.needs_setup;
+    if (boot.org && boot.org.logo_path) {
+      $('#gate-logo').src = boot.org.logo_path;
+      $('#gate-logo').classList.remove('hidden');
+    }
     $('#gate-title').textContent = setup ? 'Set up Smart Lobby' : (boot.org && boot.org.name) || 'Smart Lobby';
     $('#gate-sub').textContent = setup ? 'Create the first administrator account' : 'Sign in to the admin dashboard';
     $('#gate-org-wrap').hidden = !setup;
@@ -906,11 +926,31 @@
                 .map(([v, l]) => `<option value="${v}" ${s.org.date_format === v ? 'selected' : ''}>${l}</option>`).join('')}
             </select></label>
         </div>
+        <h3>Logo</h3>
+        <p class="muted" style="margin-top:0">Shown on the kiosk welcome screen, the badges, this dashboard and the sign-in page.</p>
         <div class="row"><label class="btn subtle">${s.org.logo_path ? 'Replace logo' : 'Upload logo'}<input type="file" hidden id="logo-file" accept="image/*"></label>
           ${s.org.logo_path
             ? `<img src="${esc(s.org.logo_path)}" style="max-height:44px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:4px">
                <button class="btn ghost" id="logo-remove">Remove logo</button>`
             : '<span class="muted">No logo set — PNG or SVG with a transparent background works best</span>'}</div>
+
+        <h3>Kiosk background</h3>
+        <p class="muted" style="margin-top:0">A photo behind the welcome screen — a site shot or a finished build works well.
+          Landscape, at least 1600px wide. Leave it unset for the plain gradient.</p>
+        <div class="row"><label class="btn subtle">${s.org.background_path ? 'Replace background' : 'Upload background'}
+            <input type="file" hidden id="bg-file" accept="image/*"></label>
+          ${s.org.background_path
+            ? `<button class="btn ghost" id="bg-remove">Remove background</button>`
+            : '<span class="muted">No background set</span>'}</div>
+        ${s.org.background_path ? `
+          <div class="bg-preview" id="bg-preview" style="background-image:url('${esc(s.org.background_path)}')">
+            <div class="bg-scrim" id="bg-scrim"></div>
+            <div class="bg-text"><b>Welcome</b><span>Please tap below to sign in</span></div>
+          </div>
+          <label class="field" style="max-width:26rem;margin-top:1rem"><span>Darken the photo so the text stays readable
+            — <b id="dim-value">${s.org.background_dim}</b>%</span>
+            <input type="range" min="0" max="85" step="5" id="bg-dim" data-set="org.background_dim" value="${s.org.background_dim}"></label>
+        ` : ''}
       </div>
 
       <div class="card section"><h2>Kiosk sign-in flow</h2>
@@ -1070,7 +1110,7 @@
       const patch = {};
       $$('[data-set]').forEach((input) => {
         const value = input.type === 'checkbox' ? input.checked
-          : input.type === 'number' ? Number(input.value)
+          : (input.type === 'number' || input.type === 'range') ? Number(input.value)
           : input.value;
         setPath(patch, input.dataset.set, value);
       });
@@ -1079,19 +1119,51 @@
       SETTINGS = await api('/settings', { method: 'PUT', body: patch });
       if (SETTINGS.warnings && SETTINGS.warnings.length) toast(SETTINGS.warnings.join(' '), 7000);
       else toast('Settings saved');
-      $('#brand-name').textContent = SETTINGS.org.name || 'Smart Lobby';
+      applyBranding();
+      document.documentElement.style.setProperty('--brand', SETTINGS.org.primary_color || '#2f7d5d');
+      document.documentElement.style.setProperty('--brand-dark', SETTINGS.org.accent_color || '#123a2c');
     });
 
     $('#logo-file').addEventListener('change', async (e) => {
       if (!e.target.files[0]) return;
       await upload('/settings/logo', e.target.files[0]);
+      SETTINGS = await api('/settings');
+      applyBranding();
       toast('Logo updated');
       render('settings');
     });
 
+    const bgFile = $('#bg-file');
+    if (bgFile) bgFile.addEventListener('change', async (e) => {
+      if (!e.target.files[0]) return;
+      try {
+        await upload('/settings/background', e.target.files[0]);
+        SETTINGS = await api('/settings');
+        toast('Background updated');
+        render('settings');
+      } catch { toast('That file could not be used as a background'); }
+    });
+
+    const bgRemove = $('#bg-remove');
+    if (bgRemove) bgRemove.addEventListener('click', async () => {
+      await api('/settings/background', { method: 'DELETE' });
+      SETTINGS = await api('/settings');
+      toast('Background removed');
+      render('settings');
+    });
+
+    const dim = $('#bg-dim');
+    if (dim) dim.addEventListener('input', () => {
+      $('#dim-value').textContent = dim.value;
+      $('#bg-scrim').style.background = `rgba(8,18,14,${Number(dim.value) / 100})`;
+    });
+    if (dim) $('#bg-scrim').style.background = `rgba(8,18,14,${Number(dim.value) / 100})`;
+
     const logoRemove = $('#logo-remove');
     if (logoRemove) logoRemove.addEventListener('click', async () => {
       await api('/settings/logo', { method: 'DELETE' });
+      SETTINGS = await api('/settings');
+      applyBranding();
       toast('Logo removed');
       render('settings');
     });
@@ -1231,7 +1303,7 @@
     SETTINGS = await api('/settings');
     document.documentElement.style.setProperty('--brand', SETTINGS.org.primary_color || '#2f7d5d');
     document.documentElement.style.setProperty('--brand-dark', SETTINGS.org.accent_color || '#123a2c');
-    $('#brand-name').textContent = SETTINGS.org.name || 'Smart Lobby';
+    applyBranding();
     $('#who').textContent = `${ME.name || ME.email}`;
     $('#shell').classList.remove('hidden');
     const view = (location.hash || '#dashboard').slice(1);

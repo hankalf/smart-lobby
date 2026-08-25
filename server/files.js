@@ -66,6 +66,34 @@ const memoryUpload = multer({
   limits: { fileSize: 100 * 1024 * 1024 }
 });
 
+/**
+ * Images only. Rejecting inside multer lets it drain the request body first —
+ * replying 400 mid-upload instead resets the connection and the browser reports
+ * a network error rather than the reason.
+ */
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 12 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, /^image\//.test(file.mimetype || ''))
+});
+
+/**
+ * Check the bytes, not the filename. A text file renamed to .png arrives with an
+ * image mimetype and would otherwise be stored as a broken logo or background.
+ */
+function looksLikeImage(buf) {
+  if (!Buffer.isBuffer(buf) || buf.length < 12) return false;
+  if (buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return true; // PNG
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return true;                                    // JPEG
+  const head = buf.subarray(0, 12).toString('latin1');
+  if (head.startsWith('GIF87a') || head.startsWith('GIF89a')) return true;                                   // GIF
+  if (head.startsWith('RIFF') && head.slice(8, 12) === 'WEBP') return true;                                  // WebP
+  if (head.startsWith('BM')) return true;                                                                    // BMP
+  const text = buf.subarray(0, 512).toString('utf8').trimStart();                                            // SVG
+  if (text.startsWith('<svg') || (text.startsWith('<?xml') && text.includes('<svg'))) return true;
+  return false;
+}
+
 /** Write a raw buffer into a bucket. Returns the web path. */
 function saveBuffer(buf, bucket, subdir, filename) {
   const base = bucket === 'public' ? PUBLIC_DIR : PRIVATE_DIR;
@@ -77,4 +105,4 @@ function saveBuffer(buf, bucket, subdir, filename) {
   return `/media/${bucket}/${subdir ? subdir + '/' : ''}${name}`;
 }
 
-module.exports = { UPLOAD_DIR, PUBLIC_DIR, PRIVATE_DIR, saveDataUrl, saveBuffer, absoluteFor, removeFile, memoryUpload, rand };
+module.exports = { UPLOAD_DIR, PUBLIC_DIR, PRIVATE_DIR, saveDataUrl, saveBuffer, absoluteFor, removeFile, memoryUpload, imageUpload, looksLikeImage, rand };

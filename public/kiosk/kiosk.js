@@ -126,6 +126,17 @@
     $('#idle-message').textContent = org.welcome_message || '';
     $('#idle-org').textContent = org.name || '';
     if (org.logo_path) { $('#idle-logo').src = org.logo_path; show($('#idle-logo'), true); }
+
+    // Optional photo behind the welcome screen, with a scrim so the text stays readable.
+    const idle = document.querySelector('.idle');
+    if (org.background_path) {
+      idle.classList.add('has-bg');
+      idle.style.backgroundImage = `url("${org.background_path}")`;
+      idle.style.setProperty('--scrim', `rgba(8,18,14,${(Number(org.background_dim) || 0) / 100})`);
+    } else {
+      idle.classList.remove('has-bg');
+      idle.style.backgroundImage = '';
+    }
     document.title = `${org.name} — Reception`;
 
     show($('#tile-delivery'), !!(kiosk.show_delivery_button && deliveries.enabled));

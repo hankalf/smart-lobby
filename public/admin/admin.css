@@ -11,7 +11,10 @@
 .shell { display: grid; grid-template-columns: 250px 1fr; min-height: 100vh; }
 .side { background: var(--brand-dark); color: #dfeae5; display: flex; flex-direction: column; padding: 1.25rem 1rem; gap: 1.25rem; }
 .brand { display: flex; align-items: center; gap: .6rem; font-weight: 700; font-size: 1.05rem; color: #fff; }
-.brand-mark { width: 32px; height: 32px; border-radius: 9px; background: var(--brand); display: grid; place-items: center; font-size: .8rem; }
+.brand-mark { width: 32px; height: 32px; border-radius: 9px; background: var(--brand); display: grid; place-items: center; font-size: .8rem; flex: 0 0 auto; }
+.brand-mark.has-logo { width: auto; height: auto; max-width: 120px; background: #fff; padding: 5px 7px; border-radius: 10px; }
+.brand-mark.has-logo img { display: block; max-height: 30px; max-width: 106px; object-fit: contain; }
+.gate-logo { display: block; max-height: 64px; max-width: 200px; object-fit: contain; margin: 0 auto 1rem; }
 #nav { display: flex; flex-direction: column; gap: .15rem; }
 #nav button {
   text-align: left; background: none; border: 0; color: #cfe0d8; padding: .6rem .75rem;
@@ -112,6 +115,21 @@ td .btn { padding: .35rem .7rem; font-size: .82rem; }
 
 .toast { position: fixed; left: 50%; bottom: 1.5rem; transform: translateX(-50%);
   background: var(--brand-dark); color: #fff; padding: .7rem 1.1rem; border-radius: 999px; z-index: 80; }
+
+.bg-preview {
+  position: relative; margin-top: 1rem; height: 190px; max-width: 34rem;
+  border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
+  background-size: cover; background-position: center;
+}
+.bg-scrim { position: absolute; inset: 0; }
+.bg-text {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; color: #fff; text-align: center;
+  text-shadow: 0 1px 12px rgba(0,0,0,.5);
+}
+.bg-text b { font-size: 1.9rem; }
+.bg-text span { font-size: .95rem; opacity: .92; }
+input[type="range"] { width: 100%; accent-color: var(--brand); }
 
 .howto { border-top: 1px solid var(--line); padding: .9rem 0; }
 .howto summary { cursor: pointer; font-size: .95rem; color: var(--brand-dark); }

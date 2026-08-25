@@ -450,18 +450,27 @@ router.put('/settings', (req, res) => {
   res.json({ ...maskSecrets(updated), warnings });
 });
 
-router.post('/settings/logo', files.memoryUpload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'no_file' });
+// Branding images: the logo shown on the kiosk, badges and dashboard, and the
+// background image behind the kiosk welcome screen.
+const BRAND_IMAGES = { logo: 'logo_path', background: 'background_path' };
+
+router.post('/settings/:kind(logo|background)', files.imageUpload.single('file'), (req, res) => {
+  const field = BRAND_IMAGES[req.params.kind];
+  if (!req.file || !files.looksLikeImage(req.file.buffer)) return res.status(400).json({ error: 'not_an_image' });
+  const previous = settings.getSection('org')[field];
   const web = files.saveBuffer(req.file.buffer, 'public', 'branding', req.file.originalname);
-  settings.setSection('org', { logo_path: web });
-  res.json({ ok: true, logo_path: web });
+  settings.setSection('org', { [field]: web });
+  if (previous) files.removeFile(previous);
+  audit(req, 'upload', req.params.kind, null, { file: req.file.originalname });
+  res.json({ ok: true, [field]: web });
 });
 
-router.delete('/settings/logo', (req, res) => {
-  const current = settings.getSection('org').logo_path;
+router.delete('/settings/:kind(logo|background)', (req, res) => {
+  const field = BRAND_IMAGES[req.params.kind];
+  const current = settings.getSection('org')[field];
   if (current) files.removeFile(current);
-  settings.setSection('org', { logo_path: null });
-  audit(req, 'delete', 'logo', null);
+  settings.setSection('org', { [field]: null });
+  audit(req, 'delete', req.params.kind, null);
   res.json({ ok: true });
 });
 
