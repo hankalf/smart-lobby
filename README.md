@@ -213,7 +213,7 @@ from **Test unlock** in the dashboard. Every attempt is logged with who, when, w
 | --- | --- | --- |
 | **Email** | SMTP host, port, user, password | Any provider — Google Workspace, Microsoft 365, Fastmail, Postmark, SES. Includes the visitor's photo. |
 | **Slack** | Incoming webhook URL | Posts the arrival with the visitor's photo as a thumbnail. |
-| **Microsoft Teams** | Incoming webhook URL | Sent as a MessageCard. |
+| **Microsoft Teams** | Workflows URL | Posts to a channel, or as a direct message to one person — see the guide in **Hosts**. |
 | **Google Chat** | Incoming webhook URL | Same webhook field, pick the format. |
 | **Generic JSON** | Any URL | `{event, details[], photo_url, timestamp}` — use it to drive anything else. |
 | **SMS** | Twilio Account SID, Auth Token, from-number | Texts the host's mobile. Numbers are converted to E.164, so `07700 900123` works. |

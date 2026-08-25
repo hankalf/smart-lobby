@@ -671,7 +671,8 @@
         </details>
 
         <details class="howto">
-          <summary><b>Microsoft Teams</b></summary>
+          <summary><b>Microsoft Teams</b> — to a channel, or as a direct message to one person</summary>
+          <p><b>To a channel</b></p>
           <ol>
             <li>In Teams, hover the channel → <b>⋯</b> → <b>Workflows</b>.</li>
             <li>Choose the template <b>“Post to a channel when a webhook request is received”</b>.</li>
@@ -679,9 +680,20 @@
             <li>Copy the HTTPS URL it shows you — you only get it once.</li>
             <li>Paste it into the host's <b>Chat webhook</b> box above.</li>
           </ol>
-          <p class="muted">Microsoft is retiring the older Office 365 connectors. If your tenant still offers
-            <b>⋯ → Connectors → Incoming Webhook</b> that works too, but Workflows is the route that will keep
-            working.</p>
+          <p><b>To one person (a DM)</b> — use this when a site manager should be pinged directly rather than
+            in a shared channel.</p>
+          <ol>
+            <li>In Teams, open the chat with that person → <b>⋯</b> → <b>Workflows</b>. (Or open the
+              <b>Workflows</b> app and start from there.)</li>
+            <li>Choose the template <b>“Post to a chat when a webhook request is received”</b> — the
+              <i>chat</i> one, not the channel one.</li>
+            <li>Confirm the chat it will post into, then <b>Add workflow</b> and copy the URL.</li>
+            <li>Paste it into that host's <b>Chat webhook</b> box above. Only that host's visitors trigger it.</li>
+          </ol>
+          <p class="muted">The message arrives from <b>Flow bot</b> rather than from a person, which is normal.
+            Some tenants restrict the chat template — if you cannot see it, your IT admin controls that.
+            Microsoft is also retiring the older Office 365 connectors; if your tenant still offers
+            <b>⋯ → Connectors → Incoming Webhook</b> it works, but it is channel-only and going away.</p>
         </details>
 
         <details class="howto">
