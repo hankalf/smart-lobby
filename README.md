@@ -62,8 +62,8 @@ a Mac mini, a NUC, an old laptop or a Raspberry Pi. iPadOS cannot host the Node 
 
 **Kiosk apps and the camera.** A third-party kiosk browser must both hold iOS camera permission itself and
 forward the page request; ones that skip the second part deny it silently, with no prompt. If no permission
-prompt ever appears, that is the cause — Safari with Guided Access is the reliable alternative, and
- on the tablet will confirm it either way.
+prompt ever appears, that is the cause — Safari with Guided Access is the reliable alternative, and opening
+`/check/` on the tablet will confirm it either way.
 
 **Camera note.** The kiosk uses the iPad's front camera for the badge photo. Browsers only allow the
 *live preview* over `https://` or on `localhost`, so over a plain LAN address the kiosk automatically
