@@ -74,7 +74,8 @@
     updateBackdrop();
     if (name !== 'photo' && name !== 'delivery') stopCamera();
     if (name !== 'signout' && scanStream) stopScanner();
-    if (name === 'signout') show($('#scan-row'), !!(state.cfg && state.cfg.kiosk.qr_signout_enabled));
+    // The scanner opens with the screen, so a badge can simply be held up.
+    if (name === 'signout' && state.cfg && state.cfg.kiosk.qr_signout_enabled && !scannerDismissed) startScanner();
     if (name === 'idle') resetVisit();
     if (name === 'details') applyDetailFields();
     if (name === 'agreement') sizeSignaturePad();
@@ -83,9 +84,16 @@
     if (focusable) setTimeout(() => focusable.focus(), 120);
   }
 
+  /*
+   * Where "back" and "cancel" lead. With the cards on the welcome screen the menu
+   * screen is never used, and sending anyone there showed an empty page.
+   */
+  const homeScreen = () => (state.cfg && state.cfg.kiosk.welcome_shows_menu ? 'idle' : 'menu');
+
   function goBack() {
-    const prev = state.history.pop() || 'menu';
-    setScreen(prev, { push: false });
+    let prev = state.history.pop();
+    while (prev === 'menu' && homeScreen() === 'idle') prev = state.history.pop();
+    setScreen(prev || homeScreen(), { push: false });
   }
 
   function resetVisit() {
@@ -105,6 +113,7 @@
     state.inductionDone = false;
     state.flow = [];
     state.flowIndex = -1;
+    scannerDismissed = false;
     ['#f-name', '#f-company', '#f-phone', '#f-email', '#f-host-search', '#f-host-id', '#f-purpose', '#f-vehicle',
      '#f-reference', '#f-movement', '#identify-value', '#signout-q', '#d-name', '#d-company', '#d-host-search', '#d-host-id', '#d-tracking'].forEach((s) => {
       const el = $(s); if (el) el.value = '';
@@ -351,7 +360,10 @@
 
   /* ---------------------------------------------------------------- menu */
 
-  $$('[data-go]').forEach((b) => b.addEventListener('click', () => setScreen(b.dataset.go)));
+  $$('[data-go]').forEach((b) => b.addEventListener('click', () => {
+    // "menu" means the home screen, wherever the cards happen to live.
+    setScreen(b.dataset.go === 'menu' ? homeScreen() : b.dataset.go);
+  }));
   $$('[data-back]').forEach((b) => b.addEventListener('click', goBack));
 
   /** The sections offered on the home screen, one card each. */
@@ -437,7 +449,10 @@
     const inline = !!state.cfg.kiosk.welcome_shows_menu;
     show($('#start-btn'), !inline);
     show($('#welcome-actions'), inline);
-    wireSections(inline ? $('#welcome-actions') : $('#menu-tiles'));
+    // Both containers are filled, so the menu is never an empty screen if
+    // something does route there.
+    wireSections($('#welcome-actions'));
+    wireSections($('#menu-tiles'));
   }
 
   /* ------------------------------------------------------------ identify */
@@ -1044,8 +1059,14 @@
 
   function buildBadge(result, badge, org) {
     const root = document.documentElement;
+    const landscape = badge.orientation === 'landscape';
     root.style.setProperty('--badge-w', `${badge.label_width_mm}mm`);
     root.style.setProperty('--badge-h', `${badge.label_height_mm}mm`);
+    // A horizontal badge is turned onto a label that keeps its own size.
+    root.style.setProperty('--card-w', `${landscape ? badge.label_height_mm : badge.label_width_mm}mm`);
+    root.style.setProperty('--card-h', `${landscape ? badge.label_width_mm : badge.label_height_mm}mm`);
+    root.style.setProperty('--card-turn', landscape
+      ? `translateX(${badge.label_width_mm}mm) rotate(90deg)` : 'none');
     root.style.setProperty('--badge-scale', badge.font_scale || 1);
 
     $('#badge-type').textContent = badge.title_text || result.visit.visit_type.toUpperCase();
@@ -1121,6 +1142,7 @@
   let scanTimer = null;
   let detector = null;
   let jsQrLoading = null;
+  let scannerDismissed = false;
 
   function loadJsQr() {
     if (window.jsQR) return Promise.resolve(window.jsQR);
@@ -1156,12 +1178,16 @@
         video: { facingMode: 'user', width: { ideal: 1280 } }, audio: false
       });
       $('#scan-cam').srcObject = scanStream;
-      status.textContent = 'Hold your badge up to the camera.';
+      status.textContent = 'Hold your badge up to the camera, or type your name below.';
       scanTimer = setInterval(scanFrame, 180);
     } catch {
-      status.textContent = window.isSecureContext
-        ? 'No camera available here. Please type your name instead.'
-        : 'The camera needs an https:// address. Please type your name instead.';
+      // No camera here: fold the scanner away and leave the search, with the
+      // button available in case it was only a refused permission.
+      show($('#scan-panel'), false);
+      show($('#scan-row'), true);
+      toast(window.isSecureContext
+        ? 'No camera available — search for your name instead'
+        : 'The scanner needs an https:// address — search for your name instead', 4000);
     }
   }
 
@@ -1211,7 +1237,7 @@
   }
 
   $('#btn-scan').addEventListener('click', startScanner);
-  $('#btn-scan-stop').addEventListener('click', stopScanner);
+  $('#btn-scan-stop').addEventListener('click', () => { scannerDismissed = true; stopScanner(); });
 
   /* -------------------------------------------------------------- delivery */
 

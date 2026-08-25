@@ -123,7 +123,8 @@ The sections can sit straight on the home screen, or behind a "Touch to start" b
   Switchable off in **Settings → Kiosk sign-in flow**.
 - Signature capture on the glass for NDAs and site rules.
 - The sign-out code and its QR go on the printed badge only, not on screen — a code seen for a few seconds is no use to anyone.
-- Visitors with a printed badge can scan it at the kiosk to sign out (**Settings → Kiosk sign-in flow**).
+- The sign-out screen opens with the badge scanner already running, so a badge can simply be held up; the
+  name search sits underneath for anyone without one (**Settings → Kiosk sign-in flow**).
   Browsers with a native barcode reader use it; iPad Safari and WKWebView kiosk apps get a bundled
   decoder, fetched only when the scanner is opened, so it works offline.
 - An abandoned sign-in is wiped when the kiosk returns to the welcome screen: every field, the captured
@@ -341,7 +342,8 @@ Off by default. The **Badges** tab holds the lot: whether badges print at all, t
 badge shows, a live preview at the real size, a test print, and reprinting.
 
 **Label size** — pick your stock from a list of common Brother and Dymo rolls, or set width and height in
-millimetres. A text-size slider scales everything on the badge together.
+millimetres. Choose whether the badge prints vertically or horizontally on that label — the label keeps its
+size, the badge is turned on it — and a text-size slider scales everything together.
 
 **Reprinting** — badges from the last week are listed, searchable by name, company or badge number, with a
 Reprint button; the same is on the dashboard beside anyone on site. A visit that never had a number

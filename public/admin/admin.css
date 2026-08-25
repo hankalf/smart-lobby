@@ -119,8 +119,16 @@ td .btn { padding: .35rem .7rem; font-size: .82rem; }
 /* ----------------------------------------------------------- badge setup */
 .badge-preview-wrap { display: flex; gap: 1.5rem; flex-wrap: wrap; }
 .badge-preview {
-  border: 1px solid var(--line); border-radius: 6px; background: #fff; padding: 4mm;
-  display: flex; flex-direction: column; align-items: center; text-align: center; flex: 0 0 auto;
+  border: 1px solid var(--line); border-radius: 6px; background: #fff;
+  flex: 0 0 auto; position: relative; overflow: hidden;
+}
+/* The badge sits inside the label and is turned when printing horizontally. */
+.badge-preview .b-inner {
+  position: absolute; top: 0; left: 0;
+  width: var(--inner-w); height: var(--inner-h);
+  transform: var(--turn); transform-origin: top left;
+  padding: 4mm; box-sizing: border-box;
+  display: flex; flex-direction: column; align-items: center; text-align: center;
 }
 .badge-preview .b-type { font-weight: 800; letter-spacing: .18em; font-size: 11px; }
 .badge-preview .b-photo { width: 28mm; height: 28mm; background: var(--brand-soft); border-radius: 2mm; margin: 2mm 0;

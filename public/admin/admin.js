@@ -926,6 +926,12 @@
             ${txt('badge.label_width_mm', 'Width (mm)', 'number')}
             ${txt('badge.label_height_mm', 'Height (mm)', 'number')}
           </div>
+          <label class="field"><span>Which way it prints on the label</span>
+            <select class="input" data-set="badge.orientation">
+              <option value="portrait" ${b.orientation !== 'landscape' ? 'selected' : ''}>Vertical — reads down the label</option>
+              <option value="landscape" ${b.orientation === 'landscape' ? 'selected' : ''}>Horizontal — reads across the label</option>
+            </select>
+            <span class="muted">The label itself does not change size; the badge is turned on it</span></label>
           <label class="field"><span>Text size — <b id="scale-value">${b.font_scale}</b>×</span>
             <input type="range" min="0.6" max="1.6" step="0.05" id="badge-scale" data-set="badge.font_scale" value="${b.font_scale}"></label>
           <h3>Wording</h3>
@@ -1052,11 +1058,18 @@
 
   /** A print window sized to the label, sharing one layout with the kiosk. */
   function openBadgeWindow(b, innerHtml) {
+    const landscape = b.orientation === 'landscape';
+    // The label is the size it is; a horizontal badge is rotated onto it.
+    const cardW = landscape ? b.label_height_mm : b.label_width_mm;
+    const cardH = landscape ? b.label_width_mm : b.label_height_mm;
+    const turn = landscape ? `transform: translateX(${b.label_width_mm}mm) rotate(90deg); transform-origin: top left;` : '';
+
     const w = window.open('', '_blank', 'width=420,height=640');
     w.document.write(`<!doctype html><title>Badge</title><style>
       @page { size: ${b.label_width_mm}mm ${b.label_height_mm}mm; margin: 0; }
-      body { margin:0; font-family: system-ui, "Segoe UI", Arial, sans-serif; }
-      .card { width:${b.label_width_mm}mm; height:${b.label_height_mm}mm; padding:4mm; display:flex;
+      body { margin:0; font-family: system-ui, "Segoe UI", Arial, sans-serif;
+             width:${b.label_width_mm}mm; height:${b.label_height_mm}mm; overflow:hidden; }
+      .card { width:${cardW}mm; height:${cardH}mm; padding:4mm; display:flex; ${turn}
               flex-direction:column; align-items:center; text-align:center; box-sizing:border-box; overflow:hidden; }
       .logo { max-height:10mm; max-width:40mm; }
       .type { font-weight:800; letter-spacing:.18em; font-size:calc(4.4mm * ${b.font_scale || 1}); }
@@ -2161,9 +2174,20 @@
     if (!box) return;
     const b = badgeFormValues();
     const scale = 3.78 * 0.75; // px per mm at preview scale
-    box.style.width = `${(b.label_width_mm || 62) * scale}px`;
-    box.style.height = `${(b.label_height_mm || 100) * scale}px`;
-    box.innerHTML = `
+    const w = (b.label_width_mm || 62) * scale;
+    const h = (b.label_height_mm || 100) * scale;
+    const landscape = b.orientation === 'landscape';
+
+    // The label keeps its physical size; a horizontal badge is turned on it, which
+    // is exactly what the printed version does.
+    box.style.width = `${w}px`;
+    box.style.height = `${h}px`;
+    box.classList.toggle('landscape', landscape);
+    box.style.setProperty('--inner-w', `${landscape ? h : w}px`);
+    box.style.setProperty('--inner-h', `${landscape ? w : h}px`);
+    box.style.setProperty('--turn', landscape ? `translateX(${w}px) rotate(90deg)` : 'none');
+
+    box.innerHTML = `<div class="b-inner">
       ${b.show_logo && SETTINGS.org.logo_path ? `<img src="${esc(SETTINGS.org.logo_path)}" style="max-height:26px;margin-bottom:4px">` : ''}
       <div class="b-type">${esc(b.title_text || 'VISITOR')}</div>
       ${b.show_photo ? '<div class="b-photo">photo</div>' : ''}
@@ -2174,7 +2198,7 @@
         b.show_badge_no ? `${b.badge_prefix || 'V'}${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-001` : '']
         .filter(Boolean).join('<br>')}</div>
       ${b.show_qr ? '<div class="b-qr"></div>' : ''}
-      <div class="b-foot">${esc(b.footer_text || '')}</div>`;
+      <div class="b-foot">${esc(b.footer_text || '')}</div></div>`;
   }
 
   function printTestBadge() {
