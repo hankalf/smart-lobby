@@ -61,13 +61,24 @@ async function sendWebhook({ url, title, lines, photoUrl, visit_id, delivery_id 
   if (!target) return false;
   const format = detectWebhookFormat(target) || n.webhook_format;
   const body = format === 'teams'
+    // Teams Workflows (which replaced Office 365 connectors) rejects a bare
+    // MessageCard with 400. An Adaptive Card in this envelope works on both.
     ? {
-        '@type': 'MessageCard',
-        '@context': 'https://schema.org/extensions',
-        summary: title,
-        themeColor: '2f7d5d',
-        title,
-        text: lines.join('  \n')
+        type: 'message',
+        attachments: [{
+          contentType: 'application/vnd.microsoft.card.adaptive',
+          contentUrl: null,
+          content: {
+            $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
+            type: 'AdaptiveCard',
+            version: '1.4',
+            body: [
+              { type: 'TextBlock', text: title, weight: 'Bolder', size: 'Medium', wrap: true },
+              ...(photoUrl ? [{ type: 'Image', url: photoUrl, size: 'Medium', style: 'Person' }] : []),
+              { type: 'TextBlock', text: lines.join('\n\n'), wrap: true, spacing: 'Small' }
+            ]
+          }
+        }]
       }
     : format === 'google_chat'
     ? { text: `*${title}*\n${lines.join('\n')}` }
