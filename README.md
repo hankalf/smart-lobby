@@ -97,9 +97,17 @@ The database is a single file, so keep **one** instance running — do not scale
 Welcome screen → sign in / sign out / delivery → visit type → returning-visitor lookup → details →
 photo → document signing → induction → badge + QR code.
 
-The welcome screen can either show a single "Touch to start" button, or put Sign in / Sign out /
-Delivery straight on it (**Settings → Kiosk sign-in flow → Skip "Touch to start"**). Background photos
-are shown behind both the welcome screen and the menu behind it.
+The home screen is built from sections:
+
+- **Sign in / Sign out** — one card holding both, since it is the same errand to a visitor. Sign out
+  searches by first name, last name or phone number; the visitor taps their name and is out.
+- **Interview** — candidates arriving to meet the hiring team, recorded as an interview visit without
+  them choosing a visit type.
+- **Delivery** — courier drop-off. Switchable in **Settings → Kiosk sign-in flow → Sections**.
+- **Request entry** — appears when kiosk door unlock is switched on.
+
+The sections can sit straight on the home screen, or behind a "Touch to start" button
+(**Settings → Kiosk sign-in flow**). Background photos show behind both.
 
 - Recognises returning visitors by mobile number (or email) and pre-fills their details.
 - Signature capture on the glass for NDAs and site rules.

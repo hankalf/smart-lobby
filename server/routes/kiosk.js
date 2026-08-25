@@ -251,10 +251,11 @@ router.post('/signout/search', (req, res) => {
     return res.json(v ? [v] : []);
   }
   if (!q || q.length < 2) return res.json([]);
+  // Matches any part of the name, so a first name, a surname or a phone number all work.
   res.json(all(`SELECT v.id, v.signed_in_at, p.full_name, p.company, h.name AS host_name
                 FROM visits v JOIN visitors p ON p.id = v.visitor_id LEFT JOIN hosts h ON h.id = v.host_id
-                WHERE v.status = 'onsite' AND (lower(p.full_name) LIKE ? OR replace(p.phone, char(32), '') LIKE ?)
-                ORDER BY v.signed_in_at DESC LIMIT 25`, `%${q}%`, `%${q}%`));
+                WHERE v.status = 'onsite' AND (lower(p.full_name) LIKE ? OR ${PHONE_NORM_SQL.replace(/phone/g, 'p.phone')} LIKE ?)
+                ORDER BY v.signed_in_at DESC LIMIT 25`, `%${q}%`, `%${normPhone(q) || q}%`));
 });
 
 router.post('/signout', async (req, res) => {

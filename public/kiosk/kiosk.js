@@ -143,11 +143,8 @@
     show(document.querySelector('.idle-foot'), !!org.show_welcome_footer);
     document.documentElement.style.setProperty('--scrim', `rgba(8,18,14,${(Number(org.background_dim) || 0) / 100})`);
     startBackgrounds(org.backgrounds || [], Number(org.background_rotate_seconds) || 12);
-    buildWelcomeActions();
+    buildSections();
     document.title = `${org.name} — Reception`;
-
-    show($('#tile-delivery'), !!(kiosk.show_delivery_button && deliveries.enabled));
-    show($('#tile-unlock'), !!(access.enabled && access.unlock_button_on_kiosk && state.cfg.access_points.length));
 
     show($('#w-company'), true);
     show($('#w-phone'), true);
@@ -264,10 +261,54 @@
   $$('[data-go]').forEach((b) => b.addEventListener('click', () => setScreen(b.dataset.go)));
   $$('[data-back]').forEach((b) => b.addEventListener('click', goBack));
 
-  $$('#menu-tiles .tile').forEach((tile) =>
-    tile.addEventListener('click', () => runAction(tile.dataset.action)));
+  /**
+   * The sections offered on the home screen. Sign in and sign out share one card
+   * because they are the same errand from the visitor's point of view; everything
+   * else is a card of its own and can be switched off in Settings.
+   */
+  function sectionsHtml() {
+    const { kiosk, deliveries, access } = state.cfg;
+    const cards = [`
+      <div class="tile combo">
+        <span class="tile-icon">👋</span>
+        <span>Sign in / Sign out</span>
+        <small>Visitors &amp; contractors</small>
+        <div class="combo-actions">
+          <button class="btn" data-action="signin">Sign in</button>
+          <button class="btn subtle" data-action="signout">Sign out</button>
+        </div>
+      </div>`];
+
+    if (kiosk.show_interview_button) {
+      cards.push(`<button class="tile" data-action="interview">
+        <span class="tile-icon">💼</span><span>Interview</span><small>Here to meet the hiring team</small></button>`);
+    }
+    if (kiosk.show_delivery_button && deliveries.enabled) {
+      cards.push(`<button class="tile" data-action="delivery">
+        <span class="tile-icon">📦</span><span>Delivery</span><small>Courier drop-off</small></button>`);
+    }
+    if (access.enabled && access.unlock_button_on_kiosk && state.cfg.access_points.length) {
+      cards.push(`<button class="tile" data-action="unlock">
+        <span class="tile-icon">🔓</span><span>Request entry</span><small>Unlock the door</small></button>`);
+    }
+    return cards.join('');
+  }
+
+  function wireSections(container) {
+    container.innerHTML = sectionsHtml();
+    $$('[data-action]', container).forEach((el) => el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      runAction(el.dataset.action);
+    }));
+  }
 
   async function runAction(action) {
+    if (action === 'interview') {
+      state.visitType = 'interview';
+      await loadAgreement();
+      state.induction = await api('/induction', { visit_type: 'interview' }).catch(() => state.induction);
+      return setScreen('identify');
+    }
     if (action === 'signin') {
       const types = state.cfg.kiosk.visit_types || ['visitor'];
       if (types.length > 1) return setScreen('type');
@@ -285,23 +326,12 @@
     }
   }
 
-  /** Optionally put the actions straight on the welcome screen, skipping "Touch to start". */
-  function buildWelcomeActions() {
-    const { kiosk, deliveries, access } = state.cfg;
-    const box = $('#welcome-actions');
-    const inline = !!kiosk.welcome_shows_menu;
+  /** The same sections, either straight on the welcome screen or behind "Touch to start". */
+  function buildSections() {
+    const inline = !!state.cfg.kiosk.welcome_shows_menu;
     show($('#start-btn'), !inline);
-    show(box, inline);
-    if (!inline) return;
-
-    const actions = [['signin', '👋', 'Sign in', 'Visitors & contractors'], ['signout', '🚪', 'Sign out', 'Leaving site']];
-    if (kiosk.show_delivery_button && deliveries.enabled) actions.push(['delivery', '📦', 'Delivery', 'Courier drop-off']);
-    if (access.enabled && access.unlock_button_on_kiosk && state.cfg.access_points.length) {
-      actions.push(['unlock', '🔓', 'Request entry', 'Unlock the door']);
-    }
-    box.innerHTML = actions.map(([a, icon, label, sub]) =>
-      `<button data-wa="${a}"><span class="wa-icon">${icon}</span><span>${label}</span><small>${sub}</small></button>`).join('');
-    $$('[data-wa]', box).forEach((b) => b.addEventListener('click', () => runAction(b.dataset.wa)));
+    show($('#welcome-actions'), inline);
+    wireSections(inline ? $('#welcome-actions') : $('#menu-tiles'));
   }
 
   /* ------------------------------------------------------------ identify */

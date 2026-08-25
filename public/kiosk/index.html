@@ -33,12 +33,7 @@
   <!-- MENU ------------------------------------------------------------- -->
   <section class="screen" data-screen="menu" hidden>
     <header class="bar"><h2>How can we help?</h2><button class="btn ghost" data-go="idle">Cancel</button></header>
-    <div class="tiles" id="menu-tiles">
-      <button class="tile" data-action="signin"><span class="tile-icon">👋</span><span>Sign in</span><small>Visitors &amp; contractors</small></button>
-      <button class="tile" data-action="signout"><span class="tile-icon">🚪</span><span>Sign out</span><small>Leaving site</small></button>
-      <button class="tile" data-action="delivery" id="tile-delivery"><span class="tile-icon">📦</span><span>Delivery</span><small>Courier drop-off</small></button>
-      <button class="tile hidden" data-action="unlock" id="tile-unlock"><span class="tile-icon">🔓</span><span>Request entry</span><small>Unlock the door</small></button>
-    </div>
+    <div class="tiles" id="menu-tiles"></div>
   </section>
 
   <!-- VISIT TYPE ------------------------------------------------------- -->
@@ -167,8 +162,9 @@
   <section class="screen" data-screen="signout" hidden>
     <header class="bar"><h2>Sign out</h2><button class="btn ghost" data-go="menu">Back</button></header>
     <div class="panel">
-      <label class="field"><span>Your name, phone or badge code</span>
-        <input class="input xl" id="signout-q" autocomplete="off" placeholder="Type to search…"></label>
+      <p class="lead">Search for yourself by first name, last name or phone number, then tap your name.</p>
+      <label class="field"><span>First name, last name or phone number</span>
+        <input class="input xl" id="signout-q" autocomplete="off" placeholder="Start typing…"></label>
       <div id="signout-results" class="result-list"></div>
     </div>
   </section>

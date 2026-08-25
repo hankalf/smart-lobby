@@ -1136,8 +1136,7 @@
           ${chk('kiosk.ask_purpose', 'Ask reason for visit')}
           ${chk('kiosk.ask_vehicle', 'Ask vehicle registration')}
           ${chk('kiosk.welcome_shows_menu', 'Skip “Touch to start”',
-            'Put Sign in / Sign out / Delivery straight on the welcome screen')}
-          ${chk('kiosk.show_delivery_button', 'Show the delivery button')}
+            'Put the sections straight on the home screen')}
           ${chk('kiosk.show_onsite_count', 'Show how many people are on site')}
         </div>
         <div class="form-grid">
@@ -1150,6 +1149,15 @@
               <option value="email" ${s.kiosk.returning_lookup_field === 'email' ? 'selected' : ''}>Email address</option>
             </select></label>
         </div>
+        <h3>Sections on the home screen</h3>
+        <p class="muted" style="margin-top:0">Sign in and sign out always share the first card. Switch the rest off
+          for sites that do not need them.</p>
+        <div class="form-grid">
+          ${chk('kiosk.show_interview_button', 'Interview', 'For candidates arriving to meet the hiring team')}
+          ${chk('kiosk.show_delivery_button', 'Delivery', 'Courier drop-off — also needs Deliveries enabled below')}
+        </div>
+        <p class="muted">A “Request entry” card appears too when you switch it on under <b>Access control</b>.</p>
+
         <span class="muted">Visit types offered on the kiosk</span>
         <div class="form-grid" style="margin-top:.5rem">
           ${['visitor', 'contractor', 'interview', 'staff'].map((t) => `<label class="check">

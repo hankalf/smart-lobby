@@ -52,20 +52,18 @@ body.has-bg .screen[data-screen="menu"] .btn.ghost { color: #fff; border-color: 
   .idle-bg, #bg-stage { transition: none; }
 }
 
-/* Action tiles shown straight on the welcome screen. */
-.welcome-actions { display: flex; gap: .9rem; flex-wrap: wrap; justify-content: inherit; margin-top: .5rem; }
-.idle[data-align="left"]  .welcome-actions { justify-content: flex-start; }
-.idle[data-align="right"] .welcome-actions { justify-content: flex-end; }
+/* Sections shown straight on the welcome screen. */
+.welcome-actions { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: .5rem; }
+.idle[data-align="left"]   .welcome-actions { justify-content: flex-start; }
+.idle[data-align="right"]  .welcome-actions { justify-content: flex-end; }
 .idle[data-align="center"] .welcome-actions { justify-content: center; }
-.welcome-actions button {
-  display: flex; flex-direction: column; align-items: center; gap: .3rem;
-  min-width: 9.5rem; padding: 1.1rem 1.4rem; cursor: pointer;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-  box-shadow: var(--shadow); font-size: 1.05rem; font-weight: 700; color: var(--brand-dark);
-}
-.welcome-actions button:active { transform: scale(.985); }
-.welcome-actions .wa-icon { font-size: 1.9rem; }
-.welcome-actions small { font-weight: 500; font-size: .8rem; color: var(--ink-soft); }
+.welcome-actions .tile { min-height: auto; min-width: 11rem; flex: 1 1 11rem; padding: 1.3rem 1.4rem; font-size: 1.1rem; }
+.welcome-actions .tile-icon { font-size: 2.1rem; }
+
+/* Sign in and sign out share a card. */
+.tile.combo { cursor: default; }
+.combo-actions { display: flex; gap: .6rem; margin-top: .9rem; flex-wrap: wrap; justify-content: center; }
+.combo-actions .btn { font-size: 1rem; padding: .7rem 1.4rem; border-radius: 999px; }
 /* Where the welcome text sits — set from Settings so it can be placed clear of
    whatever the background photo has in it. */
 .idle[data-align="left"]   { align-items: flex-start; text-align: left; padding-left: max(3rem, 6vw); }
@@ -75,7 +73,7 @@ body.has-bg .screen[data-screen="menu"] .btn.ghost { color: #fff; border-color: 
 .idle[data-valign="top"]    { justify-content: flex-start; padding-top: 8vh; }
 .idle[data-valign="bottom"] { justify-content: flex-end; padding-bottom: 12vh; }
 
-.idle-inner { max-width: 42rem; }
+.idle-inner { max-width: min(54rem, 92vw); }
 .logo { max-height: 110px; max-width: 70vw; margin-bottom: 1.5rem; }
 .idle h1 { font-size: clamp(2.6rem, 7vw, 4.4rem); margin: 0 0 .5rem; color: var(--brand-dark); letter-spacing: -.02em; }
 .lead { font-size: clamp(1.05rem, 2.4vw, 1.4rem); color: var(--ink-soft); margin: 0 0 2rem; }
