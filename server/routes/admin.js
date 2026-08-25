@@ -30,7 +30,12 @@ function csv(rows, columns) {
 /* ------------------------------------------------------------- auth flow */
 
 router.get('/bootstrap', (req, res) => {
-  res.json({ needs_setup: !auth.anyUsers(), user: auth.currentUser(req), org: settings.getSection('org') });
+  res.json({
+    needs_setup: !auth.anyUsers(),
+    user: auth.currentUser(req),
+    org: settings.getSection('org'),
+    storage_warning: require('../db').STORAGE.message
+  });
 });
 
 router.post('/setup', (req, res) => {
@@ -78,8 +83,9 @@ router.get('/dashboard', (req, res) => {
   };
   const week = all(`SELECT substr(signed_in_at,1,10) AS day, COUNT(*) AS n FROM visits
                     WHERE signed_in_at >= date('now','-13 days') GROUP BY day ORDER BY day`);
+  const storage_warning = require('../db').STORAGE.message;
   const devices = all('SELECT id, name, last_seen_at FROM devices ORDER BY name');
-  res.json({ onsite, stats, week, devices, recent_deliveries: all(
+  res.json({ onsite, stats, week, devices, storage_warning, recent_deliveries: all(
     `SELECT d.*, h.name AS host_name FROM deliveries d LEFT JOIN hosts h ON h.id = d.recipient_host_id
      ORDER BY d.received_at DESC LIMIT 10`) });
 });

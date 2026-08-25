@@ -72,9 +72,12 @@ Everything else — sign-in, induction, signatures, badges, deliveries — works
 ### 2. On Railway
 
 1. Push this folder to a Git repository and create a Railway project from it.
-2. Add a **Volume** and mount it at `/data`.
+2. Add a **Volume** and mount it at `/data`. **This is not optional** — without it the database and
+   every uploaded photo and slide is erased on each deploy. The app detects the volume automatically,
+   and refuses to stay quiet if it is missing: a banner appears in the dashboard, the login screen
+   says so, `/api/health` reports `"storage":"ephemeral"`, and the deploy log prints a warning.
 3. Set variables:
-   - `DATA_DIR=/data`
+   - `DATA_DIR=/data` (optional — a Railway volume is picked up automatically)
    - `NODE_ENV=production`
    - `PUBLIC_URL=https://your-app.up.railway.app` (used for photo links inside notification emails)
 4. Deploy. Railway provides HTTPS, so the kiosk camera works out of the box.

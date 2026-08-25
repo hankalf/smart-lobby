@@ -3,7 +3,7 @@ require('dotenv').config();
 
 const path = require('path');
 const express = require('express');
-const { migrate, all, get, run, nowISO } = require('./db');
+const { migrate, all, get, run, nowISO, STORAGE } = require('./db');
 const auth = require('./auth');
 const settings = require('./settings');
 const files = require('./files');
@@ -40,7 +40,12 @@ app.get('/api/qr', async (req, res) => {
 });
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, time: nowISO(), onsite: get("SELECT COUNT(*) AS n FROM visits WHERE status='onsite'").n });
+  res.json({
+    ok: true,
+    time: nowISO(),
+    onsite: get("SELECT COUNT(*) AS n FROM visits WHERE status='onsite'").n,
+    storage: STORAGE.ephemeral ? 'ephemeral' : 'persistent'
+  });
 });
 
 /* ---------------------------------------------------------------- media */

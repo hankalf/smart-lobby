@@ -3,7 +3,45 @@ const path = require('path');
 const fs = require('fs');
 const { DatabaseSync } = require('node:sqlite');
 
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
+// Prefer an explicit DATA_DIR, then a Railway volume if one is attached, then local disk.
+// Falling back to local disk on a hosting platform means the database is destroyed on
+// every deploy, so that case is reported loudly rather than failing silently.
+const LOCAL_DIR = path.join(__dirname, '..', 'data');
+const DATA_DIR = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || LOCAL_DIR;
+
+function storageStatus() {
+  const onPlatform = !!(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID ||
+    process.env.RENDER || process.env.FLY_APP_NAME);
+  const volume = process.env.RAILWAY_VOLUME_MOUNT_PATH || null;
+  const onVolume = !!volume && path.resolve(DATA_DIR).startsWith(path.resolve(volume));
+  if (!onPlatform) return { ephemeral: false, dir: DATA_DIR, message: null };
+  if (!volume) {
+    return {
+      ephemeral: true,
+      dir: DATA_DIR,
+      message: 'No storage volume is attached, so the database and all uploads are erased on every deploy. ' +
+        'Attach a volume mounted at /data and redeploy.'
+    };
+  }
+  if (!onVolume) {
+    return {
+      ephemeral: true,
+      dir: DATA_DIR,
+      message: `A volume is mounted at ${volume} but data is being written to ${DATA_DIR}, which is erased on every ` +
+        `deploy. Set DATA_DIR=${volume} (or remove DATA_DIR entirely) and redeploy.`
+    };
+  }
+  return { ephemeral: false, dir: DATA_DIR, message: null };
+}
+
+const STORAGE = storageStatus();
+if (STORAGE.ephemeral) {
+  console.warn('\n  ****************************************************************');
+  console.warn('  *  DATA WILL NOT SURVIVE THE NEXT DEPLOY                       *');
+  console.warn(`  *  ${STORAGE.message}`);
+  console.warn('  ****************************************************************\n');
+}
+
 fs.mkdirSync(path.join(DATA_DIR, 'uploads'), { recursive: true });
 
 const db = new DatabaseSync(path.join(DATA_DIR, 'smartlobby.db'));
@@ -255,4 +293,4 @@ function migrate() {
   `);
 }
 
-module.exports = { db, run, get, all, exec, migrate, nowISO, DATA_DIR };
+module.exports = { db, run, get, all, exec, migrate, nowISO, DATA_DIR, STORAGE };

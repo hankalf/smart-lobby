@@ -84,6 +84,11 @@
     $('#gate-submit').textContent = setup ? 'Create account' : 'Sign in';
     $('#gate-pass').autocomplete = setup ? 'new-password' : 'current-password';
     $('#gate-form').dataset.mode = setup ? 'setup' : 'login';
+    if (boot.storage_warning) {
+      const err = $('#gate-error');
+      err.innerHTML = `<b>Storage is not persistent.</b> ${esc(boot.storage_warning)}`;
+      err.classList.remove('hidden');
+    }
   }
 
   $('#gate-form').addEventListener('submit', async (e) => {
@@ -138,6 +143,8 @@
     root.innerHTML = `
       <h1 class="page">Dashboard</h1>
       <p class="page-sub">Live view of who is on site right now.</p>
+      ${d.storage_warning ? `<div class="notice error" style="font-size:1rem">
+        <b>Storage is not persistent.</b> ${esc(d.storage_warning)}</div>` : ''}
       <div class="grid cards" style="margin-bottom:1.25rem">
         ${[['On site now', d.stats.onsite], ['Signed in today', d.stats.today_in], ['Signed out today', d.stats.today_out],
            ['Parcels waiting', d.stats.deliveries_waiting], ['Inductions today', d.stats.inductions_today],
