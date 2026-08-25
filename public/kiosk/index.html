@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Smart Lobby — Reception</title>
+<link rel="stylesheet" href="/shared/theme.css">
+<link rel="stylesheet" href="kiosk.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- IDLE ------------------------------------------------------------- -->
+  <section class="screen idle" data-screen="idle">
+    <div class="idle-inner">
+      <img id="idle-logo" class="logo hidden" alt="">
+      <h1 id="idle-title">Welcome</h1>
+      <p id="idle-message" class="lead">Please tap below to sign in</p>
+      <button class="btn big" data-go="menu">Touch to start</button>
+      <p class="onsite-count hidden" id="onsite-count"></p>
+    </div>
+    <footer class="idle-foot"><span id="idle-clock"></span> · <span id="idle-org"></span></footer>
+  </section>
+
+  <!-- MENU ------------------------------------------------------------- -->
+  <section class="screen" data-screen="menu" hidden>
+    <header class="bar"><h2>How can we help?</h2><button class="btn ghost" data-go="idle">Cancel</button></header>
+    <div class="tiles" id="menu-tiles">
+      <button class="tile" data-action="signin"><span class="tile-icon">👋</span><span>Sign in</span><small>Visitors &amp; contractors</small></button>
+      <button class="tile" data-action="signout"><span class="tile-icon">🚪</span><span>Sign out</span><small>Leaving site</small></button>
+      <button class="tile" data-action="delivery" id="tile-delivery"><span class="tile-icon">📦</span><span>Delivery</span><small>Courier drop-off</small></button>
+      <button class="tile hidden" data-action="unlock" id="tile-unlock"><span class="tile-icon">🔓</span><span>Request entry</span><small>Unlock the door</small></button>
+    </div>
+  </section>
+
+  <!-- VISIT TYPE ------------------------------------------------------- -->
+  <section class="screen" data-screen="type" hidden>
+    <header class="bar"><h2>What brings you here today?</h2><button class="btn ghost" data-go="menu">Back</button></header>
+    <div class="tiles" id="type-tiles"></div>
+  </section>
+
+  <!-- IDENTIFY --------------------------------------------------------- -->
+  <section class="screen" data-screen="identify" hidden>
+    <header class="bar"><h2 id="identify-title">Have you visited us before?</h2><button class="btn ghost" data-back>Back</button></header>
+    <div class="panel">
+      <p class="lead">Enter your mobile number and we'll speed things up.</p>
+      <label class="field"><span id="identify-label">Mobile number</span>
+        <input class="input xl" id="identify-value" type="tel" inputmode="tel" autocomplete="off" placeholder="07…">
+      </label>
+      <div id="identify-result" class="notice hidden"></div>
+      <div class="actions">
+        <button class="btn big" id="identify-continue">Continue</button>
+        <button class="btn ghost" id="identify-skip">I'm new here</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- DETAILS ---------------------------------------------------------- -->
+  <section class="screen" data-screen="details" hidden>
+    <header class="bar"><h2>Your details</h2><button class="btn ghost" data-back>Back</button></header>
+    <div class="panel">
+      <label class="field"><span>Full name *</span><input class="input xl" id="f-name" autocomplete="name"></label>
+      <label class="field" id="w-company"><span>Company</span><input class="input" id="f-company"></label>
+      <div class="two-col">
+        <label class="field" id="w-phone"><span>Mobile number</span><input class="input" id="f-phone" type="tel" inputmode="tel"></label>
+        <label class="field" id="w-email"><span>Email</span><input class="input" id="f-email" type="email" inputmode="email"></label>
+      </div>
+      <label class="field" id="w-host"><span>Who are you visiting? *</span>
+        <input class="input" id="f-host-search" placeholder="Start typing a name…" autocomplete="off">
+        <input type="hidden" id="f-host-id">
+        <div class="suggest" id="host-suggest"></div>
+      </label>
+      <label class="field" id="w-purpose"><span>Reason for visit</span><input class="input" id="f-purpose" placeholder="Meeting, delivery, site works…"></label>
+      <label class="field" id="w-vehicle"><span>Vehicle registration</span><input class="input" id="f-vehicle" style="text-transform:uppercase"></label>
+      <div id="details-error" class="notice error hidden"></div>
+      <div class="actions"><button class="btn big" id="details-continue">Continue</button></div>
+    </div>
+  </section>
+
+  <!-- PHOTO ------------------------------------------------------------ -->
+  <section class="screen" data-screen="photo" hidden>
+    <header class="bar"><h2>Photo for your badge</h2><button class="btn ghost" data-back>Back</button></header>
+    <div class="panel center">
+      <div class="camera-wrap">
+        <video id="cam" autoplay playsinline muted></video>
+        <img id="shot" class="hidden" alt="">
+        <canvas id="cam-canvas" class="hidden"></canvas>
+      </div>
+      <div id="cam-error" class="notice hidden"></div>
+      <div class="actions">
+        <button class="btn big" id="btn-capture">Take photo</button>
+        <button class="btn ghost hidden" id="btn-retake">Retake</button>
+        <button class="btn hidden" id="btn-photo-continue">Looks good</button>
+        <label class="btn subtle hidden" id="btn-photo-native">Open camera
+          <input type="file" accept="image/*" capture="user" hidden id="photo-native-input"></label>
+        <button class="btn link" id="btn-photo-skip">Skip</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- AGREEMENT -------------------------------------------------------- -->
+  <section class="screen" data-screen="agreement" hidden>
+    <header class="bar"><h2 id="agreement-title">Site rules</h2><button class="btn ghost" data-back>Back</button></header>
+    <div class="panel">
+      <div class="doc" id="agreement-body"></div>
+      <p class="sig-label">Please sign below</p>
+      <div class="sig-wrap"><canvas id="sig-pad"></canvas></div>
+      <div class="actions">
+        <button class="btn ghost" id="sig-clear">Clear</button>
+        <button class="btn big" id="agreement-continue">I agree &amp; continue</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- INDUCTION -------------------------------------------------------- -->
+  <section class="screen dark" data-screen="induction" hidden>
+    <div class="deck">
+      <div class="deck-stage" id="deck-stage"></div>
+      <div class="deck-bar">
+        <div class="deck-progress"><div id="deck-progress-fill"></div></div>
+        <div class="deck-controls">
+          <button class="btn ghost" id="deck-prev">Back</button>
+          <span id="deck-count" class="deck-count"></span>
+          <button class="btn" id="deck-next">Next</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- INDUCTION ACK ---------------------------------------------------- -->
+  <section class="screen" data-screen="ack" hidden>
+    <div class="panel center">
+      <h2>Nearly done</h2>
+      <p class="lead" id="ack-text">I confirm I have watched and understood the site induction.</p>
+      <div class="actions">
+        <button class="btn ghost" id="ack-replay">Watch again</button>
+        <button class="btn big" id="ack-confirm">I confirm</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- DONE ------------------------------------------------------------- -->
+  <section class="screen" data-screen="done" hidden>
+    <div class="panel center">
+      <div class="tick">✓</div>
+      <h2 id="done-title">You're signed in</h2>
+      <p class="lead" id="done-sub"></p>
+      <div id="done-badge-note" class="notice hidden"></div>
+      <div class="qr-box" id="done-qr"></div>
+      <p class="muted" id="done-code"></p>
+      <div class="actions">
+        <button class="btn hidden" id="btn-print-badge">Print badge</button>
+        <button class="btn ghost" data-go="idle">Done</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SIGN OUT --------------------------------------------------------- -->
+  <section class="screen" data-screen="signout" hidden>
+    <header class="bar"><h2>Sign out</h2><button class="btn ghost" data-go="menu">Back</button></header>
+    <div class="panel">
+      <label class="field"><span>Your name, phone or badge code</span>
+        <input class="input xl" id="signout-q" autocomplete="off" placeholder="Type to search…"></label>
+      <div id="signout-results" class="result-list"></div>
+    </div>
+  </section>
+
+  <!-- DELIVERY --------------------------------------------------------- -->
+  <section class="screen" data-screen="delivery" hidden>
+    <header class="bar"><h2>Delivery drop-off</h2><button class="btn ghost" data-go="menu">Back</button></header>
+    <div class="panel">
+      <div class="two-col">
+        <label class="field"><span>Your name</span><input class="input" id="d-name"></label>
+        <label class="field"><span>Courier company</span><input class="input" id="d-company" placeholder="DPD, Royal Mail…"></label>
+      </div>
+      <label class="field"><span>Who is it for? *</span>
+        <input class="input" id="d-host-search" placeholder="Start typing a name…" autocomplete="off">
+        <input type="hidden" id="d-host-id">
+        <div class="suggest" id="d-host-suggest"></div>
+      </label>
+      <div class="two-col">
+        <label class="field"><span>Number of parcels</span><input class="input" id="d-count" type="number" min="1" value="1"></label>
+        <label class="field" id="w-tracking"><span>Tracking number</span><input class="input" id="d-tracking"></label>
+      </div>
+      <div class="camera-wrap small" id="d-camera-wrap">
+        <video id="d-cam" autoplay playsinline muted></video>
+        <img id="d-shot" class="hidden" alt="">
+      </div>
+      <div class="actions">
+        <button class="btn ghost" id="d-capture">Photo of parcel</button>
+        <label class="btn ghost hidden" id="d-native">Open camera
+          <input type="file" accept="image/*" capture="environment" hidden id="d-native-input"></label>
+        <button class="btn big" id="d-submit">Log delivery</button>
+      </div>
+      <div id="d-error" class="notice error hidden"></div>
+    </div>
+  </section>
+
+</div>
+
+<!-- BADGE (print only) -------------------------------------------------- -->
+<div id="badge-sheet" aria-hidden="true">
+  <div class="badge-card" id="badge-card">
+    <div class="badge-top">
+      <img class="badge-logo hidden" id="badge-logo" alt="">
+      <div class="badge-type" id="badge-type">VISITOR</div>
+    </div>
+    <img class="badge-photo hidden" id="badge-photo" alt="">
+    <div class="badge-name" id="badge-name"></div>
+    <div class="badge-company" id="badge-company"></div>
+    <div class="badge-meta" id="badge-meta"></div>
+    <div class="badge-qr" id="badge-qr"></div>
+    <div class="badge-foot" id="badge-foot"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="kiosk.js"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+# Railway build configuration.
+# Node 24 ships SQLite in core, so there is no native module to compile.
+# LibreOffice + poppler are optional: with them, uploaded PowerPoint decks are
+# rendered slide-for-slide. Without them the deck is rebuilt from its text and
+# images, which still works fine.
+
+[phases.setup]
+nixPkgs = ["nodejs_24", "libreoffice", "poppler_utils"]
+
+[phases.install]
+cmds = ["npm ci --omit=dev || npm install --omit=dev"]
+
+[start]
+cmd = "node server/index.js"
