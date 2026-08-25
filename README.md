@@ -146,7 +146,7 @@ The sections can sit straight on the home screen, or behind a "Touch to start" b
 | Staff | People visitors ask for, each with their own email, mobile and chat webhook. Bulk import from Excel or CSV |
 | Access & doors | HTTP-controlled doors, test unlock, unlock audit trail |
 | Locations | Areas within a site — reception, yard gate, workshop entrance — with device and on-site counts |
-| Devices | Every tablet: name, location, default camera, operational mode, per-device badge printing, which cards it shows, online status |
+| Devices | Every tablet: name, location, default camera, operational mode, per-device badge printing, which cards it shows and in what order, online status |
 | Reports | Visits per day, busiest hosts, top companies, arrival times, average time on site |
 | Settings | Branding (logo, kiosk background photo, colours, time zone), kiosk flow, badges, induction, deliveries, access, notifications, retention, users |
 

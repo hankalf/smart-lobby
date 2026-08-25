@@ -386,12 +386,19 @@
   function wireSections(container) {
     container.innerHTML = sectionsHtml();
 
-    // A device can be limited to some of the cards — a warehouse gate showing
-    // drivers and deliveries, reception showing visitors and interviews.
+    /*
+     * A device can carry its own list of cards — which ones, and in what order.
+     * A warehouse gate leads with Driver; reception leads with Sign in. Cards not
+     * on the list are dropped, and anything on the list the site has switched off
+     * simply is not there to place.
+     */
     const only = state.device && state.device.sections;
     if (Array.isArray(only) && only.length) {
-      $$('[data-action]', container).forEach((el) => {
-        if (!only.includes(el.dataset.action)) el.remove();
+      const built = new Map($$('[data-action]', container).map((el) => [el.dataset.action, el]));
+      container.innerHTML = '';
+      only.forEach((key) => {
+        const el = built.get(key);
+        if (el) container.appendChild(el);
       });
     }
     $$('[data-action]', container).forEach((el) => el.addEventListener('click', (e) => {

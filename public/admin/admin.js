@@ -1248,10 +1248,20 @@
       const d = rows.find((x) => String(x.id) === b.dataset.dvedit);
       let reported = [];
       try { reported = JSON.parse(d.cameras || '[]'); } catch { reported = []; }
+
+      // This device's card list: the saved order first, then anything it has not
+      // been told about, so a newly added card is offered rather than lost.
+      let saved = null;
+      try { saved = JSON.parse(d.sections || 'null'); } catch { saved = null; }
+      const known = DEVICE_SECTIONS.map(([key]) => key);
+      const sectionOrder = Array.isArray(saved) && saved.length
+        ? [...new Set([...saved.filter((k) => known.includes(k)), ...known])]
+        : known.slice();
+      const enabled = new Set(Array.isArray(saved) && saved.length ? saved : known);
       const options = [['front', 'Front camera'], ['rear', 'Rear camera'],
         ...reported.map((c) => [c.id, c.label])];
 
-      modal(`Edit ${d.name}`, `
+      const m = modal(`Edit ${d.name}`, `
         <div class="form-grid">
           <label class="field"><span>Device name</span><input class="input" id="de-name" value="${esc(d.name)}"></label>
           <label class="field"><span>Location</span><select class="input" id="de-loc">
@@ -1266,17 +1276,13 @@
           </select></label>
         </div>
 
-        <h3>Cards shown on this device</h3>
-        <p class="muted" style="margin-top:0">A warehouse gate can show drivers and deliveries while reception shows
-          visitors and interviews. Leave all of them ticked to show whatever is switched on in Settings.</p>
-        <div class="form-grid">
-          ${DEVICE_SECTIONS.map(([key, label]) => {
-            let chosen = null;
-            try { chosen = JSON.parse(d.sections || 'null'); } catch { chosen = null; }
-            const on = !Array.isArray(chosen) || !chosen.length || chosen.includes(key);
-            return `<label class="check"><input type="checkbox" data-dsec="${key}" ${on ? 'checked' : ''}> ${label}</label>`;
-          }).join('')}
-        </div>
+        <h3>Cards on this device</h3>
+        <p class="muted" style="margin-top:0">Which cards this kiosk shows, and the order they appear in. A warehouse
+          gate can lead with Driver while reception leads with Sign in. Untick a card to hide it here without
+          affecting other devices.</p>
+        <div id="de-sections" class="section-order"></div>
+        <p class="muted">With everything ticked in the standard order, this device shows whatever is switched on in
+          Settings — including any card added later.</p>
         <p class="muted">${reported.length
           ? `${reported.length} camera${reported.length === 1 ? '' : 's'} reported by this device.`
           : 'This device has not reported its cameras yet — it does so once it has been opened and allowed camera access. Front/rear still work.'}</p>
@@ -1285,17 +1291,48 @@
             Settings. Turn it off for a device with no printer attached.</span></span></label>
         <p class="muted">More operational modes are coming; every device runs in kiosk mode for now.</p>`,
         async (bg, close) => {
-          const picked = $$('[data-dsec]', bg).filter((c) => c.checked).map((c) => c.dataset.dsec);
+          const picked = sectionOrder.filter((k) => enabled.has(k));
+          const isDefault = picked.length === DEVICE_SECTIONS.length
+            && picked.every((k, i) => k === DEVICE_SECTIONS[i][0]);
           await api(`/devices/${d.id}`, { method: 'PATCH', body: {
             name: $('#de-name', bg).value,
             location_id: $('#de-loc', bg).value || null,
             default_camera: $('#de-cam', bg).value,
             mode: $('#de-mode', bg).value,
-            // All ticked means "no restriction", so a new card added later still appears.
-            sections: picked.length === DEVICE_SECTIONS.length ? null : JSON.stringify(picked),
+            // Everything ticked in the standard order means "no preference", so a
+            // card added later still appears on this device.
+            sections: isDefault ? null : JSON.stringify(picked),
             print_enabled: $('#de-print', bg).checked } });
           close(); render('devices');
         });
+
+      const drawSections = () => {
+        const box = $('#de-sections', m.bg);
+        const label = (k) => (DEVICE_SECTIONS.find(([key]) => key === k) || [k, k])[1];
+        box.innerHTML = sectionOrder.map((key, i) => `<div class="section-row${enabled.has(key) ? '' : ' off'}">
+          <label class="check"><input type="checkbox" data-dsec="${key}" ${enabled.has(key) ? 'checked' : ''}>
+            <span>${i + 1}. ${esc(label(key))}</span></label>
+          <span class="flow-moves">
+            <button class="btn ghost" type="button" data-secup="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
+            <button class="btn ghost" type="button" data-secdown="${i}" ${i === sectionOrder.length - 1 ? 'disabled' : ''}>↓</button>
+          </span></div>`).join('');
+
+        $$('[data-dsec]', box).forEach((c) => c.addEventListener('change', () => {
+          if (c.checked) enabled.add(c.dataset.dsec); else enabled.delete(c.dataset.dsec);
+          drawSections();
+        }));
+        $$('[data-secup]', box).forEach((btn) => btn.addEventListener('click', () => {
+          const i = Number(btn.dataset.secup);
+          [sectionOrder[i - 1], sectionOrder[i]] = [sectionOrder[i], sectionOrder[i - 1]];
+          drawSections();
+        }));
+        $$('[data-secdown]', box).forEach((btn) => btn.addEventListener('click', () => {
+          const i = Number(btn.dataset.secdown);
+          [sectionOrder[i + 1], sectionOrder[i]] = [sectionOrder[i], sectionOrder[i + 1]];
+          drawSections();
+        }));
+      };
+      drawSections();
     }));
 
     $$('[data-dvdel]').forEach((b) => b.addEventListener('click', () => confirmAction(

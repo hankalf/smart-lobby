@@ -139,6 +139,16 @@ td .btn { padding: .35rem .7rem; font-size: .82rem; }
   border-radius: 12px; overflow: hidden; border: 1px solid var(--line);
   background-size: cover; background-position: center;
 }
+.section-order { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.section-row {
+  display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+  padding: .5rem .75rem; border-bottom: 1px solid var(--line); background: var(--surface);
+}
+.section-row:last-child { border-bottom: 0; }
+.section-row.off { background: var(--bg); }
+.section-row.off span { color: var(--ink-soft); }
+.section-row .check { padding: 0; }
+
 .flow-col { border: 1px solid var(--line); border-radius: 12px; padding: 1rem; background: var(--bg); }
 .flow-list { margin: 0; padding-left: 1.3rem; }
 .flow-list li {
