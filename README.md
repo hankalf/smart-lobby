@@ -388,8 +388,14 @@ Everything exports to CSV.
 
 ## Access control
 
-Each door is one HTTP call, which covers most smart relays and controllers — Shelly, Tasmota,
-ESPHome, Home Assistant, Ubiquiti Access, Paxton Net2's web API, or any webhook.
+Each door is one HTTP call. That covers smart relays directly — Shelly, Tasmota, ESPHome, Home Assistant —
+and reaches a proper access control panel (Honeywell, Paxton, Net2) through one: Smart Lobby calls a network
+relay, the relay closes a contact across the door's REX or auxiliary input, and the panel releases the door
+as if somebody had pressed the exit button. The panel keeps its own schedules, interlocks, fire release and
+log, and needs nothing added to its software.
+
+A door can be set up before it is wired: add it, write the panel, door and terminals into its wiring notes,
+and leave it disabled. It stays listed, is offered on no kiosk and is never called until you tick Enabled.
 
 Add a door in **Access & doors** with a URL, method, optional headers and body. These placeholders are
 filled in at unlock time: `{{seconds}}`, `{{door}}`, `{{actor}}`, `{{visit_id}}`, `{{timestamp}}`.
