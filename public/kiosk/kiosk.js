@@ -163,6 +163,8 @@
     'Door unlocked — please come in': 'Puerta abierta — adelante',
     'Could not unlock the door': 'No se pudo abrir la puerta',
     'Photo captured': 'Foto tomada',
+    'The camera is not ready yet — try again in a moment.':
+      'La cámara aún no está lista — inténtelo de nuevo en un momento.',
     'Your badge is printing…': 'Su credencial se está imprimiendo…',
     'Tap “Print badge” to collect your badge.': 'Toque “Imprimir credencial” para recoger su credencial.',
     'Badge found': 'Credencial encontrada',
@@ -1437,16 +1439,81 @@
     return canvas.toDataURL('image/jpeg', 0.82);
   }
 
-  $('#btn-capture').addEventListener('click', () => {
+  /**
+   * True when the canvas holds a blank frame. A camera that has started but not
+   * yet delivered an image draws as flat black — accepted as a photo, that is a
+   * black square on the badge and in the record. Sampling a grid is enough: a
+   * real photo, however dim, varies across it.
+   */
+  function frameIsBlank(canvas) {
+    try {
+      const ctx = canvas.getContext('2d');
+      const step = Math.floor(canvas.width / 12) || 1;
+      let min = 255;
+      let max = 0;
+      for (let y = step; y < canvas.height; y += step) {
+        for (let x = step; x < canvas.width; x += step) {
+          const [r, g, b] = ctx.getImageData(x, y, 1, 1).data;
+          const level = (r + g + b) / 3;
+          if (level < min) min = level;
+          if (level > max) max = level;
+        }
+      }
+      // Near-black everywhere, or one flat colour with no variation at all.
+      return max < 12 || max - min < 3;
+    } catch {
+      return false; // never block a capture on a failed check
+    }
+  }
+
+  /*
+   * Take the picture once the camera is really producing frames. iPads in
+   * particular report a playing video a moment before the sensor delivers an
+   * image, so a tap the instant the screen appears used to capture black —
+   * and the kiosk then stopped the camera and offered it for confirmation.
+   */
+  async function captureFrom(videoEl) {
+    const canvas = $('#cam-canvas');
+    const waitAFrame = () => new Promise((resolve) => {
+      if (videoEl.requestVideoFrameCallback) videoEl.requestVideoFrameCallback(() => resolve());
+      else requestAnimationFrame(() => resolve());
+      setTimeout(resolve, 220);
+    });
+
+    let photo = null;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      if (videoEl.readyState >= 2 && videoEl.videoWidth) {
+        photo = grabFrame(videoEl);
+        if (!frameIsBlank(canvas)) return photo;
+      }
+      await waitAFrame();
+    }
+    return photo; // the camera never produced an image; the caller says so
+  }
+
+  $('#btn-capture').addEventListener('click', async () => {
     if (!stream) return nextStep();
-    state.photo = grabFrame($('#cam'));
-    $('#shot').src = state.photo;
-    show($('#shot'), true);
-    show($('#btn-capture'), false);
-    show($('#btn-retake'), true);
-    show($('#btn-photo-continue'), true);
-    show($('#btn-photo-skip'), false);
-    stopCamera();
+    const btn = $('#btn-capture');
+    btn.disabled = true;
+    try {
+      const photo = await captureFrom($('#cam'));
+      // A blank frame is not offered for confirmation: the camera stays live so
+      // they can simply tap again, rather than confirming a black square.
+      if (!photo || frameIsBlank($('#cam-canvas'))) {
+        toast(t('The camera is not ready yet — try again in a moment.'), 3200);
+        return;
+      }
+      state.photo = photo;
+      $('#shot').src = state.photo;
+      show($('#shot'), true);
+      show($('#btn-capture'), false);
+      show($('#btn-retake'), true);
+      show($('#btn-photo-continue'), true);
+      show($('#btn-photo-skip'), false);
+      stopCamera();
+    } finally {
+      btn.disabled = false;
+    }
   });
 
   $('#btn-retake').addEventListener('click', () => {
@@ -1912,9 +1979,13 @@
 
   /* -------------------------------------------------------------- delivery */
 
-  $('#d-capture').addEventListener('click', () => {
+  $('#d-capture').addEventListener('click', async () => {
     if (!stream) return $('#d-native-input').click();
-    state.deliveryPhoto = grabFrame($('#d-cam'));
+    const photo = await captureFrom($('#d-cam'));
+    if (!photo || frameIsBlank($('#cam-canvas'))) {
+      return toast(t('The camera is not ready yet — try again in a moment.'), 3200);
+    }
+    state.deliveryPhoto = photo;
     $('#d-shot').src = state.deliveryPhoto;
     show($('#d-shot'), true);
     toast(t('Photo captured'));
