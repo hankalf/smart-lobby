@@ -26,6 +26,7 @@
     deckIndex: 0,
     deckStart: null,
     inductionDone: false,
+    deckWatched: null,
     flow: [],
     flowIndex: -1,
     lastResult: null,
@@ -105,6 +106,7 @@
     'I agree & continue': 'Acepto y continúo',
     'I agree — next document': 'Acepto — siguiente documento',
     'Next': 'Siguiente',
+    'Finish': 'Terminar',
     'Nearly done': 'Casi listo',
     'Watch again': 'Ver de nuevo',
     'I confirm': 'Confirmo',
@@ -370,6 +372,10 @@
     state.lastResult = null;
     state.deckIndex = 0;
     state.inductionDone = false;
+    state.deckWatched = null;
+    // A countdown left ticking by an abandoned visit must not unlock anything
+    // for the next person.
+    clearInterval(renderSlide._t);
     state.flow = [];
     state.flowIndex = -1;
     scannerDismissed = false;
@@ -1393,6 +1399,9 @@
   function startDeck() {
     state.deckIndex = 0;
     state.deckStart = new Date().toISOString();
+    // Which slides have already been sat through, so going back to re-read one
+    // does not lock every slide again on the way forward.
+    state.deckWatched = new Set();
     renderSlide();
     setScreen('induction');
   }
@@ -1409,24 +1418,35 @@
     $('#deck-count').textContent = `${state.deckIndex + 1} ${state.lang === 'es' ? 'de' : 'of'} ${slides.length}`;
     $('#deck-progress-fill').style.width = `${((state.deckIndex + 1) / slides.length) * 100}%`;
     $('#deck-prev').disabled = state.deckIndex === 0;
-    $('#deck-next').textContent = state.deckIndex === slides.length - 1 ? 'Finish' : 'Next';
 
+    /*
+     * The deck's "minimum seconds per slide" is what stops the whole induction
+     * being clicked through unread: Next counts down and only then unlocks.
+     * A slide already sat through stays unlocked, so going back to re-read an
+     * earlier one is free rather than a penalty.
+     */
     const minSecs = Number(show_.min_seconds_per_slide || 0);
     const next = $('#deck-next');
-    if (minSecs > 0) {
+    const nextLabel = () => t(state.deckIndex === slides.length - 1 ? 'Finish' : 'Next');
+    const slideKey = slide.id != null ? slide.id : state.deckIndex;
+    clearInterval(renderSlide._t);
+    if (minSecs > 0 && !(state.deckWatched && state.deckWatched.has(slideKey))) {
       next.disabled = true;
       let left = minSecs;
       next.textContent = `${left}s`;
-      clearInterval(renderSlide._t);
       renderSlide._t = setInterval(() => {
         left -= 1;
         if (left <= 0) {
           clearInterval(renderSlide._t);
+          if (state.deckWatched) state.deckWatched.add(slideKey);
           next.disabled = false;
-          next.textContent = state.deckIndex === slides.length - 1 ? 'Finish' : 'Next';
+          next.textContent = nextLabel();
         } else next.textContent = `${left}s`;
       }, 1000);
-    } else next.disabled = false;
+    } else {
+      next.disabled = false;
+      next.textContent = nextLabel();
+    }
   }
 
   $('#deck-next').addEventListener('click', () => {

@@ -222,9 +222,11 @@ Who has to watch it:
   "repeat after N days", or if you tick "show it every visit".
 - Reset one person from **Visitor registry → Open → Reset induction**.
 
-Set "minimum seconds per slide" if you need proof that people actually read it — the Next button
-stays disabled until the timer runs out. Completion is stored per person with the deck version and
-the number of seconds they took, and appears on the visit record.
+Set "minimum seconds per slide" (in each deck's settings) if you need proof that people actually read
+it — Next shows a countdown and only unlocks once the time is up, on every slide. A slide already sat
+through stays unlocked, so going back to re-read an earlier one costs nothing, and "Watch again" after
+the deck is not re-timed. Completion is stored per person with the deck version and the number of
+seconds they took, and appears on the visit record.
 
 ---
 

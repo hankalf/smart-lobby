@@ -704,7 +704,9 @@
         <label class="field"><span>Repeat after (days, 0 = never)</span>
           <input class="input" id="dk-repeat" type="number" min="0" value="${existing ? existing.repeat_after_days || 0 : 0}"></label>
         <label class="field"><span>Minimum seconds per slide</span>
-          <input class="input" id="dk-min" type="number" min="0" value="${existing ? existing.min_seconds_per_slide : 0}"></label>
+          <input class="input" id="dk-min" type="number" min="0" value="${existing ? existing.min_seconds_per_slide : 0}">
+          <span class="muted">Stops the deck being clicked through unread: Next shows a countdown and only
+            unlocks once the time is up, on every slide not yet watched. 0 = no wait.</span></label>
       </div>
       <label class="check"><input type="checkbox" id="dk-active" ${!existing || existing.active ? 'checked' : ''}> Active</label>`,
       async (bg, close) => {
