@@ -328,3 +328,6 @@ body:not(.has-bg) .lang-bar button.on {
   border-color: var(--brand, #2f7d5d);
 }
 .lang-bar.hidden { display: none; }
+
+/* Never over the deck controls, even before the script has caught up */
+body:has(.screen[data-screen="induction"]:not([hidden])) .lang-toggle { display: none; }

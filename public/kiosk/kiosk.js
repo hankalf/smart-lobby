@@ -262,8 +262,11 @@
    */
   function updateLangControls() {
     const enabled = !!(state.cfg && state.cfg.kiosk.spanish_enabled);
-    const onHome = state.screen === 'idle' || state.screen === 'menu';
-    show($('#lang-toggle'), enabled && !onHome);
+    // No pill on the home screens (the bar names both languages there) and none
+    // over the induction deck, whose Next button owns the same corner — the
+    // language was chosen before the deck, and the slides are one deck anyway.
+    const pillHidden = state.screen === 'idle' || state.screen === 'menu' || state.screen === 'induction';
+    show($('#lang-toggle'), enabled && !pillHidden);
     // The pill offers the language you would switch to, in that language.
     $('#lang-toggle').textContent = state.lang === 'es' ? 'English' : 'Español';
     $$('.lang-bar').forEach((bar) => {
