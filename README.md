@@ -391,8 +391,10 @@ Setup:
 
 You choose what appears: logo, photo, company, host, date, time, badge number, sign-out QR code,
 header and footer text. Badge numbers look like `NTB260825-004` (prefix, date, sequence for the day).
-With "print automatically" on, the badge prints as soon as sign-in completes; with it off, the visitor
-taps **Print badge**.
+The sequence carries on from the highest number already handed out that day, so deleting a visit
+leaves a gap rather than letting the next arrival be given a number someone on site is still wearing.
+Changing the prefix starts a fresh sequence under the new one. With "print automatically" on, the
+badge prints as soon as sign-in completes; with it off, the visitor taps **Print badge**.
 
 With badge printing disabled, no badge numbers are issued and nothing else changes — visitors still
 get an on-screen QR code for sign-out.
@@ -435,6 +437,10 @@ Home Assistant    POST  http://192.168.1.10:8123/api/services/lock/unlock
 
 Doors can fire automatically on sign-in, on sign-out, from a **Request entry** button on the kiosk, or
 from **Test unlock** in the dashboard. Every attempt is logged with who, when, why and the result.
+
+When an unlock fails, the result says which end to go and look at — whether the relay refused the
+connection, could not be found, sat on a network this server cannot reach, never answered, or answered
+and turned the request down (a 401 or 403 usually being a password or token in the headers).
 
 ---
 
@@ -498,6 +504,7 @@ server/
   auth.js         cookie sessions, bcrypt passwords
   notify.js       SMTP and Slack/Teams webhooks
   access.js       door triggering and unlock audit
+  badges.js       badge numbering, shared by sign-in and reprinting
   slides.js       PowerPoint/PDF/image → slides
   unzip.js        minimal ZIP reader so .pptx needs no dependency
   routes/

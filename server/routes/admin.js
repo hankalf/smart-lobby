@@ -8,6 +8,7 @@ const files = require('../files');
 const notify = require('../notify');
 const accessCtl = require('../access');
 const decks = require('../slides');
+const { nextBadgeNo } = require('../badges');
 
 const router = express.Router();
 const clean = (v) => (typeof v === 'string' ? v.trim() : v);
@@ -140,10 +141,7 @@ router.post('/visits/:id/badge', (req, res) => {
   if (!visit) return res.status(404).json({ error: 'not_found' });
 
   if (!visit.badge_no) {
-    const badge = settings.getSection('badge');
-    const day = String(visit.signed_in_at).slice(0, 10);
-    const seq = get('SELECT COUNT(*) AS n FROM visits WHERE substr(signed_in_at,1,10) = ? AND id <= ?', day, visit.id).n;
-    visit.badge_no = `${badge.badge_prefix || 'V'}${day.replace(/-/g, '').slice(2)}-${String(seq).padStart(3, '0')}`;
+    visit.badge_no = nextBadgeNo(String(visit.signed_in_at).slice(0, 10));
     run('UPDATE visits SET badge_no = ? WHERE id = ?', visit.badge_no, visit.id);
   }
 

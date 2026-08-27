@@ -6,6 +6,7 @@ const settings = require('../settings');
 const files = require('../files');
 const notify = require('../notify');
 const accessCtl = require('../access');
+const { nextBadgeNo } = require('../badges');
 
 const router = express.Router();
 
@@ -67,14 +68,6 @@ function agreementsFor(visitType) {
 }
 
 const activeAgreementFor = (visitType) => agreementsFor(visitType)[0] || null;
-
-function nextBadgeNo() {
-  const badge = settings.getSection('badge');
-  const day = new Date().toISOString().slice(0, 10);
-  const row = get("SELECT COUNT(*) AS n FROM visits WHERE substr(signed_in_at,1,10) = ?", day);
-  const seq = String((row ? row.n : 0) + 1).padStart(3, '0');
-  return `${badge.badge_prefix || 'V'}${day.replace(/-/g, '').slice(2)}-${seq}`;
-}
 
 function defaultSite() {
   return get('SELECT * FROM sites WHERE active = 1 ORDER BY id LIMIT 1');
@@ -221,7 +214,7 @@ router.post('/signin', async (req, res) => {
     }
 
     const badgeCfg = settings.getSection('badge');
-    const badgeNo = badgeCfg.enabled ? nextBadgeNo() : null;
+    const badgeNo = badgeCfg.enabled ? nextBadgeNo(new Date().toISOString().slice(0, 10)) : null;
     const code = crypto.randomBytes(4).toString('hex').toUpperCase();
 
     // Which entrance or area they signed in at, taken from the kiosk itself.
