@@ -38,6 +38,22 @@
 
   /* ------------------------------------------------------------- helpers */
 
+  /*
+   * The site's clock rather than the tablet's. A kiosk left on the wrong zone —
+   * or one shipped in from another office — would otherwise print a date on the
+   * badge that does not match the day the visitor is standing there on. A zone
+   * Intl cannot parse is checked once and then ignored, leaving the tablet's.
+   */
+  let zoneSeen = {};
+  const siteZone = () => {
+    const tz = (state.cfg && state.cfg.org && state.cfg.org.timezone) || undefined;
+    if (!tz) return undefined;
+    if (zoneSeen.tz !== tz) {
+      try { new Intl.DateTimeFormat('en', { timeZone: tz }); zoneSeen = { tz, use: tz }; } catch { zoneSeen = { tz }; }
+    }
+    return zoneSeen.use;
+  };
+
   async function api(path, body, opts = {}) {
     const res = await fetch(`/api/kiosk${path}`, {
       method: body ? 'POST' : 'GET',
@@ -1180,8 +1196,9 @@
 
     const meta = [];
     if (badge.show_host && result.visit.host_name) meta.push(`Visiting: ${result.visit.host_name}`);
-    if (badge.show_date) meta.push(new Date(result.visit.signed_in_at).toLocaleDateString(org.date_format || 'en-GB'));
-    if (badge.show_time) meta.push(new Date(result.visit.signed_in_at).toLocaleTimeString(org.date_format || 'en-GB', { hour: '2-digit', minute: '2-digit' }));
+    const tz = siteZone();
+    if (badge.show_date) meta.push(new Date(result.visit.signed_in_at).toLocaleDateString(org.date_format || 'en-GB', { timeZone: tz }));
+    if (badge.show_time) meta.push(new Date(result.visit.signed_in_at).toLocaleTimeString(org.date_format || 'en-GB', { hour: '2-digit', minute: '2-digit', timeZone: tz }));
     if (badge.show_badge_no && badge.badge_no) meta.push(badge.badge_no);
     $('#badge-meta').innerHTML = meta.join('<br>');
 
@@ -1218,7 +1235,7 @@
               ? `<img class="result-photo" src="${escapeHtml(r.photo_url)}" alt="">`
               : `<div class="result-photo initials">${escapeHtml(initials(r.full_name))}</div>`}
             <div class="result-who"><b>${escapeHtml(r.full_name)}</b>
-            <span>${r.company ? escapeHtml(r.company) + ' · ' : ''}in since ${new Date(r.signed_in_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${r.host_name ? ' · ' + escapeHtml(r.host_name) : ''}</span></div>
+            <span>${r.company ? escapeHtml(r.company) + ' · ' : ''}in since ${new Date(r.signed_in_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: siteZone() })}${r.host_name ? ' · ' + escapeHtml(r.host_name) : ''}</span></div>
             <button class="btn" data-signout="${r.id}">Sign out</button></div>`).join('')
         : '<p class="muted">No matching visitor is signed in.</p>';
       $$('#signout-results [data-signout]').forEach((b) => b.addEventListener('click', async () => {

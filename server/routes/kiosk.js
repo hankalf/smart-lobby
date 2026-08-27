@@ -7,6 +7,7 @@ const files = require('../files');
 const notify = require('../notify');
 const accessCtl = require('../access');
 const { nextBadgeNo } = require('../badges');
+const localtime = require('../localtime');
 
 const router = express.Router();
 
@@ -214,7 +215,7 @@ router.post('/signin', async (req, res) => {
     }
 
     const badgeCfg = settings.getSection('badge');
-    const badgeNo = badgeCfg.enabled ? nextBadgeNo(new Date().toISOString().slice(0, 10)) : null;
+    const badgeNo = badgeCfg.enabled ? nextBadgeNo(localtime.today()) : null;
     const code = crypto.randomBytes(4).toString('hex').toUpperCase();
 
     // Which entrance or area they signed in at, taken from the kiosk itself.

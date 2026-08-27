@@ -42,9 +42,28 @@
     toast._t = setTimeout(() => t.classList.add('hidden'), ms);
   }
 
-  const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—');
-  const fmtTime = (iso) => (iso ? new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '—');
-  const fmtDay = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
+  /*
+   * Times are shown on the site's clock, not the one this dashboard happens to
+   * be open on. Someone checking the gate from head office in another country
+   * should read the same arrival time the receptionist does, and the same one
+   * printed on the badge — otherwise "3 in today" sits above a list of
+   * yesterday's arrivals.
+   *
+   * A zone Intl cannot parse would throw out of every row it formats, so it is
+   * checked once and then ignored, leaving times on the browser's own clock.
+   */
+  let zoneSeen = {};
+  const siteZone = () => {
+    const tz = (SETTINGS && SETTINGS.org.timezone) || undefined;
+    if (!tz) return undefined;
+    if (zoneSeen.tz !== tz) {
+      try { new Intl.DateTimeFormat('en', { timeZone: tz }); zoneSeen = { tz, use: tz }; } catch { zoneSeen = { tz }; }
+    }
+    return zoneSeen.use;
+  };
+  const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: siteZone() }) : '—');
+  const fmtTime = (iso) => (iso ? new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: siteZone() }) : '—');
+  const fmtDay = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: siteZone() }) : '—');
 
   /* ---------------------------------------------------------------- modal */
 
@@ -1083,8 +1102,10 @@
     const { visit, badge, org } = await api(`/visits/${visitId}/badge`, { method: 'POST' });
     const meta = [
       badge.show_host && visit.host_name ? `Visiting: ${visit.host_name}` : '',
-      badge.show_date ? new Date(visit.signed_in_at).toLocaleDateString(org.date_format || 'en-GB') : '',
-      badge.show_time ? new Date(visit.signed_in_at).toLocaleTimeString(org.date_format || 'en-GB', { hour: '2-digit', minute: '2-digit' }) : '',
+      // The site's clock, so a reprint from a laptop in another zone still
+      // carries the date and time the visitor actually arrived on site.
+      badge.show_date ? new Date(visit.signed_in_at).toLocaleDateString(org.date_format || 'en-GB', { timeZone: siteZone() }) : '',
+      badge.show_time ? new Date(visit.signed_in_at).toLocaleTimeString(org.date_format || 'en-GB', { hour: '2-digit', minute: '2-digit', timeZone: siteZone() }) : '',
       badge.show_badge_no && visit.badge_no ? visit.badge_no : ''
     ].filter(Boolean).join('<br>');
 
@@ -2406,9 +2427,10 @@
       ${b.show_photo ? '<div class="b-photo">photo</div>' : ''}
       <div class="b-name">Sam Taylor</div>
       ${b.show_company ? '<div class="b-company">Acme Roofing Ltd</div>' : ''}
-      <div class="b-meta">${[b.show_host ? 'Visiting: Alex Green' : '', b.show_date ? new Date().toLocaleDateString('en-GB') : '',
-        b.show_time ? new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '',
-        b.show_badge_no ? `${b.badge_prefix || 'V'}${new Date().toISOString().slice(2, 10).replace(/-/g, '')}-001` : '']
+      <div class="b-meta">${[b.show_host ? 'Visiting: Alex Green' : '', b.show_date ? new Date().toLocaleDateString('en-GB', { timeZone: siteZone() }) : '',
+        b.show_time ? new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: siteZone() }) : '',
+        // Same date the server would put on a real one: the site's, not UTC.
+        b.show_badge_no ? `${b.badge_prefix || 'V'}${new Date().toLocaleDateString('en-CA', { timeZone: siteZone() }).slice(2).replace(/-/g, '')}-001` : '']
         .filter(Boolean).join('<br>')}</div>
       ${b.show_qr ? '<div class="b-qr"></div>' : ''}
       <div class="b-foot">${esc(b.footer_text || '')}</div></div>`;
@@ -2434,7 +2456,7 @@
       ${b.show_photo ? '<div class="photo">photo</div>' : ''}
       <div class="name">Test Badge</div>
       ${b.show_company ? '<div class="company">Alignment check</div>' : ''}
-      <div class="meta">${[b.show_host ? 'Visiting: Reception' : '', b.show_date ? new Date().toLocaleDateString('en-GB') : '',
+      <div class="meta">${[b.show_host ? 'Visiting: Reception' : '', b.show_date ? new Date().toLocaleDateString('en-GB', { timeZone: siteZone() }) : '',
         b.show_badge_no ? `${b.badge_prefix || 'V'}-TEST` : ''].filter(Boolean).join('<br>')}</div>
       ${b.show_qr ? '<div class="qr"></div>' : ''}
       <div class="foot">${esc(b.footer_text || '')}</div></div>`);

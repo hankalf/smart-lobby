@@ -9,6 +9,7 @@ const notify = require('../notify');
 const accessCtl = require('../access');
 const decks = require('../slides');
 const { nextBadgeNo } = require('../badges');
+const localtime = require('../localtime');
 
 const router = express.Router();
 const clean = (v) => (typeof v === 'string' ? v.trim() : v);
@@ -17,6 +18,37 @@ function audit(req, action, entity, entityId, detail) {
   run('INSERT INTO audit_log (user_id, action, entity, entity_id, detail, created_at) VALUES (?,?,?,?,?,?)',
     req.user ? req.user.id : null, action, entity || null, entityId || null,
     detail ? JSON.stringify(detail) : null, nowISO());
+}
+
+/**
+ * Timestamps counted into the site's own days, for the activity charts.
+ *
+ * SQLite can group on the stored UTC text but not on a zone whose offset moves
+ * with the clocks, so the bucketing happens here. Days nothing happened on are
+ * left out, as they were when this was a GROUP BY.
+ */
+function byLocalDay(timestamps, days) {
+  const counts = new Map();
+  for (const ts of timestamps) {
+    if (!ts) continue;
+    const day = localtime.dayOf(ts);
+    counts.set(day, (counts.get(day) || 0) + 1);
+  }
+  const earliest = localtime.dayOf(new Date(Date.now() - (days - 1) * 864e5));
+  return [...counts.entries()]
+    .filter(([day]) => day >= earliest)
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .map(([day, n]) => ({ day, n }));
+}
+
+/** The same, by hour of the local day, so "busiest hour" means the site's hour. */
+function byLocalHour(timestamps) {
+  const counts = new Map();
+  for (const ts of timestamps) {
+    const hour = ts && localtime.hourOf(ts);
+    if (hour) counts.set(hour, (counts.get(hour) || 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => (a[0] < b[0] ? -1 : 1)).map(([hour, n]) => ({ hour, n }));
 }
 
 function csv(rows, columns) {
@@ -80,7 +112,7 @@ router.get('/me', (req, res) => res.json(req.user));
 /* ------------------------------------------------------------- dashboard */
 
 router.get('/dashboard', (req, res) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const day = localtime.dayRange(localtime.today());
   const onsite = all(`SELECT v.id, v.signed_in_at, v.visit_type, v.badge_no, v.photo_path, v.vehicle_reg,
                              p.full_name, p.company, p.phone, h.name AS host_name, s.name AS site_name
                       FROM visits v JOIN visitors p ON p.id = v.visitor_id
@@ -88,14 +120,14 @@ router.get('/dashboard', (req, res) => {
                       WHERE v.status = 'onsite' ORDER BY v.signed_in_at DESC`);
   const stats = {
     onsite: onsite.length,
-    today_in: get('SELECT COUNT(*) AS n FROM visits WHERE substr(signed_in_at,1,10) = ?', today).n,
-    today_out: get("SELECT COUNT(*) AS n FROM visits WHERE substr(signed_out_at,1,10) = ?", today).n,
+    today_in: get('SELECT COUNT(*) AS n FROM visits WHERE signed_in_at >= ? AND signed_in_at < ?', day.start, day.end).n,
+    today_out: get('SELECT COUNT(*) AS n FROM visits WHERE signed_out_at >= ? AND signed_out_at < ?', day.start, day.end).n,
     deliveries_waiting: get("SELECT COUNT(*) AS n FROM deliveries WHERE status = 'awaiting'").n,
     visitors_total: get('SELECT COUNT(*) AS n FROM visitors').n,
-    inductions_today: get('SELECT COUNT(*) AS n FROM slide_views WHERE substr(completed_at,1,10) = ?', today).n
+    inductions_today: get('SELECT COUNT(*) AS n FROM slide_views WHERE completed_at >= ? AND completed_at < ?', day.start, day.end).n
   };
-  const week = all(`SELECT substr(signed_in_at,1,10) AS day, COUNT(*) AS n FROM visits
-                    WHERE signed_in_at >= date('now','-13 days') GROUP BY day ORDER BY day`);
+  const week = byLocalDay(all(`SELECT signed_in_at FROM visits WHERE signed_in_at >= date('now','-14 days')`)
+    .map((r) => r.signed_in_at), 14);
   const storage_warning = require('../db').STORAGE.message;
   const devices = all('SELECT id, name, last_seen_at FROM devices ORDER BY name');
   res.json({ onsite, stats, week, devices, storage_warning, recent_deliveries: all(
@@ -141,7 +173,7 @@ router.post('/visits/:id/badge', (req, res) => {
   if (!visit) return res.status(404).json({ error: 'not_found' });
 
   if (!visit.badge_no) {
-    visit.badge_no = nextBadgeNo(String(visit.signed_in_at).slice(0, 10));
+    visit.badge_no = nextBadgeNo(localtime.dayOf(visit.signed_in_at));
     run('UPDATE visits SET badge_no = ? WHERE id = ?', visit.badge_no, visit.id);
   }
 
@@ -165,7 +197,7 @@ router.patch('/visits/:id/door', (req, res) => {
 
 /** Badges issued recently, for reprinting a lost or damaged one. */
 router.get('/badges', (req, res) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const day = localtime.dayRange(localtime.today());
   res.json({
     issued: all(`SELECT v.id, v.badge_no, v.signed_in_at, v.status, v.visit_type, v.photo_path,
                         p.full_name, p.company, h.name AS host_name
@@ -173,7 +205,9 @@ router.get('/badges', (req, res) => {
                  LEFT JOIN hosts h ON h.id = v.host_id
                  WHERE v.signed_in_at >= date('now','-7 days')
                  ORDER BY v.signed_in_at DESC LIMIT 100`),
-    printed_today: get('SELECT COUNT(*) AS n FROM visits WHERE badge_no IS NOT NULL AND substr(signed_in_at,1,10) = ?', today).n
+    printed_today: get(`SELECT COUNT(*) AS n FROM visits
+                        WHERE badge_no IS NOT NULL AND signed_in_at >= ? AND signed_in_at < ?`,
+      day.start, day.end).n
   });
 });
 
@@ -181,7 +215,7 @@ router.get('/badges', (req, res) => {
 
 /** Everything about truck drivers in one place: who is on site, and the log. */
 router.get('/drivers', (req, res) => {
-  const today = new Date().toISOString().slice(0, 10);
+  const day = localtime.dayRange(localtime.today());
   const base = `SELECT v.*, p.full_name, p.company, p.phone, l.name AS location_name, d.name AS device_name
                 FROM visits v JOIN visitors p ON p.id = v.visitor_id
                 LEFT JOIN locations l ON l.id = v.location_id
@@ -224,9 +258,14 @@ router.get('/drivers', (req, res) => {
     log,
     stats: {
       onsite: onsite.length,
-      today: count("SELECT COUNT(*) AS n FROM visits WHERE visit_type = 'driver' AND substr(signed_in_at,1,10) = ?", today),
-      delivering_today: count("SELECT COUNT(*) AS n FROM visits WHERE visit_type = 'driver' AND movement IN ('Delivery','Delivering','Both') AND substr(signed_in_at,1,10) = ?", today),
-      collecting_today: count("SELECT COUNT(*) AS n FROM visits WHERE visit_type = 'driver' AND movement IN ('Pick-Up','Collecting','Both') AND substr(signed_in_at,1,10) = ?", today),
+      today: count(`SELECT COUNT(*) AS n FROM visits WHERE visit_type = 'driver'
+                    AND signed_in_at >= ? AND signed_in_at < ?`, day.start, day.end),
+      delivering_today: count(`SELECT COUNT(*) AS n FROM visits WHERE visit_type = 'driver'
+                               AND movement IN ('Delivery','Delivering','Both')
+                               AND signed_in_at >= ? AND signed_in_at < ?`, day.start, day.end),
+      collecting_today: count(`SELECT COUNT(*) AS n FROM visits WHERE visit_type = 'driver'
+                               AND movement IN ('Pick-Up','Collecting','Both')
+                               AND signed_in_at >= ? AND signed_in_at < ?`, day.start, day.end),
       avg_minutes: get(`SELECT AVG((julianday(signed_out_at) - julianday(signed_in_at)) * 1440) AS m
                         FROM visits WHERE visit_type = 'driver' AND signed_out_at IS NOT NULL`).m
     }
@@ -860,14 +899,14 @@ router.delete('/users/:id', (req, res) => {
 
 router.get('/stats', (req, res) => {
   res.json({
-    by_day: all(`SELECT substr(signed_in_at,1,10) AS day, COUNT(*) AS n FROM visits
-                 WHERE signed_in_at >= date('now','-29 days') GROUP BY day ORDER BY day`),
+    by_day: byLocalDay(all(`SELECT signed_in_at FROM visits WHERE signed_in_at >= date('now','-30 days')`)
+      .map((r) => r.signed_in_at), 30),
     by_type: all('SELECT visit_type, COUNT(*) AS n FROM visits GROUP BY visit_type ORDER BY n DESC'),
     by_host: all(`SELECT h.name, COUNT(*) AS n FROM visits v JOIN hosts h ON h.id = v.host_id
                   GROUP BY h.id ORDER BY n DESC LIMIT 10`),
     by_company: all(`SELECT p.company AS name, COUNT(*) AS n FROM visits v JOIN visitors p ON p.id = v.visitor_id
                      WHERE p.company IS NOT NULL AND p.company != '' GROUP BY lower(p.company) ORDER BY n DESC LIMIT 10`),
-    by_hour: all(`SELECT substr(signed_in_at,12,2) AS hour, COUNT(*) AS n FROM visits GROUP BY hour ORDER BY hour`),
+    by_hour: byLocalHour(all('SELECT signed_in_at FROM visits').map((r) => r.signed_in_at)),
     avg_minutes: get(`SELECT AVG((julianday(signed_out_at) - julianday(signed_in_at)) * 1440) AS m
                       FROM visits WHERE signed_out_at IS NOT NULL`).m
   });

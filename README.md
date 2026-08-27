@@ -194,6 +194,12 @@ the number of seconds they took, and appears on the visit record.
 **Settings → Branding** sets the organisation name, kiosk headline and sign-out message, the two
 brand colours, time zone and date format.
 
+The **time zone** is the site's own, and everything that names a day or a time uses it: the date on a
+badge and the date inside its number, the "today" counts, the activity and busiest-hour charts, and
+every arrival time shown on the dashboard. Times are stored as UTC, so moving a site to a different
+zone re-reads the existing history in the new one rather than shifting it. Set this before opening a
+site, and leave it alone afterwards unless the site itself moves.
+
 - **Logo** — appears on the kiosk welcome screen, on printed badges, in the dashboard sidebar and on
   the admin sign-in page. PNG or SVG with a transparent background works best.
 - **Welcome text position** — place the headline, sub-heading and button left, centre or right, and
@@ -391,9 +397,11 @@ Setup:
 
 You choose what appears: logo, photo, company, host, date, time, badge number, sign-out QR code,
 header and footer text. Badge numbers look like `NTB260825-004` (prefix, date, sequence for the day).
-The sequence carries on from the highest number already handed out that day, so deleting a visit
-leaves a gap rather than letting the next arrival be given a number someone on site is still wearing.
-Changing the prefix starts a fresh sequence under the new one. With "print automatically" on, the
+The date is the site's, taken from the time zone in Branding rather than the server's clock, so a
+badge printed at 8am in New York or half past midnight in London carries the day the visitor would
+write on a form. The sequence carries on from the highest number already handed out that day, so
+deleting a visit leaves a gap rather than letting the next arrival be given a number someone on site
+is still wearing. Changing the prefix starts a fresh sequence under the new one. With "print automatically" on, the
 badge prints as soon as sign-in completes; with it off, the visitor taps **Print badge**.
 
 With badge printing disabled, no badge numbers are issued and nothing else changes — visitors still
@@ -505,6 +513,7 @@ server/
   notify.js       SMTP and Slack/Teams webhooks
   access.js       door triggering and unlock audit
   badges.js       badge numbering, shared by sign-in and reprinting
+  localtime.js    the site's day, for everything that counts one
   slides.js       PowerPoint/PDF/image → slides
   unzip.js        minimal ZIP reader so .pptx needs no dependency
   routes/
