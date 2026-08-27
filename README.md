@@ -76,6 +76,21 @@ To get the inline live preview over LAN, either put a reverse proxy with a certi
 
 Everything else — sign-in, induction, signatures, badges, deliveries — works over plain HTTP.
 
+### When the connection drops
+
+The kiosk rides out an outage — a cellular tablet in a dead spot, the site router rebooting — rather
+than showing a browser error. The app, the configuration, the documents and the induction slides are
+kept on the device (refreshed from the server whenever it is reachable, so nothing is ever stale while
+the network is up). A full sign-in works offline: details, project, photo, documents and their
+questions, signature, and the induction deck in either language. Completed sign-ins are saved on the
+device and recorded automatically when the connection returns, carrying the moment they actually
+happened and a reference that makes each one land exactly once however many times the retry runs. A
+banner on the kiosk says the connection is down and how many sign-ins are waiting.
+
+What genuinely needs the server waits for it: recognising returning visitors (offline arrivals use
+"I'm new here"), badges (no number can be issued), sign-out (the open visit lives on the server — the
+kiosk says to see reception), and notifications, which go out when the sign-in is recorded.
+
 ### 2. On Railway
 
 1. Push this folder to a Git repository and create a Railway project from it.

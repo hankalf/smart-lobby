@@ -166,6 +166,13 @@
     'Your badge is printing…': 'Su credencial se está imprimiendo…',
     'Tap “Print badge” to collect your badge.': 'Toque “Imprimir credencial” para recoger su credencial.',
     'Badge found': 'Credencial encontrada',
+    'Working offline — sign-ins are saved on this device.':
+      'Sin conexión — las entradas se guardan en este dispositivo.',
+    'Reconnected — recording saved sign-ins…': 'Conexión restablecida — registrando las entradas guardadas…',
+    'The connection is down, so your sign-in is saved on this device and will be recorded the moment it returns.':
+      'No hay conexión, así que su entrada quedó guardada en este dispositivo y se registrará en cuanto vuelva.',
+    'The connection is down — please see reception to sign out.':
+      'No hay conexión — pase por recepción para registrar su salida.',
     "That's me": 'Soy yo',
     "I'm not on this list": 'No estoy en esta lista',
     'That number is used by more than one person — who are you?':
@@ -301,6 +308,103 @@
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw Object.assign(new Error(data.error || 'request_failed'), { data, status: res.status });
     return data;
+  }
+
+  /* -------------------------------------------------------------- offline */
+
+  /*
+   * The kiosk stays useful with the connection down. A service worker keeps
+   * the app, configuration and media; what cannot be cached is queued: a
+   * completed sign-in is stored on the device and posted when the server can
+   * be reached again, carrying the moment it actually happened and a
+   * reference so a retried post is recorded exactly once. A banner says the
+   * connection is down and how many sign-ins are waiting — quietly losing a
+   * contractor's signed safety documents is the one failure not allowed here.
+   */
+  let offline = false;
+  let pendingCount = 0;
+
+  function updateOfflineNote() {
+    const note = $('#offline-note');
+    if (!offline && !pendingCount) return show(note, false);
+    if (offline) {
+      note.textContent = t('Working offline — sign-ins are saved on this device.')
+        + (pendingCount ? ` (${pendingCount})` : '');
+    } else {
+      note.textContent = t('Reconnected — recording saved sign-ins…') + ` (${pendingCount})`;
+    }
+    show(note, true);
+  }
+
+  function setOffline(on) {
+    if (offline === !!on) return updateOfflineNote();
+    offline = !!on;
+    updateOfflineNote();
+    if (!offline) flushQueue();
+  }
+
+  // The queue lives in IndexedDB: photos ride along as data URLs, and a
+  // handful of those would overflow localStorage.
+  function queueDb() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open('sl-kiosk', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore('pending', { keyPath: 'client_ref' });
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  function queueOp(mode, fn) {
+    return queueDb().then((db) => new Promise((resolve, reject) => {
+      const tx = db.transaction('pending', mode);
+      const out = fn(tx.objectStore('pending'));
+      tx.oncomplete = () => { db.close(); resolve(out && 'result' in out ? out.result : undefined); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
+    }));
+  }
+
+  const queueAdd = (payload) => queueOp('readwrite', (store) => store.put(payload));
+  const queueRemove = (ref) => queueOp('readwrite', (store) => store.delete(ref));
+  const queueAll = () => queueOp('readonly', (store) => store.getAll());
+
+  async function refreshPendingCount() {
+    try { pendingCount = ((await queueAll()) || []).length; } catch { pendingCount = 0; }
+    updateOfflineNote();
+  }
+
+  let flushing = false;
+  async function flushQueue() {
+    if (flushing) return;
+    flushing = true;
+    try {
+      const items = (await queueAll()) || [];
+      for (const item of items) {
+        try {
+          await api('/signin', item);
+          await queueRemove(item.client_ref);
+        } catch (err) {
+          // The server said no (a project closed in the meantime, say): the
+          // sign-in stays queued and visible rather than vanishing — the
+          // dashboard fix, then the next flush, will land it. A network
+          // failure just means still offline; stop and try again later.
+          if (!err.status) break;
+          if (err.status < 500) {
+            // Leave it for the next round unless it landed as a duplicate.
+            if (err.data && err.data.duplicate) await queueRemove(item.client_ref);
+          }
+        }
+      }
+    } finally {
+      flushing = false;
+      refreshPendingCount();
+    }
+  }
+
+  window.addEventListener('online', () => setOffline(false));
+  window.addEventListener('offline', () => setOffline(true));
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/kiosk/sw.js').catch(() => { /* http:// LAN — cache off, kiosk unchanged */ });
   }
 
   function toast(msg, ms = 2600) {
@@ -448,6 +552,11 @@
     state.configRev = state.cfg.config_rev;
     state.lang = state.cfg.kiosk.default_language === 'es' ? 'es' : 'en';
     applyConfig();
+    refreshPendingCount().then(() => { if (pendingCount) flushQueue(); });
+    // Slides are fetched once now so the induction still plays if the
+    // connection later drops before anyone has watched it on this device.
+    ((state.cfg.decks || []).flatMap((d) => d.slides || []))
+      .forEach((sl) => { if (sl.image_path) fetch(sl.image_path).catch(() => {}); });
     // Only now is the screen the one this site and device actually configured.
     document.body.classList.add('cfg-ready');
     $('#app').style.visibility = '';
@@ -629,7 +738,8 @@
         state.configPending = true;
       }
       if (state.configPending && state.screen === 'idle') await reloadConfig();
-    } catch { /* offline; the kiosk keeps working */ }
+      setOffline(false);
+    } catch { setOffline(true); /* the kiosk keeps working */ }
   }
 
   async function reloadConfig() {
@@ -754,7 +864,15 @@
   async function loadAgreement() {
     try {
       state.agreements = await api(`/agreements/${encodeURIComponent(state.visitType)}`);
-    } catch { state.agreements = []; }
+    } catch {
+      // Unreachable server: the configuration carries every active document in
+      // full, so signing works offline exactly as it does online.
+      state.agreements = (((state.cfg && state.cfg.agreements) || [])).filter((a) => {
+        let list = [];
+        try { list = JSON.parse(a.required_for); } catch { list = []; }
+        return !list.length || list.includes(state.visitType);
+      });
+    }
     state.agreementIndex = 0;
     state.signedDocs = [];
     state.agreement = state.agreements[0] || null;
@@ -1051,7 +1169,13 @@
           visitor_id: state.visitor ? state.visitor.id : null,
           language: state.lang
         });
-      } catch { /* keep the prefetched deck */ }
+      } catch {
+        // Unreachable server: pick the deck from the configuration. Whether
+        // this person has already watched it cannot be checked offline, so it
+        // plays — showing an induction twice is the recoverable mistake.
+        const deck = offlineDeckFor(state.visitType);
+        if (deck) state.induction = { required: true, slideshow: deck };
+      }
       const show_ = state.induction && state.induction.slideshow;
       const needed = state.induction && state.induction.required && show_ && show_.slides && show_.slides.length;
       if (!needed) return nextStep();
@@ -1420,6 +1544,19 @@
 
   /* ------------------------------------------------------------------ deck */
 
+  /** The deck for a type straight out of the configuration, language-matched. */
+  function offlineDeckFor(visitType) {
+    if (state.cfg && state.cfg.induction && !state.cfg.induction.enabled) return null;
+    const decks = ((state.cfg && state.cfg.decks) || []).filter((d) => {
+      let list = [];
+      try { list = JSON.parse(d.required_for); } catch { list = []; }
+      return (!list.length || list.includes(visitType)) && d.slides && d.slides.length;
+    });
+    return decks.find((d) => (d.language || 'en') === state.lang)
+      || decks.find((d) => (d.language || 'en') === 'en')
+      || decks[0] || null;
+  }
+
   function startDeck() {
     state.deckIndex = 0;
     state.deckStart = new Date().toISOString();
@@ -1517,13 +1654,42 @@
       induction_started_at: state.deckStart,
       induction_seconds: state.deckStart ? Math.round((Date.now() - new Date(state.deckStart).getTime()) / 1000) : null
     };
+    // Minted per attempt: however many times a queued copy is retried, the
+    // server records this sign-in once.
+    payload.client_ref = `k${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
     try {
       const result = await api('/signin', payload);
       state.lastResult = result;
       showDone(result);
     } catch (err) {
-      toast(err.data && err.data.message ? err.data.message : t('Sorry, something went wrong. Please see reception.'));
+      // A response with a status is the server refusing; without one the
+      // server was never reached — save the sign-in and let them go on site.
+      if (err.status) {
+        return toast(err.data && err.data.message ? err.data.message : t('Sorry, something went wrong. Please see reception.'));
+      }
+      payload.queued_at = new Date().toISOString();
+      try {
+        await queueAdd(payload);
+        setOffline(true);
+        refreshPendingCount();
+        showDoneQueued(payload.full_name);
+      } catch {
+        toast(t('Sorry, something went wrong. Please see reception.'));
+      }
     }
+  }
+
+  /** The thank-you screen for a sign-in saved on the device to sync later. */
+  function showDoneQueued(fullName) {
+    $('#done-title').textContent = state.lang === 'es'
+      ? `Ha registrado su entrada, ${fullName.split(' ')[0]}`
+      : `You're signed in, ${fullName.split(' ')[0]}`;
+    $('#done-sub').textContent = t('The connection is down, so your sign-in is saved on this device and will be recorded the moment it returns.');
+    $('#done-code').textContent = '';
+    $('#done-qr').innerHTML = '';
+    show($('#btn-print-badge'), false);
+    show($('#done-badge-note'), false);
+    setScreen('done');
   }
 
   function showDone(result) {
@@ -1608,7 +1774,12 @@
       // Matches appear from the first letter typed.
       if (!q) return ($('#signout-results').innerHTML = '');
       const isCode = /^[0-9A-F]{8}$/i.test(q);
-      const rows = await api('/signout/search', isCode ? { code: q } : { q }).catch(() => []);
+      const rows = await api('/signout/search', isCode ? { code: q } : { q }).catch(() => null);
+      if (!rows) {
+        // Signing out needs the server — the open visit lives there.
+        $('#signout-results').innerHTML = `<p class="muted">${escapeHtml(t('The connection is down — please see reception to sign out.'))}</p>`;
+        return;
+      }
       $('#signout-results').innerHTML = rows.length
         ? rows.map((r) => `<div class="result">
             ${r.photo_url

@@ -97,7 +97,8 @@ function defaultSite() {
 router.get('/config', (req, res) => {
   const site = defaultSite();
   const pub = settings.publicSettings();
-  const agreements = all('SELECT id, name, name_es, body, body_es, version, required_for FROM agreements WHERE active = 1');
+  const agreements = all(`SELECT id, name, name_es, body, body_es, version, required_for, questions, require_signature
+                          FROM agreements WHERE active = 1`);
   const inductions = all('SELECT id, name, version, required_for FROM slideshows WHERE active = 1');
   res.json({
     ...pub,
@@ -107,6 +108,12 @@ router.get('/config', (req, res) => {
     // another round trip to the server.
     projects: all('SELECT id, name, name_es, code FROM projects WHERE active = 1 ORDER BY name'),
     agreements,
+    // The active decks, slides and all: with these and the agreements above the
+    // kiosk can run a complete sign-in with the connection down.
+    decks: all(`SELECT id, name, language, required_for, version, min_seconds_per_slide, repeat_after_days
+                FROM slideshows WHERE active = 1 ORDER BY id`)
+      .map((s) => ({ ...s, slides: slidesFor(s.id) }))
+      .filter((s) => s.slides.length),
     has_induction: inductions.length > 0,
     onsite_count: accessCtl.occupancy(site ? site.id : null),
     access_points: pub.access.unlock_button_on_kiosk
@@ -254,6 +261,34 @@ router.post('/signin', async (req, res) => {
 
     const language = b.language === 'es' ? 'es' : 'en';
 
+    /*
+     * A sign-in queued on the kiosk while the connection was down is retried
+     * until it lands, so its reference must make it land exactly once — the
+     * retry whose response was lost must not become a second visit.
+     */
+    const clientRef = clean(b.client_ref) ? String(clean(b.client_ref)).slice(0, 64) : null;
+    if (clientRef) {
+      const dup = get('SELECT id, checkout_code FROM visits WHERE client_ref = ?', clientRef);
+      if (dup) {
+        const visit = get(`SELECT v.*, p.full_name, p.company, h.name AS host_name, s.name AS site_name,
+                                  j.name AS project_name, j.name_es AS project_name_es
+                           FROM visits v JOIN visitors p ON p.id = v.visitor_id
+                           LEFT JOIN hosts h ON h.id = v.host_id LEFT JOIN sites s ON s.id = v.site_id
+                           LEFT JOIN projects j ON j.id = v.project_id WHERE v.id = ?`, dup.id);
+        return res.json({ ok: true, duplicate: true, visit, badge: null, checkout_code: dup.checkout_code });
+      }
+    }
+
+    // A queued sign-in carries the moment it actually happened; a time that is
+    // implausible — in the future, or older than the queue could be — is
+    // ignored rather than trusted.
+    let signedInAt = nowISO();
+    const queuedAt = b.queued_at ? new Date(b.queued_at) : null;
+    if (queuedAt && !Number.isNaN(queuedAt.getTime())
+        && queuedAt.getTime() < Date.now() && Date.now() - queuedAt.getTime() < 48 * 3600e3) {
+      signedInAt = queuedAt.toISOString();
+    }
+
     const site = b.site_id ? get('SELECT * FROM sites WHERE id = ?', Number(b.site_id)) : defaultSite();
 
     /*
@@ -294,13 +329,13 @@ router.post('/signin', async (req, res) => {
     const visitRes = run(`INSERT INTO visits
       (site_id, visitor_id, host_id, visit_type, purpose, vehicle_reg, badge_no, checkout_code, photo_path,
        induction_shown, signed_in_at, status, device_id, location_id, reference, movement, project_id,
-       language, created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,'onsite',?,?,?,?,?,?,?)`,
+       language, client_ref, created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,'onsite',?,?,?,?,?,?,?,?)`,
       site ? site.id : null, visitor.id, b.host_id ? Number(b.host_id) : null, visitType,
       clean(b.purpose) || null, (clean(b.vehicle_reg) || '').toUpperCase() || null, badgeNo, code, photoPath,
-      b.induction_completed ? 1 : 0, nowISO(), device ? device.id : null,
+      b.induction_completed ? 1 : 0, signedInAt, device ? device.id : null,
       device ? device.location_id : null, clean(b.reference) || null, clean(b.movement) || null,
-      project ? project.id : null, language, nowISO());
+      project ? project.id : null, language, clientRef, nowISO());
     const visitId = Number(visitRes.lastInsertRowid);
 
     // One row per document signed, each with the answers given to its questions.

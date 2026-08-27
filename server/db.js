@@ -363,6 +363,9 @@ function migrate() {
   // An induction deck is uploaded per language; the kiosk serves the one
   // matching the language chosen on screen.
   addColumn('slideshows', 'language', "TEXT NOT NULL DEFAULT 'en'");
+  // A reference minted on the kiosk for each sign-in, so one queued offline
+  // and retried is recorded once however many times the retry lands.
+  addColumn('visits', 'client_ref', 'TEXT');
 }
 
 function addColumn(table, column, definition) {
