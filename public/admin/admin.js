@@ -775,14 +775,33 @@
 
   VIEWS.documents = async (root) => {
     const rows = await api('/agreements');
-    const countQuestions = (a) => { try { return JSON.parse(a.questions || '[]').length; } catch { return 0; } };
+    const parseQs = (a) => { try { return JSON.parse(a.questions || '[]'); } catch { return []; } };
+    const countQuestions = (a) => parseQs(a).length;
+    const spanishOn = !!(SETTINGS && SETTINGS.kiosk && SETTINGS.kiosk.spanish_enabled);
+
+    /*
+     * With Spanish offered on the kiosk, every document without its translation
+     * is being shown to Spanish visitors in English. That fallback is deliberate
+     * — but it must be visible here, not discovered by a contractor mid-sign-in.
+     */
+    const langPill = (a) => {
+      if (!spanishOn) return '';
+      const qs = parseQs(a);
+      const translatedQs = qs.filter((q) => String(q.label_es || '').trim()).length;
+      const hasBody = !!(String(a.body_es || '').trim() || !String(a.body || '').trim());
+      if (hasBody && translatedQs === qs.length) return '<span class="pill on">Español ✓</span>';
+      if (!hasBody && !translatedQs) return '<span class="pill off" title="Open Edit and fill in the En español boxes">no Spanish — shows in English</span>';
+      return `<span class="pill wait" title="Open Edit and fill in the En español boxes">Spanish incomplete${qs.length ? ` (${translatedQs}/${qs.length} questions)` : ''}</span>`;
+    };
+
     root.innerHTML = `
       <h1 class="page">Documents to sign</h1>
       <p class="page-sub">NDAs, site rules and safety declarations. Each one is assigned to the categories that must sign it,
-        and can ask its own questions before the signature. Deliveries do not sign anything.</p>
+        and can ask its own questions before the signature. Deliveries do not sign anything.${spanishOn
+          ? ' Spanish is offered on the kiosk, so each document also carries its Spanish wording — anything left untranslated is shown to Spanish visitors in English.' : ''}</p>
       <div class="row"><button class="btn" id="a-new">New document</button></div>
       ${rows.map((a) => `<div class="card section">
-        <div class="row between"><div><h2 style="margin:0">${esc(a.name)} <span class="pill ${a.active ? 'on' : 'off'}">${a.active ? 'active' : 'off'}</span></h2>
+        <div class="row between"><div><h2 style="margin:0">${esc(a.name)} <span class="pill ${a.active ? 'on' : 'off'}">${a.active ? 'active' : 'off'}</span> ${langPill(a)}</h2>
         <span class="muted">v${a.version} · signed by ${esc(JSON.parse(a.required_for).map(categoryLabel).join(', ') || 'nobody')}${
           countQuestions(a) ? ` · ${countQuestions(a)} question${countQuestions(a) === 1 ? '' : 's'}` : ''}</span></div>
         <div class="row" style="margin:0"><button class="btn ghost" data-doc="${a.id}">Edit</button>
@@ -806,7 +825,8 @@
       <label class="field"><span>What they read and sign</span>
         <textarea class="input" id="ag-body" rows="10">${esc(doc ? doc.body : '')}</textarea></label>
 
-      <details class="howto" ${doc && ((doc.name_es || '').trim() || (doc.body_es || '').trim()) ? 'open' : ''}>
+      <details class="howto" ${(doc && ((doc.name_es || '').trim() || (doc.body_es || '').trim()))
+        || (SETTINGS && SETTINGS.kiosk && SETTINGS.kiosk.spanish_enabled) ? 'open' : ''}>
         <summary><b>En español</b> — shown when the kiosk is switched to Spanish</summary>
         <p class="muted" style="margin-top:.5rem">Leave a box empty and that part stays in English. The signature records
           which language was on screen when it was signed.</p>
@@ -889,6 +909,8 @@
             placeholder="Options, separated by commas" value="${esc((q.options || []).join(', '))}">` : ''}
           <input class="input" data-qlabeles="${i}" style="margin-top:.5rem"
             placeholder="En español (optional — English is shown if empty)" value="${esc(q.label_es || '')}">
+          ${String(q.description || '').trim() || String(q.description_es || '').trim() ? `<input class="input" data-qdesces="${i}" style="margin-top:.5rem"
+            placeholder="Help text en español (optional)" value="${esc(q.description_es || '')}">` : ''}
           ${q.type === 'choice' ? `<input class="input" data-qoptses="${i}" style="margin-top:.5rem"
             placeholder="Options in Spanish, in the same order" value="${esc((q.options_es || []).join(', '))}">` : ''}
           <label class="field" style="margin:.5rem 0 0"><span>Only ask this if</span>
@@ -925,6 +947,7 @@
       $$('[data-qreq]', list).forEach((input) => { questions[Number(input.dataset.qreq)].required = input.checked; });
       $$('[data-qdesc]', list).forEach((input) => { questions[Number(input.dataset.qdesc)].description = input.value; });
       $$('[data-qlabeles]', list).forEach((input) => { questions[Number(input.dataset.qlabeles)].label_es = input.value; });
+      $$('[data-qdesces]', list).forEach((input) => { questions[Number(input.dataset.qdesces)].description_es = input.value; });
       $$('[data-qoptses]', list).forEach((input) => {
         questions[Number(input.dataset.qoptses)].options_es = input.value.split(',').map((o) => o.trim()).filter(Boolean);
       });
@@ -947,6 +970,7 @@
         required: !!q.required,
         ...(String(q.description || '').trim() ? { description: q.description.trim() } : {}),
         ...(String(q.label_es || '').trim() ? { label_es: q.label_es.trim() } : {}),
+        ...(String(q.description_es || '').trim() ? { description_es: q.description_es.trim() } : {}),
         ...(q.type === 'choice' ? { options: q.options || [] } : {}),
         ...(q.type === 'choice' && (q.options_es || []).length ? { options_es: q.options_es } : {}),
         // A condition pointing at a question that has since been deleted would
