@@ -819,6 +819,17 @@ router.put('/settings', (req, res) => {
     delete patch.org.date_format;
   }
 
+  // The visitor-type list is stored cleaned up or not at all — a kiosk whose
+  // every type was somehow removed would have no way to sign anyone in.
+  if (patch.types !== undefined) {
+    const cleaned = settings.sanitizeTypes(patch.types);
+    if (cleaned) patch.types = cleaned;
+    else {
+      warnings.push('The visitor types were not saved — at least one type with a name is needed.');
+      delete patch.types;
+    }
+  }
+
   // A masked secret means "unchanged" — never write the mask itself back.
   if (patch.notify) {
     for (const key of ['smtp_pass', 'twilio_auth_token']) {

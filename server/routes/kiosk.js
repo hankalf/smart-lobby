@@ -133,9 +133,34 @@ router.post('/lookup', (req, res) => {
     return res.json({ found: false, matches });
   }
 
+  /*
+   * A whole crew often shares one phone — the site phone, the foreman's. Picking
+   * "the first" record for it would greet the wrong person, skip an induction
+   * the newcomer has never seen, and at sign-in overwrite somebody else's name.
+   * So a number several people share comes back as a question, not a match:
+   * the kiosk shows the names and asks which of them they are.
+   */
   let visitor = null;
-  if (phone && phone.length >= 6) visitor = get(`SELECT * FROM visitors WHERE ${PHONE_NORM_SQL} = ? ORDER BY id LIMIT 1`, phone);
-  if (!visitor && email) visitor = get('SELECT * FROM visitors WHERE lower(email) = ? ORDER BY id LIMIT 1', email);
+  if (phone && phone.length >= 6) {
+    const sharing = all(`SELECT * FROM visitors WHERE ${PHONE_NORM_SQL} = ? ORDER BY last_visit_at DESC LIMIT 8`, phone);
+    const allowed = sharing.filter((v) => !v.blocked);
+    if (sharing.length && !allowed.length) return res.status(403).json({ found: true, blocked: true, message: 'Please see reception.' });
+    if (allowed.length > 1) {
+      return res.json({ found: false, multiple: true,
+        matches: allowed.map((v) => ({ id: v.id, full_name: v.full_name, company: v.company })) });
+    }
+    visitor = allowed[0] || null;
+  }
+  if (!visitor && email) {
+    const sharing = all('SELECT * FROM visitors WHERE lower(email) = ? ORDER BY last_visit_at DESC LIMIT 8', email);
+    const allowed = sharing.filter((v) => !v.blocked);
+    if (sharing.length && !allowed.length) return res.status(403).json({ found: true, blocked: true, message: 'Please see reception.' });
+    if (allowed.length > 1) {
+      return res.json({ found: false, multiple: true,
+        matches: allowed.map((v) => ({ id: v.id, full_name: v.full_name, company: v.company })) });
+    }
+    visitor = allowed[0] || null;
+  }
   if (!visitor && req.body.visitor_id) visitor = get('SELECT * FROM visitors WHERE id = ?', Number(req.body.visitor_id));
 
   if (!visitor) return res.json({ found: false, induction: inductionStatus(null, visitType) });
@@ -212,9 +237,18 @@ router.post('/signin', async (req, res) => {
 
     const site = b.site_id ? get('SELECT * FROM sites WHERE id = ?', Number(b.site_id)) : defaultSite();
 
+    /*
+     * Sign-in updates the matched record — including its name — so a phone or
+     * email match must never guess. A returning visitor who picked themselves
+     * arrives with their visitor_id; without one, a number or address only
+     * matches the record carrying the name just typed, and anyone else on a
+     * shared number becomes a new visitor rather than silently becoming
+     * somebody else.
+     */
+    const matchAmong = (rows) => rows.find((v) => lower(v.full_name) === lower(fullName)) || null;
     let visitor = b.visitor_id ? get('SELECT * FROM visitors WHERE id = ?', Number(b.visitor_id)) : null;
-    if (!visitor && phone) visitor = get(`SELECT * FROM visitors WHERE ${PHONE_NORM_SQL} = ? LIMIT 1`, phone);
-    if (!visitor && email) visitor = get('SELECT * FROM visitors WHERE lower(email) = ? LIMIT 1', email);
+    if (!visitor && phone) visitor = matchAmong(all(`SELECT * FROM visitors WHERE ${PHONE_NORM_SQL} = ?`, phone));
+    if (!visitor && email) visitor = matchAmong(all('SELECT * FROM visitors WHERE lower(email) = ?', email));
     if (visitor && visitor.blocked) return res.status(403).json({ error: 'blocked', message: 'Please see reception.' });
 
     const photoPath = files.saveDataUrl(b.photo, 'private', 'photos');

@@ -57,6 +57,13 @@ const DEFAULTS = {
    * to the standard wording.
    */
   wording: {},
+  /*
+   * The visitor types themselves — the cards on the kiosk. Stored as a list the
+   * dashboard edits; empty means "never configured", and the list is then built
+   * from the older per-card switches so an existing site keeps its exact layout
+   * until it first saves the Visitor types tab.
+   */
+  types: [],
   kiosk: {
     visit_types: ['visitor', 'contractor', 'interview'],
     welcome_shows_menu: true,
@@ -187,6 +194,64 @@ const DETAIL_FIELDS = [
 /** The languages the kiosk can be shown in. */
 const LANGUAGES = [['en', 'English'], ['es', 'Español']];
 
+/*
+ * Every visitor type has a placement:
+ *   card    — its own card on the home screen, straight into that sign-in
+ *   picker  — offered when somebody taps the general Sign in card
+ *   both    — the card and the picker
+ *   off     — not offered anywhere (history and settings are kept)
+ */
+const TYPE_MODES = ['card', 'picker', 'both', 'off'];
+// Words already meaning something on the home screen, which a type key must not shadow.
+const RESERVED_TYPE_KEYS = ['signin', 'signout', 'delivery', 'unlock', 'menu', 'idle'];
+const BUILTIN_TYPE_KEYS = ['visitor', 'contractor', 'interview', 'driver'];
+
+/** The four original types, laid out exactly as the per-card switches have them. */
+function builtinTypes(kiosk) {
+  const picker = Array.isArray(kiosk.visit_types) ? kiosk.visit_types : ['visitor'];
+  const mode = (key, cardOn) => {
+    const inPicker = picker.includes(key);
+    if (cardOn) return inPicker ? 'both' : 'card';
+    return inPicker ? 'picker' : 'off';
+  };
+  return [
+    { key: 'visitor', label: 'Visitor', icon: '👤', sub: '', mode: mode('visitor', false), builtin: true },
+    { key: 'contractor', label: 'Contractor', icon: '🦺', sub: 'Working on site', mode: mode('contractor', !!kiosk.show_contractor_button), builtin: true },
+    { key: 'interview', label: 'Interview', icon: '💼', sub: 'Here to meet the hiring team', mode: mode('interview', !!kiosk.show_interview_button), builtin: true },
+    { key: 'driver', label: 'Driver', icon: '🚚', sub: 'Pick-up or delivery', mode: mode('driver', !!kiosk.show_driver_button), builtin: true }
+  ];
+}
+
+/**
+ * A types list as sent by the dashboard, made safe to store: real keys, no
+ * duplicates or reserved words, sane modes, labels present. Returns null when
+ * nothing usable is left, so the caller can refuse rather than store a kiosk
+ * with no way to sign in.
+ */
+function sanitizeTypes(list) {
+  if (!Array.isArray(list)) return null;
+  const seen = new Set();
+  const out = [];
+  for (const entry of list) {
+    if (!entry || typeof entry !== 'object') continue;
+    const key = String(entry.key || '').toLowerCase().trim().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
+    const label = String(entry.label || '').trim().slice(0, 60);
+    if (!key || !label || seen.has(key) || RESERVED_TYPE_KEYS.includes(key)) continue;
+    seen.add(key);
+    out.push({
+      key,
+      label,
+      label_es: String(entry.label_es || '').trim().slice(0, 60),
+      sub: String(entry.sub || '').trim().slice(0, 80),
+      sub_es: String(entry.sub_es || '').trim().slice(0, 80),
+      icon: String(entry.icon || '').trim().slice(0, 8) || '👤',
+      mode: TYPE_MODES.includes(entry.mode) ? entry.mode : 'picker',
+      builtin: BUILTIN_TYPE_KEYS.includes(key)
+    });
+  }
+  return out.length ? out : null;
+}
+
 /**
  * Picks the wording for a language, falling back to English whenever the
  * translation has not been filled in. A half-translated site should read oddly,
@@ -260,6 +325,9 @@ function getAll() {
     try { stored[r.key] = JSON.parse(r.value); } catch { stored[r.key] = r.value; }
   }
   const merged = deepMerge(DEFAULTS, stored);
+  // A site that has never opened the Visitor types tab gets its list built from
+  // the older switches, so nothing moves on the kiosk until someone edits it.
+  if (!Array.isArray(merged.types) || !merged.types.length) merged.types = builtinTypes(merged.kiosk);
   // Installs made before backgrounds became a list keep working: the single
   // image is presented as a one-item list everywhere downstream.
   if (!Array.isArray(merged.org.backgrounds) || !merged.org.backgrounds.length) {
@@ -316,6 +384,7 @@ function publicSettings() {
   return {
     org: s.org,
     kiosk: s.kiosk,
+    types: s.types,
     details: s.details,
     wording: s.wording,
     flow: s.flow,
@@ -328,4 +397,4 @@ function publicSettings() {
 
 module.exports = { DEFAULTS, getAll, getSection, setSection, setAll, publicSettings, deepMerge,
   isValidTimeZone, isValidLocale, PHONE_COUNTRIES, phoneCountry, DETAIL_FIELDS, fieldsFor,
-  FLOW_STEPS, flowFor, configRev, bumpConfigRev, LANGUAGES, inLanguage };
+  FLOW_STEPS, flowFor, configRev, bumpConfigRev, LANGUAGES, inLanguage, sanitizeTypes, TYPE_MODES };

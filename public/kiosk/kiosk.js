@@ -164,6 +164,10 @@
     'Your badge is printing…': 'Su credencial se está imprimiendo…',
     'Tap “Print badge” to collect your badge.': 'Toque “Imprimir credencial” para recoger su credencial.',
     'Badge found': 'Credencial encontrada',
+    "That's me": 'Soy yo',
+    "I'm not on this list": 'No estoy en esta lista',
+    'That number is used by more than one person — who are you?':
+      'Ese número lo usan varias personas — ¿quién es usted?',
     'The scanner could not load. Please type your name instead.': 'El escáner no pudo cargarse. Escriba su nombre, por favor.',
     'Hold your badge up to the camera, or type your name below.': 'Acerque su credencial a la cámara, o escriba su nombre abajo.',
     'That is not a badge from this building.': 'Esa no es una credencial de este edificio.',
@@ -251,20 +255,36 @@
     }
   }
 
+  /**
+   * The two ways the language is offered: a bar naming both languages on the
+   * home screens, where the choice is made before anything starts, and a corner
+   * pill once a flow is underway, for anyone who realises partway through.
+   */
+  function updateLangControls() {
+    const enabled = !!(state.cfg && state.cfg.kiosk.spanish_enabled);
+    const onHome = state.screen === 'idle' || state.screen === 'menu';
+    show($('#lang-toggle'), enabled && !onHome);
+    // The pill offers the language you would switch to, in that language.
+    $('#lang-toggle').textContent = state.lang === 'es' ? 'English' : 'Español';
+    $$('.lang-bar').forEach((bar) => {
+      show(bar, enabled);
+      $$('button', bar).forEach((b) => b.classList.toggle('on', b.dataset.lang === state.lang));
+    });
+  }
+
   /** Switch the words on screen, leaving everything typed so far alone. */
   function setLanguage(lang) {
     state.lang = lang === 'es' ? 'es' : 'en';
-    const btn = $('#lang-toggle');
-    // The button offers the language you would switch to, in that language.
-    btn.textContent = state.lang === 'es' ? 'English' : 'Español';
     applyStaticLanguage();
     if (state.cfg) applyConfig();
+    updateLangControls();
     if (state.screen === 'details') applyDetailFields();
     if (state.screen === 'agreement') showDocument(state.agreementIndex, { preserve: true });
     if (state.screen === 'done' && state.lastResult) showDone(state.lastResult);
   }
 
   $('#lang-toggle').addEventListener('click', () => setLanguage(state.lang === 'es' ? 'en' : 'es'));
+  $$('.lang-bar button').forEach((b) => b.addEventListener('click', () => setLanguage(b.dataset.lang)));
 
   async function api(path, body, opts = {}) {
     const res = await fetch(`/api/kiosk${path}`, {
@@ -306,6 +326,7 @@
     // The scanner opens with the screen, so a badge can simply be held up.
     if (name === 'signout' && state.cfg && state.cfg.kiosk.qr_signout_enabled && !scannerDismissed) startScanner();
     if (name === 'idle') resetVisit();
+    updateLangControls();
     if (name === 'details') applyDetailFields();
     // Sizing the pad wipes any ink on it, so a re-render of the same screen —
     // a language switch mid-document — must leave it alone.
@@ -420,8 +441,7 @@
     document.documentElement.style.setProperty('--brand', org.primary_color || '#2f7d5d');
     document.documentElement.style.setProperty('--brand-dark', org.accent_color || '#123a2c');
 
-    show($('#lang-toggle'), !!kiosk.spanish_enabled);
-    $('#lang-toggle').textContent = state.lang === 'es' ? 'English' : 'Español';
+    updateLangControls();
     applyStaticLanguage();
     $('#idle-title').textContent = inLang(org, 'welcome_title') || 'Welcome';
     $('#idle-message').textContent = inLang(org, 'welcome_message');
@@ -476,12 +496,9 @@
       t(inLang(state.cfg.induction, 'acknowledgement_text') || 'I confirm I have watched and understood the site induction.');
 
     const tiles = $('#type-tiles');
-    const labels = { visitor: ['👤', 'Visitor'], contractor: ['🦺', 'Contractor'], interview: ['💼', 'Interview'],
-      delivery: ['📦', 'Delivery'], driver: ['🚚', 'Driver'] };
-    tiles.innerHTML = (kiosk.visit_types || ['visitor']).map((type) => {
-      const [icon, label] = labels[type] || ['👤', type];
-      return `<button class="tile" data-type="${type}"><span class="tile-icon">${icon}</span><span>${t(label)}</span></button>`;
-    }).join('');
+    tiles.innerHTML = pickerTypes().map((ty) =>
+      `<button class="tile" data-type="${escapeHtml(ty.key)}"><span class="tile-icon">${escapeHtml(ty.icon || '👤')}</span>` +
+      `<span>${escapeHtml(typeWord(ty, 'label'))}</span></button>`).join('');
     tiles.querySelectorAll('[data-type]').forEach((b) => b.addEventListener('click', () => {
       state.visitType = b.dataset.type;
       loadAgreement().then(() => setScreen('identify'));
@@ -612,26 +629,32 @@
   $$('[data-back]').forEach((b) => b.addEventListener('click', goBack));
 
   /** The sections offered on the home screen, one card each. */
-  function sectionsHtml() {
-    const { kiosk, deliveries, access } = state.cfg;
-    const cards = [
-      `<button class="tile" data-action="signin">
-        <span class="tile-icon">👋</span><span>${t('Sign in')}</span><small>${t('Visitors & contractors')}</small></button>`,
-      `<button class="tile" data-action="signout">
-        <span class="tile-icon">🚪</span><span>${t('Sign out')}</span><small>${t('Leaving site')}</small></button>`
-    ];
+  /** The types on offer, and how each is worded in the language on screen. */
+  const allTypes = () => (state.cfg && state.cfg.types) || [];
+  const pickerTypes = () => allTypes().filter((ty) => ty.mode === 'picker' || ty.mode === 'both');
+  const cardTypes = () => allTypes().filter((ty) => ty.mode === 'card' || ty.mode === 'both');
+  // A custom Spanish wording wins; the stock English labels go through the
+  // dictionary so the built-in cards still translate.
+  const typeWord = (ty, field) =>
+    (state.lang === 'es' && (ty[`${field}_es`] || '').trim()) ? ty[`${field}_es`] : t(ty[field] || '');
 
-    if (kiosk.show_contractor_button) {
-      cards.push(`<button class="tile" data-action="contractor">
-        <span class="tile-icon">🦺</span><span>${t('Contractor')}</span><small>${t('Working on site')}</small></button>`);
+  function sectionsHtml() {
+    const { deliveries, access, kiosk } = state.cfg;
+    const cards = [];
+
+    // The general Sign in card only makes sense while some type is offered
+    // behind it; a site running entirely on per-type cards drops it.
+    if (pickerTypes().length) {
+      cards.push(`<button class="tile" data-action="signin">
+        <span class="tile-icon">👋</span><span>${t('Sign in')}</span><small>${t('Visitors & contractors')}</small></button>`);
     }
-    if (kiosk.show_interview_button) {
-      cards.push(`<button class="tile" data-action="interview">
-        <span class="tile-icon">💼</span><span>${t('Interview')}</span><small>${t('Here to meet the hiring team')}</small></button>`);
-    }
-    if (kiosk.show_driver_button) {
-      cards.push(`<button class="tile" data-action="driver">
-        <span class="tile-icon">🚚</span><span>${t('Driver')}</span><small>${t('Pick-up or delivery')}</small></button>`);
+    cards.push(`<button class="tile" data-action="signout">
+      <span class="tile-icon">🚪</span><span>${t('Sign out')}</span><small>${t('Leaving site')}</small></button>`);
+
+    for (const ty of cardTypes()) {
+      cards.push(`<button class="tile" data-action="${escapeHtml(ty.key)}">
+        <span class="tile-icon">${escapeHtml(ty.icon || '👤')}</span><span>${escapeHtml(typeWord(ty, 'label'))}</span>${
+        typeWord(ty, 'sub') ? `<small>${escapeHtml(typeWord(ty, 'sub'))}</small>` : ''}</button>`);
     }
     if (kiosk.show_delivery_button && deliveries.enabled) {
       cards.push(`<button class="tile" data-action="delivery">
@@ -669,17 +692,18 @@
   }
 
   async function runAction(action) {
-    // Cards that go straight into a sign-in as a particular type.
-    if (action === 'interview' || action === 'driver' || action === 'contractor') {
-      state.visitType = action;
+    // A card that goes straight into a sign-in as a particular type.
+    const direct = allTypes().find((ty) => ty.key === action && (ty.mode === 'card' || ty.mode === 'both'));
+    if (direct) {
+      state.visitType = direct.key;
       await loadAgreement();
-      state.induction = await api('/induction', { visit_type: action }).catch(() => state.induction);
+      state.induction = await api('/induction', { visit_type: direct.key }).catch(() => state.induction);
       return setScreen('identify');
     }
     if (action === 'signin') {
-      const types = state.cfg.kiosk.visit_types || ['visitor'];
-      if (types.length > 1) return setScreen('type');
-      state.visitType = types[0];
+      const offered = pickerTypes();
+      if (offered.length > 1) return setScreen('type');
+      state.visitType = offered.length ? offered[0].key : 'visitor';
       await loadAgreement();
       return setScreen('identify');
     }
@@ -737,20 +761,7 @@
         $('#f-name').value = value;
         return startFlow();
       }
-      box.innerHTML = r.matches.map((m) => `<div class="result">
-          <div class="result-photo initials">${escapeHtml(initials(m.full_name))}</div>
-          <div class="result-who"><b>${escapeHtml(m.full_name)}</b>
-            ${m.company ? `<span>${escapeHtml(m.company)}</span>` : ''}</div>
-          <button class="btn" data-pick="${m.id}">That's me</button>
-        </div>`).join('')
-        + `<div class="actions"><button class="btn ghost" id="not-listed">I'm not on this list</button></div>`;
-
-      $$('[data-pick]', box).forEach((b) => b.addEventListener('click', () => pickReturningVisitor(Number(b.dataset.pick))));
-      $('#not-listed', box).addEventListener('click', () => {
-        box.innerHTML = '';
-        $('#f-name').value = value;
-        startFlow();
-      });
+      showIdentityChoices(r.matches, () => { $('#f-name').value = value; });
       return;
     }
 
@@ -759,6 +770,14 @@
         [isEmail ? 'email' : 'phone']: value,
         visit_type: state.visitType
       });
+      // Several people share this number or address: ask who they are before
+      // anything is prefilled, so nobody continues as somebody else.
+      if (r.multiple && r.matches && r.matches.length) {
+        showIdentityChoices(r.matches,
+          () => { if (isEmail) $('#f-email').value = value; else $('#f-phone').value = value; },
+          t('That number is used by more than one person — who are you?'));
+        return;
+      }
       state.induction = r.induction || { required: false, slideshow: null };
       if (r.found && r.visitor) {
         state.visitor = r.visitor;
@@ -787,6 +806,30 @@
   });
 
   /** They picked themselves from the name matches: fetch their details and carry on. */
+  /**
+   * A list of "That's me" choices, with a way out for someone who is none of
+   * them. Used when a typed name matches several people, and when a phone
+   * number turns out to be shared — `heading` says why they are being asked.
+   */
+  function showIdentityChoices(matches, onNotListed, heading) {
+    const box = $('#identify-matches');
+    box.innerHTML = (heading ? `<p class="lead">${escapeHtml(heading)}</p>` : '')
+      + matches.map((m) => `<div class="result">
+          <div class="result-photo initials">${escapeHtml(initials(m.full_name))}</div>
+          <div class="result-who"><b>${escapeHtml(m.full_name)}</b>
+            ${m.company ? `<span>${escapeHtml(m.company)}</span>` : ''}</div>
+          <button class="btn" data-pick="${m.id}">${t("That's me")}</button>
+        </div>`).join('')
+      + `<div class="actions"><button class="btn ghost" id="not-listed">${t("I'm not on this list")}</button></div>`;
+
+    $$('[data-pick]', box).forEach((b) => b.addEventListener('click', () => pickReturningVisitor(Number(b.dataset.pick))));
+    $('#not-listed', box).addEventListener('click', () => {
+      box.innerHTML = '';
+      if (onNotListed) onNotListed();
+      startFlow();
+    });
+  }
+
   async function pickReturningVisitor(visitorId) {
     try {
       const r = await api('/lookup', { visitor_id: visitorId, visit_type: state.visitType });
@@ -1403,6 +1446,9 @@
   async function submitSignIn() {
     const inductionDone = state.inductionDone;
     const payload = {
+      visitor_id: state.visitor ? state.visitor.id : null,
+      // Who they said they are, when they picked themselves from a list — the
+      // server must not re-guess it from a phone number others share.
       visitor_id: state.visitor ? state.visitor.id : null,
       full_name: $('#f-name').value.trim(),
       company: $('#f-company').value.trim(),

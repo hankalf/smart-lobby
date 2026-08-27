@@ -28,6 +28,10 @@
       <p id="idle-message" class="lead">Please tap below to sign in</p>
       <button class="btn big" id="start-btn" data-go="menu">Touch to start</button>
       <div class="welcome-actions hidden" id="welcome-actions"></div>
+      <div class="lang-bar hidden">
+        <button type="button" data-lang="en">English</button>
+        <button type="button" data-lang="es">Español</button>
+      </div>
       <p class="onsite-count hidden" id="onsite-count"></p>
     </div>
     <footer class="idle-foot"><span id="idle-clock"></span> · <span id="idle-org"></span></footer>
@@ -37,6 +41,10 @@
   <section class="screen" data-screen="menu" hidden>
     <header class="bar"><h2>How can we help?</h2><button class="btn ghost" data-go="idle">Cancel</button></header>
     <div class="tiles" id="menu-tiles"></div>
+    <div class="lang-bar hidden">
+      <button type="button" data-lang="en">English</button>
+      <button type="button" data-lang="es">Español</button>
+    </div>
   </section>
 
   <!-- VISIT TYPE ------------------------------------------------------- -->

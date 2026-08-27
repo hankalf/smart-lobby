@@ -698,7 +698,7 @@
       <label class="field"><span>Description</span><input class="input" id="dk-desc" value="${esc(existing ? existing.description || '' : '')}"></label>
       <span class="muted">Show to these visitor types</span>
       <div class="form-grid" style="margin:.5rem 0 1rem">
-        ${CATEGORIES.map(([t, label]) => `<label class="check"><input type="checkbox" data-type="${t}" ${req.includes(t) ? 'checked' : ''}> ${label}</label>`).join('')}
+        ${categories().map(([t, label]) => `<label class="check"><input type="checkbox" data-type="${t}" ${req.includes(t) ? 'checked' : ''}> ${label}</label>`).join('')}
       </div>
       <div class="form-grid">
         <label class="field"><span>Repeat after (days, 0 = never)</span>
@@ -744,14 +744,11 @@
 
   /* ------------------------------------------------------------ documents */
 
-  // The kiosk home-screen cards these documents can be attached to.
-  const CATEGORIES = [
-    ['visitor', 'Visitors', 'Sign in / Sign out card'],
-    ['contractor', 'Contractors', 'Sign in / Sign out card'],
-    ['interview', 'Interviews', 'Interview card — candidates'],
-    ['driver', 'Drivers', 'Driver card — deliveries and collections']
-  ];
-  const categoryLabel = (t) => (CATEGORIES.find(([v]) => v === t) || [t, t])[1];
+  // The visitor types these documents can be attached to — the list managed on
+  // the Visitor types tab, so a newly added type can be given documents at once.
+  const MODE_HINT = { card: 'Own card on the home screen', picker: 'Offered behind Sign in', both: 'Card + Sign in picker', off: 'Currently hidden' };
+  const categories = () => ((SETTINGS && SETTINGS.types) || []).map((ty) => [ty.key, ty.label, MODE_HINT[ty.mode] || '']);
+  const categoryLabel = (t) => { const c = categories().find(([v]) => v === t); return c ? c[1] : t; };
 
   /** Map question ids back to the wording used at the time, for reading answers. */
   function questionLabels(questionsJson) {
@@ -808,7 +805,7 @@
       <h3>Who signs this</h3>
       <p class="muted" style="margin-top:0">Matched to the cards on the kiosk home screen.</p>
       <div class="form-grid" style="margin:.5rem 0 1rem">
-        ${CATEGORIES.map(([t, label, hint]) => `<label class="check"><input type="checkbox" data-t="${t}" ${req.includes(t) ? 'checked' : ''}>
+        ${categories().map(([t, label, hint]) => `<label class="check"><input type="checkbox" data-t="${t}" ${req.includes(t) ? 'checked' : ''}>
           <span>${label}<br><span class="muted">${hint}</span></span></label>`).join('')}
       </div>
 
@@ -1593,6 +1590,113 @@
       async () => { await api(`/locations/${b.dataset.lodel}`, { method: 'DELETE' }); render('locations'); })));
   };
 
+  /* --------------------------------------------------------- visitor types */
+
+  VIEWS.vtypes = async (root) => {
+    SETTINGS = await api('/settings');
+    // Edited as a local copy; nothing reaches the kiosk until Save.
+    const types = (SETTINGS.types || []).map((ty) => ({ ...ty }));
+    const MODES = [['card', 'Own card on the home screen'], ['picker', 'Behind the Sign in card'],
+      ['both', 'Both'], ['off', 'Hidden']];
+
+    root.innerHTML = `
+      <h1 class="page">Visitor types</h1>
+      <p class="page-sub">The cards on the kiosk. Each type has its own wording, its own place on the home screen, and —
+        via the other tabs — its own documents, induction, form fields and step order. Add one here and it appears
+        everywhere a type can be chosen: the “Your details” form settings, document and deck assignment, and the
+        per-device card list.</p>
+      <div class="card section">
+        <div id="vt-list"></div>
+        <div class="row" style="margin-top:1rem">
+          <button class="btn subtle" id="vt-add" type="button">Add a visitor type</button>
+          <button class="btn" id="vt-save" type="button">Save visitor types</button>
+        </div>
+        <p class="muted">A hidden type keeps its history and settings — hide a type rather than deleting it once it has
+          been used. The Spanish boxes are shown when the kiosk is switched to Spanish; empty ones fall back to English.</p>
+      </div>`;
+
+    const list = $('#vt-list');
+
+    const draw = () => {
+      list.innerHTML = types.map((ty, i) => `
+        <div class="q-row" data-i="${i}">
+          <div class="q-row-top">
+            <input class="input" data-vticon="${i}" title="Icon (emoji)" style="max-width:4.5rem;text-align:center"
+              value="${esc(ty.icon || '👤')}">
+            <input class="input" data-vtlabel="${i}" placeholder="Card name — e.g. Cleaner" value="${esc(ty.label || '')}">
+            <select class="input" data-vtmode="${i}">
+              ${MODES.map(([v, l]) => `<option value="${v}" ${ty.mode === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+            <button class="btn ghost" type="button" data-vtup="${i}" ${i === 0 ? 'disabled' : ''} title="Move up">↑</button>
+            <button class="btn ghost" type="button" data-vtdown="${i}" ${i === types.length - 1 ? 'disabled' : ''} title="Move down">↓</button>
+            ${ty.builtin ? '<span class="pill on" title="A standard type — hide it rather than removing it">built-in</span>'
+              : `<button class="btn ghost" type="button" data-vtdel="${i}" title="Remove">✕</button>`}
+          </div>
+          <div class="two-col" style="margin-top:.5rem">
+            <input class="input" data-vtsub="${i}" placeholder="Line under the name (optional)" value="${esc(ty.sub || '')}">
+            <input class="input" data-vtlabeles="${i}" placeholder="Name en español (optional)" value="${esc(ty.label_es || '')}">
+          </div>
+          <div class="two-col" style="margin-top:.5rem">
+            <input class="input" data-vtsubes="${i}" placeholder="Line under the name en español (optional)" value="${esc(ty.sub_es || '')}">
+            <span class="muted" style="align-self:center">Key: <code>${esc(ty.key || '(from the name)')}</code></span>
+          </div>
+        </div>`).join('');
+
+      $$('[data-vtdel]', list).forEach((b) => b.addEventListener('click', () => {
+        sync(); types.splice(Number(b.dataset.vtdel), 1); draw();
+      }));
+      $$('[data-vtup]', list).forEach((b) => b.addEventListener('click', () => {
+        sync(); const i = Number(b.dataset.vtup);
+        [types[i - 1], types[i]] = [types[i], types[i - 1]]; draw();
+      }));
+      $$('[data-vtdown]', list).forEach((b) => b.addEventListener('click', () => {
+        sync(); const i = Number(b.dataset.vtdown);
+        [types[i + 1], types[i]] = [types[i], types[i + 1]]; draw();
+      }));
+    };
+
+    const sync = () => {
+      $$('[data-vtlabel]', list).forEach((el) => { types[Number(el.dataset.vtlabel)].label = el.value; });
+      $$('[data-vticon]', list).forEach((el) => { types[Number(el.dataset.vticon)].icon = el.value; });
+      $$('[data-vtsub]', list).forEach((el) => { types[Number(el.dataset.vtsub)].sub = el.value; });
+      $$('[data-vtlabeles]', list).forEach((el) => { types[Number(el.dataset.vtlabeles)].label_es = el.value; });
+      $$('[data-vtsubes]', list).forEach((el) => { types[Number(el.dataset.vtsubes)].sub_es = el.value; });
+      $$('[data-vtmode]', list).forEach((el) => { types[Number(el.dataset.vtmode)].mode = el.value; });
+    };
+
+    // A new type's key comes from its name, and must not collide with another
+    // type or with the fixed home-screen cards.
+    const keyFor = (label) => {
+      const base = String(label).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32) || 'type';
+      const taken = new Set([...types.map((ty) => ty.key), 'signin', 'signout', 'delivery', 'unlock', 'menu', 'idle']);
+      let key = base, n = 2;
+      while (taken.has(key)) key = `${base}-${n++}`;
+      return key;
+    };
+
+    $('#vt-add').addEventListener('click', () => {
+      sync();
+      types.push({ key: '', label: '', label_es: '', sub: '', sub_es: '', icon: '🪪', mode: 'picker', builtin: false });
+      draw();
+      const inputs = $$('[data-vtlabel]', list);
+      if (inputs.length) inputs[inputs.length - 1].focus();
+    });
+
+    $('#vt-save').addEventListener('click', async () => {
+      sync();
+      const named = types.filter((ty) => String(ty.label || '').trim());
+      if (!named.length) return toast('Keep at least one visitor type');
+      if (!named.some((ty) => ty.mode !== 'off')) return toast('Every type is hidden — nobody could sign in');
+      named.forEach((ty) => { if (!ty.key) ty.key = keyFor(ty.label); });
+      SETTINGS = await api('/settings', { method: 'PUT', body: { types: named } });
+      if (SETTINGS.warnings && SETTINGS.warnings.length) toast(SETTINGS.warnings.join(' '), 7000);
+      else toast('Visitor types saved — kiosks update within a few seconds');
+      render('vtypes');
+    });
+
+    draw();
+  };
+
   /* ------------------------------------------------------------- projects */
 
   VIEWS.projects = async (root) => {
@@ -1667,10 +1771,13 @@
 
   const CAMERA_LABEL = { front: 'Front camera', rear: 'Rear camera' };
 
-  // The home-screen cards a device can be limited to.
-  const DEVICE_SECTIONS = [
-    ['signin', 'Sign in'], ['signout', 'Sign out'], ['contractor', 'Contractor'], ['interview', 'Interview'],
-    ['driver', 'Driver'], ['delivery', 'Delivery'], ['unlock', 'Request entry']
+  // The home-screen cards a device can be limited to — the fixed ones plus
+  // whatever visitor types currently have their own card.
+  const DEVICE_SECTIONS = () => [
+    ['signin', 'Sign in'], ['signout', 'Sign out'],
+    ...((SETTINGS && SETTINGS.types) || []).filter((ty) => ty.mode === 'card' || ty.mode === 'both')
+      .map((ty) => [ty.key, ty.label]),
+    ['delivery', 'Delivery'], ['unlock', 'Request entry']
   ];
 
   VIEWS.devices = async (root) => {
@@ -1733,7 +1840,7 @@
       // been told about, so a newly added card is offered rather than lost.
       let saved = null;
       try { saved = JSON.parse(d.sections || 'null'); } catch { saved = null; }
-      const known = DEVICE_SECTIONS.map(([key]) => key);
+      const known = DEVICE_SECTIONS().map(([key]) => key);
       const sectionOrder = Array.isArray(saved) && saved.length
         ? [...new Set([...saved.filter((k) => known.includes(k)), ...known])]
         : known.slice();
@@ -1772,8 +1879,9 @@
         <p class="muted">More operational modes are coming; every device runs in kiosk mode for now.</p>`,
         async (bg, close) => {
           const picked = sectionOrder.filter((k) => enabled.has(k));
-          const isDefault = picked.length === DEVICE_SECTIONS.length
-            && picked.every((k, i) => k === DEVICE_SECTIONS[i][0]);
+          const defaults = DEVICE_SECTIONS();
+          const isDefault = picked.length === defaults.length
+            && picked.every((k, i) => k === defaults[i][0]);
           await api(`/devices/${d.id}`, { method: 'PATCH', body: {
             name: $('#de-name', bg).value,
             location_id: $('#de-loc', bg).value || null,
@@ -1788,7 +1896,7 @@
 
       const drawSections = () => {
         const box = $('#de-sections', m.bg);
-        const label = (k) => (DEVICE_SECTIONS.find(([key]) => key === k) || [k, k])[1];
+        const label = (k) => (DEVICE_SECTIONS().find(([key]) => key === k) || [k, k])[1];
         box.innerHTML = sectionOrder.map((key, i) => `<div class="section-row${enabled.has(key) ? '' : ' off'}">
           <label class="check"><input type="checkbox" data-dsec="${key}" ${enabled.has(key) ? 'checked' : ''}>
             <span>${i + 1}. ${esc(label(key))}</span></label>
@@ -1876,8 +1984,9 @@
     ['movement', 'Pick-Up or Delivery', ''],
     ['project', 'Project', 'Picked from the list on the Projects tab']
   ];
-  const DETAIL_TYPES = [['visitor', 'Visitors'], ['contractor', 'Contractors'], ['interview', 'Interviews'],
-    ['driver', 'Drivers']];
+  // One column per visitor type, straight from the Visitor types tab.
+  const DETAIL_TYPES = null; // replaced by detailTypes() — kept null so stale references fail loudly
+  const detailTypes = () => ((SETTINGS && SETTINGS.types) || []).map((ty) => [ty.key, ty.label]);
 
   VIEWS.settings = async (root) => {
     SETTINGS = await api('/settings');
@@ -1992,11 +2101,11 @@
         <p class="muted" style="margin-top:0">What each type of visitor is asked. An interview does not need a reason for
           visit — the card already says why they are here — so switch it off in that column alone.</p>
         <div class="table-wrap"><table class="fields-table">
-          <thead><tr><th>Field</th>${DETAIL_TYPES.map(([, l]) => `<th>${l}</th>`).join('')}</tr></thead>
+          <thead><tr><th>Field</th>${detailTypes().map(([, l]) => `<th>${l}</th>`).join('')}</tr></thead>
           <tbody>${DETAIL_FIELDS.map(([field, label, hint]) => `<tr>
             <td><b>${label}</b>${hint ? `<div class="muted">${hint}</div>` : ''}
               <div><button class="btn link" type="button" data-rowoff="${field}">Turn off for everyone</button></div></td>
-            ${DETAIL_TYPES.map(([type]) => {
+            ${detailTypes().map(([type]) => {
               const value = ((s.details[type] || {})[field]) || 'off';
               return `<td><select class="input" data-set="details.${type}.${field}">
                 ${[['off', 'Not asked'], ['optional', 'Optional'], ['required', 'Required']]
@@ -2011,7 +2120,7 @@
           a driver is asked for a haulier, not a company. Leave a box empty to keep the standard wording.</p>
         <label class="field" style="max-width:16rem"><span>Wording for</span>
           <select class="input" id="wording-type">
-            ${DETAIL_TYPES.map(([t, l]) => `<option value="${t}">${l}</option>`).join('')}
+            ${detailTypes().map(([t, l]) => `<option value="${t}">${l}</option>`).join('')}
           </select></label>
         <div id="wording-fields"></div>
       </div>
@@ -2021,7 +2130,7 @@
           induction at all. Everything after that is yours to arrange, per type. A step that does not apply is skipped
           wherever it sits: no photo asked for, no documents for that type, an induction already watched.</p>
         <div class="grid two" id="flow-editor">
-          ${DETAIL_TYPES.map(([type, label]) => `
+          ${detailTypes().map(([type, label]) => `
             <div class="flow-col" data-flowtype="${type}">
               <h3 style="margin-top:0">${label}</h3>
               <ol class="flow-list"></ol>
@@ -2057,12 +2166,9 @@
         </div>
 
         <h3>Sections on the home screen</h3>
-        <p class="muted" style="margin-top:0">Sign in and sign out always share the first card. Switch the rest off
-          for sites that do not need them.</p>
+        <p class="muted" style="margin-top:0">The visitor cards — who they are for, their wording and where each sits —
+          are managed on the <b>Visitor types</b> tab. The two below are not visitor types, so they live here.</p>
         <div class="check-list">
-          ${chk('kiosk.show_contractor_button', 'Contractor', 'Straight into a contractor sign-in — no card picker in between')}
-          ${chk('kiosk.show_interview_button', 'Interview', 'For candidates arriving to meet the hiring team')}
-          ${chk('kiosk.show_driver_button', 'Driver', 'Truck drivers delivering or collecting at a warehouse')}
           ${chk('kiosk.show_delivery_button', 'Delivery', 'Courier drop-off — also needs Deliveries enabled below')}
         </div>
         <p class="muted">A “Request entry” card appears too when you switch it on under <b>Access control</b>.</p>
@@ -2075,12 +2181,6 @@
             <option value="es" ${s.kiosk.default_language === 'es' ? 'selected' : ''}>Español</option>
           </select></label>
 
-        <h3>Visit types offered on the kiosk</h3>
-        <p class="muted" style="margin-top:0">Shown when somebody taps Sign in, unless only one is ticked.</p>
-        <div class="check-list">
-          ${[['visitor', 'Visitor'], ['contractor', 'Contractor'], ['interview', 'Interview']].map(([t, label]) => `<label class="check">
-            <input type="checkbox" data-vtype="${t}" ${s.kiosk.visit_types.includes(t) ? 'checked' : ''}> <span>${label}</span></label>`).join('')}
-        </div>
       </div>
 
       <div class="card section"><h2>ID badge printing</h2>
@@ -2255,14 +2355,14 @@
     // Step order, one reorderable list per visitor type.
     const FLOW_LABELS = { details: 'Their details', photo: 'Photo', documents: 'Documents & questions', induction: 'Induction deck' };
     const flowState = {};
-    DETAIL_TYPES.forEach(([type]) => {
+    detailTypes().forEach(([type]) => {
       const configured = (s.flow && s.flow[type]) || Object.keys(FLOW_LABELS);
       // Repair anything missing so a step can never quietly disappear.
       flowState[type] = [...new Set([...configured.filter((k) => FLOW_LABELS[k]), ...Object.keys(FLOW_LABELS)])];
     });
 
     function drawFlow() {
-      DETAIL_TYPES.forEach(([type]) => {
+      detailTypes().forEach(([type]) => {
         const list = $(`[data-flowtype="${type}"] .flow-list`);
         list.innerHTML = flowState[type].map((step, i) => `<li>
           <span>${FLOW_LABELS[step]}</span>
@@ -2292,7 +2392,7 @@
     // off everywhere should not mean four separate changes.
     $$('[data-rowoff]').forEach((b) => b.addEventListener('click', () => {
       const field = b.dataset.rowoff;
-      DETAIL_TYPES.forEach(([type]) => {
+      detailTypes().forEach(([type]) => {
         const select = $(`[data-set="details.${type}.${field}"]`);
         if (select) select.value = 'off';
       });
@@ -2315,7 +2415,6 @@
         setPath(patch, input.dataset.set, value);
       });
       patch.kiosk = patch.kiosk || {};
-      patch.kiosk.visit_types = $$('[data-vtype]').filter((c) => c.checked).map((c) => c.dataset.vtype);
       if (VIEWS.settings.collectFlow) patch.flow = VIEWS.settings.collectFlow();
       if (VIEWS.settings.collectWording) patch.wording = VIEWS.settings.collectWording();
       SETTINGS = await api('/settings', { method: 'PUT', body: patch });

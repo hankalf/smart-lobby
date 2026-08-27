@@ -109,16 +109,19 @@ The database is a single file, so keep **one** instance running — do not scale
 Welcome screen → sign in / sign out / delivery → visit type → returning-visitor lookup → details →
 photo → document signing → induction → badge + QR code.
 
-The home screen is built from sections:
+The home screen is built from sections. The visitor cards — which exist, their wording in both
+languages, their icon, and whether each is its own card, an option behind Sign in, both, or hidden —
+are managed on the **Visitor types** tab, where new types (a Cleaner card, an Auditor card) can be
+added and immediately gain their own form settings, documents, induction assignment and per-device
+placement. The standard set:
 
-- **Sign in** — visitors and contractors.
+- **Sign in** — the general card, offering whichever types are placed behind it.
 - **Sign out** — matches appear from the first letter typed, by first name, last name or phone number, each with
   the photo taken at sign-in so people pick themselves out at a glance. Photos stay behind the admin login:
   the kiosk gets a short-lived signed link that only works for that visit, only while they are on site.
 - **Contractor** — straight into a contractor sign-in with no card picker in between: name, company,
   phone, and the **project** they are on, picked from the list managed on the Projects tab. No vehicle
-  is asked for. Their documents and the induction deck follow as usual. Switchable in
-  **Settings → Kiosk sign-in flow → Sections**.
+  is asked for. Their documents and the induction deck follow as usual.
 - **Interview** — candidates arriving to meet the hiring team, recorded as an interview visit without
   them choosing a visit type.
 - **Driver** — truck drivers at a warehouse. Asks for the haulier, vehicle registration, load or order
@@ -131,8 +134,10 @@ The sections can sit straight on the home screen, or behind a "Touch to start" b
 
 ### Spanish
 
-Switch on **Settings → Kiosk sign-in flow → Language → Offer Spanish** and an **Español** button sits on
-every kiosk screen; the kiosk can also start in Spanish by default. The kiosk's own wording — buttons,
+Switch on **Settings → Kiosk sign-in flow → Language → Offer Spanish** and the choice is offered twice:
+an **English / Español** bar on the welcome screen itself, for choosing before signing in or out, and a
+small button in the bottom corner of every later screen for anyone who realises partway through. The
+kiosk can also start in Spanish by default. The kiosk's own wording — buttons,
 prompts, field labels, error messages — is translated in the app. Everything an admin types carries an
 optional Spanish box beside it: the welcome lines in Branding, each document's title and body, every
 question and its choices, custom field wording, project names, and the induction confirmation line.
@@ -156,6 +161,10 @@ history. A project that has ever been signed in against cannot be deleted, only 
 - Recognises returning visitors by phone number, email, or name — one box takes any of them. Typing a
   name offers the matches to pick from, showing only a name and company, never a phone number or email.
   Switchable off in **Settings → Kiosk sign-in flow**.
+- A phone number several people share — a crew on the foreman's phone — never guesses. The kiosk asks
+  which of them they are before anything is prefilled, and at sign-in a shared number only matches the
+  record carrying the exact name typed; anyone new on that number gets their own record instead of
+  quietly overwriting somebody else's.
 - Signature capture on the glass for NDAs and site rules.
 - The sign-out code and its QR go on the printed badge only, not on screen — a code seen for a few seconds is no use to anyone.
 - The sign-out screen opens with the badge scanner already running, so a badge can simply be held up; the
@@ -184,6 +193,7 @@ history. A project that has ever been signed in against cannot be deleted, only 
 | Access & doors | HTTP-controlled doors, test unlock, unlock audit trail |
 | Locations | Areas within a site — reception, yard gate, workshop entrance — with device and on-site counts |
 | Projects | The jobs contractors sign in against, with Spanish names, codes, and who is on each right now |
+| Visitor types | The kiosk cards themselves — add, reword (in both languages), re-icon, place or hide each type |
 | Devices | Every tablet: name, location, default camera, operational mode, per-device badge printing, which cards it shows and in what order, online status |
 | Reports | Visits per day, busiest hosts, top companies, arrival times, average time on site |
 | Settings | Branding (logo, kiosk background photo, colours, time zone), kiosk flow, badges, induction, deliveries, access, notifications, retention, users |
