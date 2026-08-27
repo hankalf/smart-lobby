@@ -148,6 +148,11 @@ body.has-bg .screen:not(.dark) > .bar .btn.ghost {
 }
 .camera-wrap.small { width: min(320px, 70vw); aspect-ratio: 4/3; }
 .camera-wrap video, .camera-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* The captured photo lays over the (stopped) video, so taking a photo shows
+   the photo — both are full-size blocks, and without this the image sat below
+   the video, clipped out of the frame by overflow:hidden. */
+.camera-wrap img { position: absolute; inset: 0; }
+.camera-wrap img.hidden { display: none; }
 
 /* ----------------------------------------------------------- agreement */
 .doc {
