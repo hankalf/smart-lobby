@@ -616,7 +616,9 @@
       ${rows.length ? rows.map((s) => `
         <div class="card section" data-show="${s.id}">
           <div class="row between">
-            <div><h2 style="margin:0">${esc(s.name)} <span class="pill ${s.active ? 'on' : 'off'}">${s.active ? 'active' : 'off'}</span></h2>
+            <div><h2 style="margin:0">${esc(s.name)}
+              <span class="pill ${s.language === 'es' ? 'wait' : 'on'}">${s.language === 'es' ? 'Español' : 'English'}</span>
+              <span class="pill ${s.active ? 'on' : 'off'}">${s.active ? 'active' : 'off'}</span></h2>
               <span class="muted">v${s.version} · ${s.slide_count} slide(s) · watched ${s.views} time(s)
               ${s.source_file ? `· from ${esc(s.source_file)}` : ''}</span>
               ${s.render_mode === 'rebuilt'
@@ -696,6 +698,14 @@
     modal(existing ? 'Deck settings' : 'New induction deck', `
       <label class="field"><span>Name</span><input class="input" id="dk-name" value="${esc(existing ? existing.name : 'Site induction')}"></label>
       <label class="field"><span>Description</span><input class="input" id="dk-desc" value="${esc(existing ? existing.description || '' : '')}"></label>
+      <label class="field" style="max-width:16rem"><span>Language</span>
+        <select class="input" id="dk-lang">
+          <option value="en" ${!existing || existing.language !== 'es' ? 'selected' : ''}>English</option>
+          <option value="es" ${existing && existing.language === 'es' ? 'selected' : ''}>Español</option>
+        </select>
+        <span class="muted">Upload the deck once per language. The kiosk shows the one matching the language chosen on
+          screen, and falls back to English when there is no Spanish deck. Watching either language counts as having
+          watched the induction.</span></label>
       <span class="muted">Show to these visitor types</span>
       <div class="form-grid" style="margin:.5rem 0 1rem">
         ${categories().map(([t, label]) => `<label class="check"><input type="checkbox" data-type="${t}" ${req.includes(t) ? 'checked' : ''}> ${label}</label>`).join('')}
@@ -716,6 +726,7 @@
           required_for: $$('[data-type]', bg).filter((c) => c.checked).map((c) => c.dataset.type),
           repeat_after_days: Number($('#dk-repeat', bg).value) || null,
           min_seconds_per_slide: Number($('#dk-min', bg).value) || 0,
+          language: $('#dk-lang', bg).value,
           active: $('#dk-active', bg).checked
         };
         if (existing) await api(`/slideshows/${existing.id}`, { method: 'PATCH', body });

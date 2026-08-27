@@ -223,6 +223,13 @@ Who has to watch it:
   "repeat after N days", or if you tick "show it every visit".
 - Reset one person from **Visitor registry → Open → Reset induction**.
 
+A deck is uploaded once per language: set **Language** in the deck's settings and upload the English
+and Spanish PowerPoints as two decks assigned to the same visitor types. The kiosk plays the one
+matching the language chosen on screen — switching language even at the last moment switches the
+deck — and falls back to English where no Spanish deck exists. Watching either language counts as
+having watched the induction, so nobody sits through the same content twice in translation; bumping a
+deck's version still brings back everyone who watched that deck.
+
 Set "minimum seconds per slide" (in each deck's settings) if you need proof that people actually read
 it — Next shows a countdown and only unlocks once the time is up, on every slide. A slide already sat
 through stays unlocked, so going back to re-read an earlier one costs nothing, and "Watch again" after

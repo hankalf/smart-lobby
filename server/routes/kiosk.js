@@ -18,13 +18,25 @@ const lower = (s) => String(s || '').trim().toLowerCase();
 // Stored numbers may contain spaces, dashes or brackets; compare on digits only.
 const PHONE_NORM_SQL = "replace(replace(replace(replace(phone, char(32), ''), '-', ''), '(', ''), ')', '')";
 
-function activeSlideshowFor(visitType) {
-  const shows = all('SELECT * FROM slideshows WHERE active = 1 ORDER BY id');
-  return shows.find((s) => {
+/** Every active deck assigned to this visitor type, in every language. */
+function slideshowsFor(visitType) {
+  return all('SELECT * FROM slideshows WHERE active = 1 ORDER BY id').filter((s) => {
     let list = [];
     try { list = JSON.parse(s.required_for); } catch { list = []; }
     return !list.length || list.includes(visitType);
-  }) || null;
+  });
+}
+
+/**
+ * The deck to show: the one in the language on the kiosk's screen, the English
+ * one when no translation has been uploaded, and whatever exists as a last
+ * resort — a site with only a Spanish deck still shows it to everyone.
+ */
+function activeSlideshowFor(visitType, language) {
+  const shows = slideshowsFor(visitType);
+  return shows.find((s) => (s.language || 'en') === (language === 'es' ? 'es' : 'en'))
+    || shows.find((s) => (s.language || 'en') === 'en')
+    || shows[0] || null;
 }
 
 function slidesFor(showId) {
@@ -32,25 +44,31 @@ function slidesFor(showId) {
 }
 
 /** Has this person already seen the current version of the induction? */
-function inductionStatus(visitor, visitType) {
+function inductionStatus(visitor, visitType, language) {
   const cfg = settings.getSection('induction');
   if (!cfg.enabled) return { required: false, slideshow: null };
-  const show = activeSlideshowFor(visitType);
+  const show = activeSlideshowFor(visitType, language);
   if (!show) return { required: false, slideshow: null };
   const slides = slidesFor(show.id);
   if (!slides.length) return { required: false, slideshow: null };
 
+  /*
+   * "Already watched" counts a completion of the deck in either language: the
+   * English and Spanish uploads are the same induction, and someone who sat
+   * through one is not made to sit through its translation. Each variant is
+   * checked against its own current version, so bumping one still brings
+   * everyone who watched it back in.
+   */
   let required = true;
   if (visitor && !cfg.show_to_returning_visitors) {
-    const seen = get(`SELECT * FROM slide_views WHERE visitor_id = ? AND slideshow_id = ? AND completed_at IS NOT NULL
-                      ORDER BY completed_at DESC LIMIT 1`, visitor.id, show.id);
-    if (seen && Number(seen.slideshow_version) === Number(show.version)) {
-      const repeatDays = Number(show.repeat_after_days || cfg.repeat_after_days || 0);
-      if (!repeatDays) required = false;
-      else {
-        const ageDays = (Date.now() - new Date(seen.completed_at).getTime()) / 864e5;
-        required = ageDays >= repeatDays;
-      }
+    const variants = slideshowsFor(visitType).filter((s) => slidesFor(s.id).length);
+    for (const variant of variants) {
+      const seen = get(`SELECT * FROM slide_views WHERE visitor_id = ? AND slideshow_id = ? AND completed_at IS NOT NULL
+                        ORDER BY completed_at DESC LIMIT 1`, visitor.id, variant.id);
+      if (!seen || Number(seen.slideshow_version) !== Number(variant.version)) continue;
+      const repeatDays = Number(variant.repeat_after_days || cfg.repeat_after_days || 0);
+      const ageDays = (Date.now() - new Date(seen.completed_at).getTime()) / 864e5;
+      if (!repeatDays || ageDays < repeatDays) { required = false; break; }
     }
   }
   return {
@@ -163,7 +181,8 @@ router.post('/lookup', (req, res) => {
   }
   if (!visitor && req.body.visitor_id) visitor = get('SELECT * FROM visitors WHERE id = ?', Number(req.body.visitor_id));
 
-  if (!visitor) return res.json({ found: false, induction: inductionStatus(null, visitType) });
+  const lang = req.body.language === 'es' ? 'es' : 'en';
+  if (!visitor) return res.json({ found: false, induction: inductionStatus(null, visitType, lang) });
   if (visitor.blocked) return res.status(403).json({ found: true, blocked: true, message: 'Please see reception.' });
 
   const openVisit = get("SELECT id, signed_in_at FROM visits WHERE visitor_id = ? AND status = 'onsite' ORDER BY id DESC LIMIT 1", visitor.id);
@@ -179,7 +198,7 @@ router.post('/lookup', (req, res) => {
       last_visit_at: visitor.last_visit_at
     },
     already_onsite: openVisit || null,
-    induction: inductionStatus(visitor, visitType)
+    induction: inductionStatus(visitor, visitType, lang)
   });
 });
 
@@ -187,7 +206,7 @@ router.post('/induction', (req, res) => {
   const visitType = clean(req.body.visit_type) || 'visitor';
   const visitorId = req.body.visitor_id ? Number(req.body.visitor_id) : null;
   const visitor = visitorId ? get('SELECT * FROM visitors WHERE id = ?', visitorId) : null;
-  res.json(inductionStatus(visitor, visitType));
+  res.json(inductionStatus(visitor, visitType, req.body.language === 'es' ? 'es' : 'en'));
 });
 
 router.get('/agreement/:visitType', (req, res) => {

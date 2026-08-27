@@ -360,6 +360,9 @@ function migrate() {
   addColumn('agreements', 'body_es', 'TEXT');
   // Which registered printer sits beside this tablet.
   addColumn('devices', 'printer_id', 'INTEGER REFERENCES printers(id) ON DELETE SET NULL');
+  // An induction deck is uploaded per language; the kiosk serves the one
+  // matching the language chosen on screen.
+  addColumn('slideshows', 'language', "TEXT NOT NULL DEFAULT 'en'");
 }
 
 function addColumn(table, column, definition) {

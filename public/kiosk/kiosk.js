@@ -718,7 +718,7 @@
     if (direct) {
       state.visitType = direct.key;
       await loadAgreement();
-      state.induction = await api('/induction', { visit_type: direct.key }).catch(() => state.induction);
+      state.induction = await api('/induction', { visit_type: direct.key, language: state.lang }).catch(() => state.induction);
       return setScreen('identify');
     }
     if (action === 'signin') {
@@ -771,7 +771,7 @@
     // Name typed: offer the matches so they can pick themselves.
     if (!isEmail && looksLikeName(value) && state.cfg.kiosk.lookup_by_name) {
       const box = $('#identify-matches');
-      const r = await api('/lookup', { name: value, visit_type: state.visitType }).catch(() => ({ matches: [] }));
+      const r = await api('/lookup', { name: value, visit_type: state.visitType, language: state.lang }).catch(() => ({ matches: [] }));
       if (r.too_short) {
         box.innerHTML = `<p class="muted">${state.lang === 'es'
           ? 'Escriba al menos tres letras de su nombre.' : 'Type at least three letters of your name.'}</p>`;
@@ -789,7 +789,8 @@
     try {
       const r = await api('/lookup', {
         [isEmail ? 'email' : 'phone']: value,
-        visit_type: state.visitType
+        visit_type: state.visitType,
+        language: state.lang
       });
       // Several people share this number or address: ask who they are before
       // anything is prefilled, so nobody continues as somebody else.
@@ -853,7 +854,7 @@
 
   async function pickReturningVisitor(visitorId) {
     try {
-      const r = await api('/lookup', { visitor_id: visitorId, visit_type: state.visitType });
+      const r = await api('/lookup', { visitor_id: visitorId, visit_type: state.visitType, language: state.lang });
       $('#identify-matches').innerHTML = '';
       if (r.found && r.visitor) {
         state.visitor = r.visitor;
@@ -871,7 +872,7 @@
   }
 
   $('#identify-skip').addEventListener('click', async () => {
-    try { state.induction = await api('/induction', { visit_type: state.visitType }); } catch { /* ignore */ }
+    try { state.induction = await api('/induction', { visit_type: state.visitType, language: state.lang }); } catch { /* ignore */ }
     startFlow();
   });
 
@@ -998,7 +999,7 @@
 
     if (!state.visitor) {
       try {
-        state.induction = await api('/induction', { visit_type: state.visitType });
+        state.induction = await api('/induction', { visit_type: state.visitType, visitor_id: state.visitor ? state.visitor.id : null, language: state.lang });
       } catch { /* keep whatever we have */ }
     }
     nextStep();
@@ -1018,7 +1019,7 @@
     nextStep();
   }
 
-  function nextStep() {
+  async function nextStep() {
     state.flowIndex += 1;
     const step = state.flow[state.flowIndex];
     if (!step) return submitSignIn();
@@ -1040,6 +1041,17 @@
     }
 
     if (step === 'induction') {
+      // The deck was picked when the visitor was looked up, but the language may
+      // have been switched since — ask again now, so the deck that plays is the
+      // one in the language on screen. If the server cannot be reached the
+      // earlier answer stands.
+      try {
+        state.induction = await api('/induction', {
+          visit_type: state.visitType,
+          visitor_id: state.visitor ? state.visitor.id : null,
+          language: state.lang
+        });
+      } catch { /* keep the prefetched deck */ }
       const show_ = state.induction && state.induction.slideshow;
       const needed = state.induction && state.induction.required && show_ && show_.slides && show_.slides.length;
       if (!needed) return nextStep();
