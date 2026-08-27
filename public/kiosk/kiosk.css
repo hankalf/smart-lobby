@@ -3,6 +3,13 @@ body { background: var(--bg); }
 
 #app { height: 100vh; height: 100dvh; }
 
+/* Nothing is shown until the configuration has been applied: the page's own
+   defaults — the stock welcome text, a "Touch to start" a site may have turned
+   off — must never flash before the real screen replaces them. The toast lives
+   outside the app, so "cannot reach the server" still shows on a blank page. */
+body:not(.cfg-ready) #app,
+body:not(.cfg-ready) .lang-toggle { visibility: hidden; }
+
 .screen {
   position: absolute;
   inset: 0;

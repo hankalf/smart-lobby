@@ -448,6 +448,10 @@
     state.configRev = state.cfg.config_rev;
     state.lang = state.cfg.kiosk.default_language === 'es' ? 'es' : 'en';
     applyConfig();
+    // Only now is the screen the one this site and device actually configured.
+    document.body.classList.add('cfg-ready');
+    $('#app').style.visibility = '';
+    $('#lang-toggle').style.visibility = '';
     if (!state.deviceToken) ping();
     setInterval(ping, 20000); // also how quickly a dashboard change reaches the kiosk
     setInterval(refreshCount, 60000);

@@ -16,9 +16,12 @@
 <div id="bg-stage" aria-hidden="true"><div id="bg-scrim"></div></div>
 
 <!-- Language switch, present on every screen when Spanish is enabled -->
-<button id="lang-toggle" class="lang-toggle hidden" type="button" aria-label="Cambiar idioma">Español</button>
+<!-- Both start hidden inline — style attributes hold even before the stylesheet
+     has loaded — and the script reveals them once the configuration is applied,
+     so the page's own defaults never flash before the real screen. -->
+<button id="lang-toggle" class="lang-toggle hidden" style="visibility:hidden" type="button" aria-label="Cambiar idioma">Español</button>
 
-<div id="app">
+<div id="app" style="visibility:hidden">
 
   <!-- IDLE ------------------------------------------------------------- -->
   <section class="screen idle" data-screen="idle">
