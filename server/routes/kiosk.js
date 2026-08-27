@@ -79,12 +79,15 @@ function defaultSite() {
 router.get('/config', (req, res) => {
   const site = defaultSite();
   const pub = settings.publicSettings();
-  const agreements = all('SELECT id, name, body, version, required_for FROM agreements WHERE active = 1');
+  const agreements = all('SELECT id, name, name_es, body, body_es, version, required_for FROM agreements WHERE active = 1');
   const inductions = all('SELECT id, name, version, required_for FROM slideshows WHERE active = 1');
   res.json({
     ...pub,
     site,
     sites: all('SELECT id, name FROM sites WHERE active = 1 ORDER BY name'),
+    // Both wordings go down, so switching language on the kiosk does not need
+    // another round trip to the server.
+    projects: all('SELECT id, name, name_es, code FROM projects WHERE active = 1 ORDER BY name'),
     agreements,
     has_induction: inductions.length > 0,
     onsite_count: accessCtl.occupancy(site ? site.id : null),
@@ -193,6 +196,20 @@ router.post('/signin', async (req, res) => {
     if (fields.reference === 'required' && !clean(b.reference)) return res.status(400).json({ error: 'reference_required' });
     if (fields.movement === 'required' && !clean(b.movement)) return res.status(400).json({ error: 'movement_required' });
 
+    /*
+     * A project has to be one of the live ones, not whatever id was posted:
+     * this is an unauthenticated endpoint, and a closed job must not quietly
+     * gain someone on site.
+     */
+    let project = null;
+    if (fields.project !== 'off' && b.project_id) {
+      project = get('SELECT * FROM projects WHERE id = ? AND active = 1', Number(b.project_id));
+      if (!project) return res.status(400).json({ error: 'unknown_project' });
+    }
+    if (fields.project === 'required' && !project) return res.status(400).json({ error: 'project_required' });
+
+    const language = b.language === 'es' ? 'es' : 'en';
+
     const site = b.site_id ? get('SELECT * FROM sites WHERE id = ?', Number(b.site_id)) : defaultSite();
 
     let visitor = b.visitor_id ? get('SELECT * FROM visitors WHERE id = ?', Number(b.visitor_id)) : null;
@@ -223,12 +240,14 @@ router.post('/signin', async (req, res) => {
 
     const visitRes = run(`INSERT INTO visits
       (site_id, visitor_id, host_id, visit_type, purpose, vehicle_reg, badge_no, checkout_code, photo_path,
-       induction_shown, signed_in_at, status, device_id, location_id, reference, movement, created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,'onsite',?,?,?,?,?)`,
+       induction_shown, signed_in_at, status, device_id, location_id, reference, movement, project_id,
+       language, created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,'onsite',?,?,?,?,?,?,?)`,
       site ? site.id : null, visitor.id, b.host_id ? Number(b.host_id) : null, visitType,
       clean(b.purpose) || null, (clean(b.vehicle_reg) || '').toUpperCase() || null, badgeNo, code, photoPath,
       b.induction_completed ? 1 : 0, nowISO(), device ? device.id : null,
-      device ? device.location_id : null, clean(b.reference) || null, clean(b.movement) || null, nowISO());
+      device ? device.location_id : null, clean(b.reference) || null, clean(b.movement) || null,
+      project ? project.id : null, language, nowISO());
     const visitId = Number(visitRes.lastInsertRowid);
 
     // One row per document signed, each with the answers given to its questions.
@@ -242,9 +261,13 @@ router.post('/signin', async (req, res) => {
         : activeAgreementFor(visitType);
       const sigPath = files.saveDataUrl(doc.signature, 'private', 'signatures');
       const answers = doc.answers && typeof doc.answers === 'object' ? JSON.stringify(doc.answers) : null;
-      run(`INSERT INTO signatures (visit_id, agreement_id, agreement_version, signed_name, signature_path, answers, signed_at)
-           VALUES (?,?,?,?,?,?,?)`,
-        visitId, agreement ? agreement.id : null, agreement ? agreement.version : null, fullName, sigPath, answers, nowISO());
+      // The language goes on the signature as well as the visit: it records
+      // which wording of the document this particular name was signed against.
+      run(`INSERT INTO signatures (visit_id, agreement_id, agreement_version, signed_name, signature_path, answers,
+                                   language, signed_at)
+           VALUES (?,?,?,?,?,?,?,?)`,
+        visitId, agreement ? agreement.id : null, agreement ? agreement.version : null, fullName, sigPath, answers,
+        language, nowISO());
     }
 
     // Induction completion
@@ -259,9 +282,11 @@ router.post('/signin', async (req, res) => {
       }
     }
 
-    const visit = get(`SELECT v.*, p.full_name, p.company, h.name AS host_name, s.name AS site_name
+    const visit = get(`SELECT v.*, p.full_name, p.company, h.name AS host_name, s.name AS site_name,
+                              j.name AS project_name, j.name_es AS project_name_es
                        FROM visits v JOIN visitors p ON p.id = v.visitor_id
                        LEFT JOIN hosts h ON h.id = v.host_id LEFT JOIN sites s ON s.id = v.site_id
+                       LEFT JOIN projects j ON j.id = v.project_id
                        WHERE v.id = ?`, visitId);
 
     notify.notifyArrival(visitId).catch(() => {});

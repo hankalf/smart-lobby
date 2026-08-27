@@ -293,6 +293,21 @@ function migrate() {
     created_at TEXT NOT NULL
   );
 
+  /*
+   * The jobs a contractor can be on site for. Kept as a list the site manages
+   * rather than free text, so "Mill Road" and "mill rd" do not both appear in
+   * a report of who was where.
+   */
+  CREATE TABLE IF NOT EXISTS projects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site_id INTEGER REFERENCES sites(id) ON DELETE SET NULL,
+    name TEXT NOT NULL,
+    name_es TEXT,
+    code TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS sessions (
     token TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -316,6 +331,14 @@ function migrate() {
   addColumn('agreements', 'questions', 'TEXT');
   addColumn('agreements', 'require_signature', 'INTEGER NOT NULL DEFAULT 1');
   addColumn('signatures', 'answers', 'TEXT');
+  addColumn('visits', 'project_id', 'INTEGER REFERENCES projects(id) ON DELETE SET NULL');
+  // Which language the kiosk was in when they signed. Worth keeping: it says
+  // which wording of a safety document the signature at the bottom belongs to.
+  addColumn('visits', 'language', "TEXT NOT NULL DEFAULT 'en'");
+  addColumn('signatures', 'language', "TEXT NOT NULL DEFAULT 'en'");
+  // The Spanish wording of documents an admin writes, alongside the English.
+  addColumn('agreements', 'name_es', 'TEXT');
+  addColumn('agreements', 'body_es', 'TEXT');
 }
 
 function addColumn(table, column, definition) {

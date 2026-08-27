@@ -17,6 +17,11 @@ const DEFAULTS = {
     welcome_title: 'Welcome',
     welcome_message: 'Please tap below to sign in',
     goodbye_message: 'Thanks for visiting. Have a safe journey.',
+    // The Spanish wording of the three lines above. Left empty, the kiosk shows
+    // the English one rather than a blank screen.
+    welcome_title_es: '',
+    welcome_message_es: '',
+    goodbye_message_es: '',
     timezone: 'Europe/London',
     date_format: 'en-GB',
     phone_country: 'US'
@@ -24,12 +29,14 @@ const DEFAULTS = {
   // What the "Your details" form asks, per visitor type. Each field is
   // off / optional / required, so an interview need not ask why they are here.
   details: {
-    visitor: { photo: 'required', company: 'optional', phone: 'required', email: 'off', staff: 'required', purpose: 'optional', vehicle: 'off', reference: 'off', movement: 'off' },
-    contractor: { photo: 'required', company: 'required', phone: 'required', email: 'off', staff: 'required', purpose: 'optional', vehicle: 'optional', reference: 'off', movement: 'off' },
-    interview: { photo: 'required', company: 'off', phone: 'required', email: 'optional', staff: 'required', purpose: 'off', vehicle: 'off', reference: 'off', movement: 'off' },
+    visitor: { photo: 'required', company: 'optional', phone: 'required', email: 'off', staff: 'required', purpose: 'optional', vehicle: 'off', reference: 'off', movement: 'off', project: 'off' },
+    // A contractor is here for a job, not a person: the project they are working
+    // on is what matters, and no vehicle is asked for.
+    contractor: { photo: 'required', company: 'required', phone: 'required', email: 'off', staff: 'off', purpose: 'off', vehicle: 'off', reference: 'off', movement: 'off', project: 'required' },
+    interview: { photo: 'required', company: 'off', phone: 'required', email: 'optional', staff: 'required', purpose: 'off', vehicle: 'off', reference: 'off', movement: 'off', project: 'off' },
     // A driver at a warehouse gate: the haulier, the vehicle and the paperwork
     // matter; who they are visiting usually does not.
-    driver: { photo: 'optional', company: 'required', phone: 'required', email: 'off', staff: 'off', purpose: 'off', vehicle: 'required', reference: 'required', movement: 'required' }
+    driver: { photo: 'optional', company: 'required', phone: 'required', email: 'off', staff: 'off', purpose: 'off', vehicle: 'required', reference: 'required', movement: 'required', project: 'off' }
   },
   /*
    * The order the sign-in steps are asked in, per visitor type. Finding the
@@ -54,8 +61,17 @@ const DEFAULTS = {
     visit_types: ['visitor', 'contractor', 'interview'],
     welcome_shows_menu: true,
     show_interview_button: true,
+    show_contractor_button: false,
     show_driver_button: false,
     show_delivery_button: true,
+    /*
+     * Offering Spanish puts a language button on every screen. The kiosk's own
+     * wording is translated in the app; anything an admin typed — document
+     * questions, project names, the welcome lines — shows its Spanish version
+     * when one has been filled in, and the English otherwise.
+     */
+    spanish_enabled: false,
+    default_language: 'en',
     show_onsite_count: false,
     idle_timeout_seconds: 90,
     returning_lookup_field: 'phone',
@@ -90,7 +106,8 @@ const DEFAULTS = {
     show_to_returning_visitors: false,
     repeat_after_days: 0,
     require_acknowledgement: true,
-    acknowledgement_text: 'I confirm I have watched and understood the site induction.'
+    acknowledgement_text: 'I confirm I have watched and understood the site induction.',
+    acknowledgement_text_es: ''
   },
   deliveries: {
     enabled: true,
@@ -163,8 +180,24 @@ const DETAIL_FIELDS = [
   ['purpose', 'Reason for visit'],
   ['vehicle', 'Vehicle registration'],
   ['reference', 'Load or order reference'],
-  ['movement', 'Pick-Up or Delivery']
+  ['movement', 'Pick-Up or Delivery'],
+  ['project', 'Project']
 ];
+
+/** The languages the kiosk can be shown in. */
+const LANGUAGES = [['en', 'English'], ['es', 'Español']];
+
+/**
+ * Picks the wording for a language, falling back to English whenever the
+ * translation has not been filled in. A half-translated site should read oddly,
+ * never blankly.
+ */
+function inLanguage(row, field, lang) {
+  if (!row) return '';
+  const translated = lang && lang !== 'en' ? row[`${field}_${lang}`] : null;
+  const value = translated && String(translated).trim() ? translated : row[field];
+  return value == null ? '' : value;
+}
 
 /** The form configuration for one visitor type, falling back to the visitor one. */
 function fieldsFor(visitType) {
@@ -295,4 +328,4 @@ function publicSettings() {
 
 module.exports = { DEFAULTS, getAll, getSection, setSection, setAll, publicSettings, deepMerge,
   isValidTimeZone, isValidLocale, PHONE_COUNTRIES, phoneCountry, DETAIL_FIELDS, fieldsFor,
-  FLOW_STEPS, flowFor, configRev, bumpConfigRev };
+  FLOW_STEPS, flowFor, configRev, bumpConfigRev, LANGUAGES, inLanguage };

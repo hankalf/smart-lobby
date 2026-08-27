@@ -284,9 +284,11 @@ router.get('/visits', (req, res) => {
   if (type) { where.push('v.visit_type = ?'); params.push(type); }
   if (q) { where.push('(lower(p.full_name) LIKE ? OR lower(p.company) LIKE ? OR lower(h.name) LIKE ?)');
     params.push(`%${String(q).toLowerCase()}%`, `%${String(q).toLowerCase()}%`, `%${String(q).toLowerCase()}%`); }
-  const sql = `SELECT v.*, p.full_name, p.company, p.phone, p.email, h.name AS host_name, s.name AS site_name
+  const sql = `SELECT v.*, p.full_name, p.company, p.phone, p.email, h.name AS host_name, s.name AS site_name,
+                      j.name AS project_name
                FROM visits v JOIN visitors p ON p.id = v.visitor_id
                LEFT JOIN hosts h ON h.id = v.host_id LEFT JOIN sites s ON s.id = v.site_id
+               LEFT JOIN projects j ON j.id = v.project_id
                ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
                ORDER BY v.signed_in_at DESC LIMIT ?`;
   const rows = all(sql, ...params, Number(req.query.limit) || 500);
@@ -294,6 +296,7 @@ router.get('/visits', (req, res) => {
     const body = csv(rows, [
       { label: 'Name', key: 'full_name' }, { label: 'Company', key: 'company' }, { label: 'Phone', key: 'phone' },
       { label: 'Email', key: 'email' }, { label: 'Type', key: 'visit_type' }, { label: 'Purpose', key: 'purpose' },
+      { label: 'Project', key: 'project_name' },
       { label: 'Staff member', key: 'host_name' }, { label: 'Badge', key: 'badge_no' }, { label: 'Vehicle', key: 'vehicle_reg' },
       { label: 'Reference', key: 'reference' }, { label: 'Pick-Up / Delivery', key: 'movement' },
       { label: 'Signed in', key: 'signed_in_at' }, { label: 'Signed out', key: 'signed_out_at' },
@@ -308,10 +311,12 @@ router.get('/visits', (req, res) => {
 
 router.get('/visits/:id', (req, res) => {
   const visit = get(`SELECT v.*, p.full_name, p.company, p.phone, p.email, p.photo_path AS profile_photo,
-                            h.name AS host_name, s.name AS site_name, l.name AS location_name, d.name AS device_name
+                            h.name AS host_name, s.name AS site_name, l.name AS location_name, d.name AS device_name,
+                            j.name AS project_name
                      FROM visits v JOIN visitors p ON p.id = v.visitor_id
                      LEFT JOIN hosts h ON h.id = v.host_id LEFT JOIN sites s ON s.id = v.site_id
                      LEFT JOIN locations l ON l.id = v.location_id
+                     LEFT JOIN projects j ON j.id = v.project_id
                      LEFT JOIN devices d ON d.id = v.device_id WHERE v.id = ?`, req.params.id);
   if (!visit) return res.status(404).json({ error: 'not_found' });
   visit.signatures = all(`SELECT sg.*, a.name AS agreement_name, a.questions AS agreement_questions
@@ -419,7 +424,8 @@ function crud(resource, table, fields) {
 
 crud('staff', 'hosts', ['site_id', 'name', 'email', 'phone', 'department', 'webhook_url', 'active']);
 crud('sites', 'sites', ['name', 'address', 'max_occupancy', 'active']);
-crud('agreements', 'agreements', ['name', 'body', 'version', 'required_for', 'questions', 'require_signature', 'active']);
+crud('agreements', 'agreements', ['name', 'body', 'name_es', 'body_es', 'version', 'required_for', 'questions',
+  'require_signature', 'active']);
 crud('access-points', 'access_points', ['site_id', 'name', 'kind', 'url', 'method', 'headers', 'body',
   'unlock_seconds', 'auto_unlock_on_signin', 'auto_unlock_on_signout', 'enabled', 'notes']);
 
@@ -551,6 +557,59 @@ router.patch('/locations/:id', (req, res) => {
 router.delete('/locations/:id', (req, res) => {
   run('DELETE FROM locations WHERE id = ?', req.params.id);
   audit(req, 'delete', 'location', Number(req.params.id));
+  res.json({ ok: true });
+});
+
+/* -------------------------------------------------------------- projects */
+
+/**
+ * The jobs contractors sign in against. Each carries how many people are on it
+ * right now, so a project cannot be deleted without seeing who is still on site.
+ */
+router.get('/projects', (req, res) => {
+  res.json(all(`SELECT p.*, s.name AS site_name,
+                  (SELECT COUNT(*) FROM visits v WHERE v.project_id = p.id AND v.status = 'onsite') AS onsite,
+                  (SELECT COUNT(*) FROM visits v WHERE v.project_id = p.id) AS visits_total
+                FROM projects p LEFT JOIN sites s ON s.id = p.site_id
+                ORDER BY p.active DESC, p.name`));
+});
+
+router.post('/projects', (req, res) => {
+  const b = req.body || {};
+  if (!clean(b.name)) return res.status(400).json({ error: 'name_required' });
+  const r = run('INSERT INTO projects (site_id, name, name_es, code, active, created_at) VALUES (?,?,?,?,?,?)',
+    b.site_id || null, clean(b.name), clean(b.name_es) || null, clean(b.code) || null,
+    b.active === false ? 0 : 1, nowISO());
+  settings.bumpConfigRev();
+  audit(req, 'create', 'project', Number(r.lastInsertRowid), b);
+  res.json(get('SELECT * FROM projects WHERE id = ?', r.lastInsertRowid));
+});
+
+router.patch('/projects/:id', (req, res) => {
+  const b = req.body || {};
+  const fields = ['site_id', 'name', 'name_es', 'code', 'active'];
+  const cols = fields.filter((f) => b[f] !== undefined);
+  if (cols.length) {
+    run(`UPDATE projects SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`,
+      ...cols.map((c) => (typeof b[c] === 'boolean' ? (b[c] ? 1 : 0) : b[c])), req.params.id);
+  }
+  settings.bumpConfigRev();
+  audit(req, 'update', 'project', Number(req.params.id), b);
+  res.json(get('SELECT * FROM projects WHERE id = ?', req.params.id));
+});
+
+/*
+ * Visits keep their project through ON DELETE SET NULL, which would quietly
+ * empty the project column of every past visit. Closing a finished job is what
+ * is usually meant, so deleting one that has any history is refused and the
+ * caller is told to make it inactive instead.
+ */
+router.delete('/projects/:id', (req, res) => {
+  const used = get('SELECT COUNT(*) AS n FROM visits WHERE project_id = ?', req.params.id).n;
+  if (used) return res.status(409).json({ error: 'project_in_use', visits: used });
+  run('DELETE FROM projects WHERE id = ?', req.params.id);
+  settings.bumpConfigRev();
+  audit(req, 'delete', 'project', Number(req.params.id));
   res.json({ ok: true });
 });
 

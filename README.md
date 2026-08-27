@@ -115,6 +115,10 @@ The home screen is built from sections:
 - **Sign out** — matches appear from the first letter typed, by first name, last name or phone number, each with
   the photo taken at sign-in so people pick themselves out at a glance. Photos stay behind the admin login:
   the kiosk gets a short-lived signed link that only works for that visit, only while they are on site.
+- **Contractor** — straight into a contractor sign-in with no card picker in between: name, company,
+  phone, and the **project** they are on, picked from the list managed on the Projects tab. No vehicle
+  is asked for. Their documents and the induction deck follow as usual. Switchable in
+  **Settings → Kiosk sign-in flow → Sections**.
 - **Interview** — candidates arriving to meet the hiring team, recorded as an interview visit without
   them choosing a visit type.
 - **Driver** — truck drivers at a warehouse. Asks for the haulier, vehicle registration, load or order
@@ -124,6 +128,30 @@ The home screen is built from sections:
 
 The sections can sit straight on the home screen, or behind a "Touch to start" button
 (**Settings → Kiosk sign-in flow**). Background photos show behind both.
+
+### Spanish
+
+Switch on **Settings → Kiosk sign-in flow → Language → Offer Spanish** and an **Español** button sits on
+every kiosk screen; the kiosk can also start in Spanish by default. The kiosk's own wording — buttons,
+prompts, field labels, error messages — is translated in the app. Everything an admin types carries an
+optional Spanish box beside it: the welcome lines in Branding, each document's title and body, every
+question and its choices, custom field wording, project names, and the induction confirmation line.
+A box left empty falls back to English, so a half-translated site reads oddly rather than blankly.
+
+Switching language mid-flow keeps everything already typed, answered and signed. Each visit records the
+language it was made in, and each signed document records the language that was on screen when it was
+signed — so it is always known which wording of a safety document a signature belongs to. Answers to
+yes/no and multiple-choice questions are stored in English regardless of the language on screen, so
+reports read the same either way. The language goes back to the site default when the kiosk returns to
+the welcome screen.
+
+### Projects
+
+**Projects** (its own tab) is the list of jobs a contractor can be on site for. Each has a name, an
+optional Spanish name, and an optional short code. Contractors pick one at sign-in — the project is on
+the visit record, the Visits CSV, and the Projects tab shows who is on each job right now. Close a
+finished job by editing it and switching **Active** off: it disappears from the kiosk but keeps its
+history. A project that has ever been signed in against cannot be deleted, only closed.
 
 - Recognises returning visitors by phone number, email, or name — one box takes any of them. Typing a
   name offers the matches to pick from, showing only a name and company, never a phone number or email.
@@ -155,6 +183,7 @@ The sections can sit straight on the home screen, or behind a "Touch to start" b
 | Staff | People visitors ask for, each with their own email, mobile and chat webhook. Bulk import from Excel or CSV |
 | Access & doors | HTTP-controlled doors, test unlock, unlock audit trail |
 | Locations | Areas within a site — reception, yard gate, workshop entrance — with device and on-site counts |
+| Projects | The jobs contractors sign in against, with Spanish names, codes, and who is on each right now |
 | Devices | Every tablet: name, location, default camera, operational mode, per-device badge printing, which cards it shows and in what order, online status |
 | Reports | Visits per day, busiest hosts, top companies, arrival times, average time on site |
 | Settings | Branding (logo, kiosk background photo, colours, time zone), kiosk flow, badges, induction, deliveries, access, notifications, retention, users |

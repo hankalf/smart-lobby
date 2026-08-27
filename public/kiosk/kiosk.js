@@ -8,6 +8,7 @@
 
   const state = {
     cfg: null,
+    lang: 'en',
     screen: 'idle',
     history: [],
     visitType: 'visitor',
@@ -54,6 +55,217 @@
     return zoneSeen.use;
   };
 
+  /* ------------------------------------------------------------- language */
+
+  /*
+   * The kiosk's own wording, in Spanish. Anything an admin typed — documents,
+   * questions, project names, the welcome lines — is not in this table: those
+   * carry their own Spanish alongside the English, filled in on the dashboard,
+   * and fall back to English when the box was left empty.
+   */
+  const STRINGS = {
+    'Touch to start': 'Toque para comenzar',
+    'How can we help?': '¿Cómo podemos ayudarle?',
+    'Cancel': 'Cancelar',
+    'What brings you here today?': '¿Qué le trae por aquí hoy?',
+    'Back': 'Atrás',
+    'Have you visited us before?': '¿Nos ha visitado antes?',
+    'Continue': 'Continuar',
+    "I'm new here": 'Soy nuevo aquí',
+    'Your details': 'Sus datos',
+    'Full name': 'Nombre completo',
+    'Company': 'Empresa',
+    'Phone number': 'Número de teléfono',
+    'Mobile number': 'Número de celular',
+    'Email': 'Correo electrónico',
+    'Email address': 'Correo electrónico',
+    'Which member of staff are you here to see?': '¿A qué miembro del personal viene a ver?',
+    'Start typing a name…': 'Empiece a escribir un nombre…',
+    'Reason for visit': 'Motivo de la visita',
+    'Meeting, delivery, site works…': 'Reunión, entrega, obras…',
+    'Vehicle registration': 'Placa del vehículo',
+    'Load or order reference': 'Referencia de carga o pedido',
+    'Order, docket or PO number': 'Número de pedido u orden de compra',
+    'Pick-Up or Delivery': 'Recogida o entrega',
+    'Project': 'Proyecto',
+    '— choose a project —': '— elija un proyecto —',
+    '— choose —': '— elegir —',
+    'Pick-Up': 'Recogida',
+    'Delivery': 'Entrega',
+    'Both': 'Ambos',
+    'Photo for your badge': 'Foto para su credencial',
+    'Take photo': 'Tomar foto',
+    'Retake': 'Repetir',
+    'Looks good': 'Se ve bien',
+    'Open camera': 'Abrir cámara',
+    'Skip': 'Omitir',
+    'Site rules': 'Reglas del sitio',
+    'Please sign below': 'Firme a continuación, por favor',
+    'Clear': 'Borrar',
+    'I agree & continue': 'Acepto y continúo',
+    'I agree — next document': 'Acepto — siguiente documento',
+    'Next': 'Siguiente',
+    'Nearly done': 'Casi listo',
+    'Watch again': 'Ver de nuevo',
+    'I confirm': 'Confirmo',
+    'I confirm I have watched and understood the site induction.':
+      'Confirmo que he visto y entendido la inducción del sitio.',
+    "You're signed in": 'Ha registrado su entrada',
+    'Signed out': 'Salida registrada',
+    'Thanks for visiting.': 'Gracias por su visita.',
+    'Print badge': 'Imprimir credencial',
+    'Done': 'Listo',
+    'Sign in': 'Registrar entrada',
+    'Sign out': 'Registrar salida',
+    'Visitors & contractors': 'Visitantes y contratistas',
+    'Leaving site': 'Saliendo del sitio',
+    'Interview': 'Entrevista',
+    'Here to meet the hiring team': 'Viene a una entrevista',
+    'Driver': 'Conductor',
+    'Pick-up or delivery': 'Recogida o entrega',
+    'Courier drop-off': 'Entrega de paquetería',
+    'Request entry': 'Solicitar entrada',
+    'Unlock the door': 'Abrir la puerta',
+    'Contractor': 'Contratista',
+    'Working on site': 'Trabaja en el sitio',
+    'Visitor': 'Visitante',
+    'Yes': 'Sí',
+    'No': 'No',
+    'Start typing…': 'Empiece a escribir…',
+    '📷 Open the badge scanner': '📷 Abrir el escáner de credenciales',
+    'Close the scanner': 'Cerrar el escáner',
+    'Hold your badge up to the camera.': 'Acerque su credencial a la cámara.',
+    'Delivery drop-off': 'Entrega de paquetes',
+    'Your name': 'Su nombre',
+    'Courier company': 'Empresa de mensajería',
+    'Who is it for?': '¿Para quién es?',
+    'Number of parcels': 'Número de paquetes',
+    'Tracking number': 'Número de seguimiento',
+    'Photo of parcel': 'Foto del paquete',
+    'Log delivery': 'Registrar entrega',
+    'Delivery logged': 'Entrega registrada',
+    'The recipient has been notified. Thank you!': 'El destinatario ha sido avisado. ¡Gracias!',
+    'Reception has been notified.': 'Recepción ha sido avisada.',
+    'Please see reception.': 'Pase por recepción, por favor.',
+    'Sorry, something went wrong. Please see reception.': 'Algo salió mal. Pase por recepción, por favor.',
+    'Please enter your name.': 'Escriba su nombre, por favor.',
+    'Please enter a contact number.': 'Escriba un número de contacto, por favor.',
+    'Please enter an email address.': 'Escriba un correo electrónico, por favor.',
+    'Please enter your company.': 'Escriba su empresa, por favor.',
+    'Please choose who you are here to see.': 'Elija a quién viene a ver, por favor.',
+    'Please enter your vehicle registration.': 'Escriba la placa de su vehículo, por favor.',
+    'Please enter your load or order reference.': 'Escriba su referencia de carga o pedido, por favor.',
+    'Please choose whether this is a pick-up or a delivery.': 'Indique si es una recogida o una entrega, por favor.',
+    'Please choose your project.': 'Elija su proyecto, por favor.',
+    'Please sign in the box to continue': 'Firme en el recuadro para continuar, por favor',
+    'Door unlocked — please come in': 'Puerta abierta — adelante',
+    'Could not unlock the door': 'No se pudo abrir la puerta',
+    'Photo captured': 'Foto tomada',
+    'Your badge is printing…': 'Su credencial se está imprimiendo…',
+    'Tap “Print badge” to collect your badge.': 'Toque “Imprimir credencial” para recoger su credencial.',
+    'Badge found': 'Credencial encontrada',
+    'The scanner could not load. Please type your name instead.': 'El escáner no pudo cargarse. Escriba su nombre, por favor.',
+    'Hold your badge up to the camera, or type your name below.': 'Acerque su credencial a la cámara, o escriba su nombre abajo.',
+    'That is not a badge from this building.': 'Esa no es una credencial de este edificio.',
+    'Please tell us who the delivery is for.': 'Indique para quién es la entrega, por favor.',
+    'Could not log the delivery. Please see reception.': 'No se pudo registrar la entrega. Pase por recepción, por favor.',
+    'Could not sign out — please see reception.': 'No se pudo registrar la salida — pase por recepción.',
+    "Enter your {x} and we'll speed things up.": 'Escriba su {x} y agilizamos el proceso.',
+    "Enter your {x} or your name and we'll speed things up.": 'Escriba su {x} o su nombre y agilizamos el proceso.',
+    'First name, last name or {x}': 'Nombre, apellido o {x}',
+    'Search for yourself by first name, last name or {x}, then tap your name.':
+      'Búsquese por nombre, apellido o {x} y toque su nombre.',
+    '{x} or name': '{x} o nombre',
+    'name': 'nombre'
+  };
+
+  /** The kiosk's own wording in the language on screen; {x} fills a blank. */
+  function t(text, vars) {
+    let out = state.lang === 'es' ? (STRINGS[text] || text) : text;
+    if (vars) for (const [k, v] of Object.entries(vars)) out = out.replace(`{${k}}`, v);
+    return out;
+  }
+
+  /**
+   * Admin-typed content: the Spanish column when it is filled in and Spanish is
+   * on screen, the English otherwise. Never blank because a translation is
+   * missing — an untranslated document still has to be readable.
+   */
+  function inLang(row, field) {
+    if (!row) return '';
+    const es = state.lang === 'es' ? row[`${field}_es`] : null;
+    const value = es && String(es).trim() ? es : row[field];
+    return value == null ? '' : value;
+  }
+
+  /*
+   * The fixed wording in the page itself. Each element remembers the English it
+   * shipped with the first time it is translated, so the toggle can go back
+   * and forth without the words drifting.
+   */
+  const STATIC_TEXT = [
+    '#start-btn',
+    '[data-screen="menu"] .bar h2', '[data-screen="menu"] .bar button',
+    '[data-screen="type"] .bar h2', '[data-screen="type"] .bar button',
+    '#identify-title', '#identify-continue', '#identify-skip',
+    '[data-screen="identify"] .bar button',
+    '[data-screen="details"] .bar h2', '[data-screen="details"] .bar button',
+    '[data-screen="photo"] .bar h2', '[data-screen="photo"] .bar button',
+    '#btn-capture', '#btn-retake', '#btn-photo-continue', '#btn-photo-skip',
+    '[data-screen="agreement"] .bar button', '.sig-label', '#sig-clear',
+    '#deck-prev', '#deck-next',
+    '[data-screen="ack"] h2', '#ack-replay', '#ack-confirm',
+    '#btn-print-badge', '[data-screen="done"] [data-go="idle"]',
+    '[data-screen="signout"] .bar h2', '[data-screen="signout"] .bar button',
+    '#btn-scan', '#btn-scan-stop', '#scan-status',
+    '[data-screen="delivery"] .bar h2', '[data-screen="delivery"] .bar button',
+    '#d-capture', '#d-submit',
+    '[data-screen="delivery"] .field span', '#f-movement option'
+  ];
+  const STATIC_PLACEHOLDER = ['#f-host-search', '#d-host-search', '#f-purpose', '#f-reference', '#signout-q'];
+
+  function applyStaticLanguage() {
+    for (const sel of STATIC_TEXT) {
+      $$(sel).forEach((el) => {
+        if (!el.dataset.en) {
+          const text = el.textContent.trim();
+          if (!text) return;
+          el.dataset.en = text;
+        }
+        el.textContent = t(el.dataset.en);
+      });
+    }
+    for (const sel of STATIC_PLACEHOLDER) {
+      $$(sel).forEach((el) => {
+        if (!el.dataset.enPh) el.dataset.enPh = el.placeholder;
+        if (el.dataset.enPh) el.placeholder = t(el.dataset.enPh);
+      });
+    }
+    const openCamera = ['#btn-photo-native', '#d-native'];
+    for (const sel of openCamera) {
+      const el = $(sel);
+      if (!el) continue;
+      // The label wraps a hidden input, so only the text node is replaced.
+      const node = el.childNodes[0];
+      if (node && node.nodeType === Node.TEXT_NODE) node.textContent = t('Open camera');
+    }
+  }
+
+  /** Switch the words on screen, leaving everything typed so far alone. */
+  function setLanguage(lang) {
+    state.lang = lang === 'es' ? 'es' : 'en';
+    const btn = $('#lang-toggle');
+    // The button offers the language you would switch to, in that language.
+    btn.textContent = state.lang === 'es' ? 'English' : 'Español';
+    applyStaticLanguage();
+    if (state.cfg) applyConfig();
+    if (state.screen === 'details') applyDetailFields();
+    if (state.screen === 'agreement') showDocument(state.agreementIndex, { preserve: true });
+    if (state.screen === 'done' && state.lastResult) showDone(state.lastResult);
+  }
+
+  $('#lang-toggle').addEventListener('click', () => setLanguage(state.lang === 'es' ? 'en' : 'es'));
+
   async function api(path, body, opts = {}) {
     const res = await fetch(`/api/kiosk${path}`, {
       method: body ? 'POST' : 'GET',
@@ -84,7 +296,8 @@
   }
 
   function setScreen(name, { push = true } = {}) {
-    if (push && state.screen !== name) state.history.push(state.screen);
+    const changed = state.screen !== name;
+    if (push && changed) state.history.push(state.screen);
     state.screen = name;
     $$('.screen').forEach((s) => { s.hidden = s.dataset.screen !== name; });
     updateBackdrop();
@@ -94,7 +307,9 @@
     if (name === 'signout' && state.cfg && state.cfg.kiosk.qr_signout_enabled && !scannerDismissed) startScanner();
     if (name === 'idle') resetVisit();
     if (name === 'details') applyDetailFields();
-    if (name === 'agreement') sizeSignaturePad();
+    // Sizing the pad wipes any ink on it, so a re-render of the same screen —
+    // a language switch mid-document — must leave it alone.
+    if (name === 'agreement' && changed) sizeSignaturePad();
     resetIdleTimer();
     const focusable = document.querySelector(`.screen[data-screen="${name}"] input:not([type=hidden])`);
     if (focusable) setTimeout(() => focusable.focus(), 120);
@@ -113,6 +328,10 @@
   }
 
   function resetVisit() {
+    // The next person starts in the site's default language, not whichever one
+    // the last visitor happened to leave the kiosk in.
+    const defaultLang = state.cfg && state.cfg.kiosk.default_language === 'es' ? 'es' : 'en';
+    if (state.lang !== defaultLang) setLanguage(defaultLang);
     state.history = [];
     state.visitor = null;
     state.agreements = [];
@@ -131,7 +350,8 @@
     state.flowIndex = -1;
     scannerDismissed = false;
     ['#f-name', '#f-company', '#f-phone', '#f-email', '#f-host-search', '#f-host-id', '#f-purpose', '#f-vehicle',
-     '#f-reference', '#f-movement', '#identify-value', '#signout-q', '#d-name', '#d-company', '#d-host-search', '#d-host-id', '#d-tracking'].forEach((s) => {
+     '#f-reference', '#f-movement', '#f-project', '#identify-value', '#signout-q', '#d-name', '#d-company',
+     '#d-host-search', '#d-host-id', '#d-tracking'].forEach((s) => {
       const el = $(s); if (el) el.value = '';
     });
     $('#d-count').value = '1';
@@ -188,6 +408,7 @@
       return setTimeout(boot, 5000);
     }
     state.configRev = state.cfg.config_rev;
+    state.lang = state.cfg.kiosk.default_language === 'es' ? 'es' : 'en';
     applyConfig();
     ping();
     setInterval(ping, 20000); // also how quickly a dashboard change reaches the kiosk
@@ -198,8 +419,12 @@
     const { org, kiosk, deliveries, access } = state.cfg;
     document.documentElement.style.setProperty('--brand', org.primary_color || '#2f7d5d');
     document.documentElement.style.setProperty('--brand-dark', org.accent_color || '#123a2c');
-    $('#idle-title').textContent = org.welcome_title || 'Welcome';
-    $('#idle-message').textContent = org.welcome_message || '';
+
+    show($('#lang-toggle'), !!kiosk.spanish_enabled);
+    $('#lang-toggle').textContent = state.lang === 'es' ? 'English' : 'Español';
+    applyStaticLanguage();
+    $('#idle-title').textContent = inLang(org, 'welcome_title') || 'Welcome';
+    $('#idle-message').textContent = inLang(org, 'welcome_message');
     $('#idle-org').textContent = org.name || '';
     if (org.logo_path) { $('#idle-logo').src = org.logo_path; show($('#idle-logo'), true); }
 
@@ -228,32 +453,34 @@
     const byEmail = kiosk.returning_lookup_field === 'email';
 
     const byName = !!kiosk.lookup_by_name;
-    $('#identify-label').textContent = byEmail
-      ? (byName ? 'Email address or name' : 'Email address')
-      : (byName ? `${phone.label} or name` : phone.label);
+    // The label the visitor is searched by, in the language on screen and in
+    // lower case where it sits inside a sentence.
+    const idLabel = t(byEmail ? 'Email address' : phone.label);
+    $('#identify-label').textContent = byName ? t('{x} or name', { x: idLabel }) : idLabel;
     // A name needs a text keyboard, so only ask for the number pad when it is numbers only.
     $('#identify-value').type = byEmail || byName ? 'text' : 'tel';
     $('#identify-value').inputMode = byEmail || byName ? 'text' : 'tel';
     $('#identify-value').placeholder = byEmail ? 'you@company.com' : phone.example;
-    $('#identify-lead').textContent = byName
-      ? `Enter your ${byEmail ? 'email address' : phone.label.toLowerCase()} or your name and we'll speed things up.`
-      : (byEmail
-        ? "Enter your email address and we'll speed things up."
-        : `Enter your ${phone.label.toLowerCase()} and we'll speed things up.`);
+    $('#identify-lead').textContent = t(byName
+      ? "Enter your {x} or your name and we'll speed things up."
+      : "Enter your {x} and we'll speed things up.", { x: idLabel.toLowerCase() });
     $('#f-phone').placeholder = phone.example;
-    $('#w-phone').querySelector('span').textContent = phone.label;
-    $('#signout-q').placeholder = 'Start typing…';
-    $('#signout-label').textContent = `First name, last name or ${phone.label.toLowerCase()}`;
+    $('#w-phone').querySelector('span').textContent = t(phone.label);
+    $('#signout-q').placeholder = t('Start typing…');
+    $('#signout-label').textContent = t('First name, last name or {x}', { x: t(phone.label).toLowerCase() });
     $('#signout-lead').textContent =
-      `Search for yourself by first name, last name or ${phone.label.toLowerCase()}, then tap your name.`;
-    $('#ack-text').textContent = state.cfg.induction.acknowledgement_text || 'I confirm I have watched the induction.';
+      t('Search for yourself by first name, last name or {x}, then tap your name.', { x: t(phone.label).toLowerCase() });
+    // A custom acknowledgement uses its Spanish box; the stock line, the
+    // dictionary — t() leaves any other custom English text untouched.
+    $('#ack-text').textContent =
+      t(inLang(state.cfg.induction, 'acknowledgement_text') || 'I confirm I have watched and understood the site induction.');
 
     const tiles = $('#type-tiles');
     const labels = { visitor: ['👤', 'Visitor'], contractor: ['🦺', 'Contractor'], interview: ['💼', 'Interview'],
       delivery: ['📦', 'Delivery'], driver: ['🚚', 'Driver'] };
-    tiles.innerHTML = (kiosk.visit_types || ['visitor']).map((t) => {
-      const [icon, label] = labels[t] || ['👤', t];
-      return `<button class="tile" data-type="${t}"><span class="tile-icon">${icon}</span><span>${label}</span></button>`;
+    tiles.innerHTML = (kiosk.visit_types || ['visitor']).map((type) => {
+      const [icon, label] = labels[type] || ['👤', type];
+      return `<button class="tile" data-type="${type}"><span class="tile-icon">${icon}</span><span>${t(label)}</span></button>`;
     }).join('');
     tiles.querySelectorAll('[data-type]').forEach((b) => b.addEventListener('click', () => {
       state.visitType = b.dataset.type;
@@ -323,7 +550,9 @@
     if (!state.cfg || !state.cfg.kiosk.show_onsite_count) return;
     try {
       const cfg = await api('/config');
-      $('#onsite-count').textContent = `${cfg.onsite_count} people currently on site`;
+      $('#onsite-count').textContent = state.lang === 'es'
+        ? `${cfg.onsite_count} personas en el sitio ahora mismo`
+        : `${cfg.onsite_count} people currently on site`;
       show($('#onsite-count'), true);
     } catch { /* offline */ }
   }
@@ -387,26 +616,30 @@
     const { kiosk, deliveries, access } = state.cfg;
     const cards = [
       `<button class="tile" data-action="signin">
-        <span class="tile-icon">👋</span><span>Sign in</span><small>Visitors &amp; contractors</small></button>`,
+        <span class="tile-icon">👋</span><span>${t('Sign in')}</span><small>${t('Visitors & contractors')}</small></button>`,
       `<button class="tile" data-action="signout">
-        <span class="tile-icon">🚪</span><span>Sign out</span><small>Leaving site</small></button>`
+        <span class="tile-icon">🚪</span><span>${t('Sign out')}</span><small>${t('Leaving site')}</small></button>`
     ];
 
+    if (kiosk.show_contractor_button) {
+      cards.push(`<button class="tile" data-action="contractor">
+        <span class="tile-icon">🦺</span><span>${t('Contractor')}</span><small>${t('Working on site')}</small></button>`);
+    }
     if (kiosk.show_interview_button) {
       cards.push(`<button class="tile" data-action="interview">
-        <span class="tile-icon">💼</span><span>Interview</span><small>Here to meet the hiring team</small></button>`);
+        <span class="tile-icon">💼</span><span>${t('Interview')}</span><small>${t('Here to meet the hiring team')}</small></button>`);
     }
     if (kiosk.show_driver_button) {
       cards.push(`<button class="tile" data-action="driver">
-        <span class="tile-icon">🚚</span><span>Driver</span><small>Pick-up or delivery</small></button>`);
+        <span class="tile-icon">🚚</span><span>${t('Driver')}</span><small>${t('Pick-up or delivery')}</small></button>`);
     }
     if (kiosk.show_delivery_button && deliveries.enabled) {
       cards.push(`<button class="tile" data-action="delivery">
-        <span class="tile-icon">📦</span><span>Delivery</span><small>Courier drop-off</small></button>`);
+        <span class="tile-icon">📦</span><span>${t('Delivery')}</span><small>${t('Courier drop-off')}</small></button>`);
     }
     if (access.enabled && access.unlock_button_on_kiosk && state.cfg.access_points.length) {
       cards.push(`<button class="tile" data-action="unlock">
-        <span class="tile-icon">🔓</span><span>Request entry</span><small>Unlock the door</small></button>`);
+        <span class="tile-icon">🔓</span><span>${t('Request entry')}</span><small>${t('Unlock the door')}</small></button>`);
     }
     return cards.join('');
   }
@@ -437,7 +670,7 @@
 
   async function runAction(action) {
     // Cards that go straight into a sign-in as a particular type.
-    if (action === 'interview' || action === 'driver') {
+    if (action === 'interview' || action === 'driver' || action === 'contractor') {
       state.visitType = action;
       await loadAgreement();
       state.induction = await api('/induction', { visit_type: action }).catch(() => state.induction);
@@ -455,8 +688,8 @@
     if (action === 'unlock') {
       try {
         await api('/unlock', { access_point_id: state.cfg.access_points[0].id });
-        toast('Door unlocked — please come in');
-      } catch { toast('Could not unlock the door'); }
+        toast(t('Door unlocked — please come in'));
+      } catch { toast(t('Could not unlock the door')); }
     }
   }
 
@@ -494,7 +727,11 @@
     if (!isEmail && looksLikeName(value) && state.cfg.kiosk.lookup_by_name) {
       const box = $('#identify-matches');
       const r = await api('/lookup', { name: value, visit_type: state.visitType }).catch(() => ({ matches: [] }));
-      if (r.too_short) { box.innerHTML = '<p class="muted">Type at least three letters of your name.</p>'; return; }
+      if (r.too_short) {
+        box.innerHTML = `<p class="muted">${state.lang === 'es'
+          ? 'Escriba al menos tres letras de su nombre.' : 'Type at least three letters of your name.'}</p>`;
+        return;
+      }
       if (!r.matches.length) {
         box.innerHTML = '';
         $('#f-name').value = value;
@@ -531,8 +768,12 @@
         $('#f-email').value = r.visitor.email || '';
         const note = $('#identify-result');
         note.textContent = r.already_onsite
-          ? `Welcome back ${r.visitor.full_name}. Our records show you are already signed in — continue to sign in again, or go back and sign out.`
-          : `Welcome back, ${r.visitor.full_name}!${state.induction.required ? '' : ' No need to watch the induction again.'}`;
+          ? (state.lang === 'es'
+            ? `Bienvenido de nuevo, ${r.visitor.full_name}. Según nuestros registros ya está dentro — continúe para registrarse de nuevo, o vuelva atrás y registre su salida.`
+            : `Welcome back ${r.visitor.full_name}. Our records show you are already signed in — continue to sign in again, or go back and sign out.`)
+          : (state.lang === 'es'
+            ? `¡Bienvenido de nuevo, ${r.visitor.full_name}!${state.induction.required ? '' : ' No hace falta ver la inducción otra vez.'}`
+            : `Welcome back, ${r.visitor.full_name}!${state.induction.required ? '' : ' No need to watch the induction again.'}`);
         note.classList.remove('hidden');
         setTimeout(() => startFlow(), 900);
       } else {
@@ -540,7 +781,7 @@
         startFlow();
       }
     } catch (err) {
-      if (err.status === 403) return toast('Please see reception.');
+      if (err.status === 403) return toast(t('Please see reception.'));
       startFlow();
     }
   });
@@ -560,7 +801,7 @@
       }
       startFlow();
     } catch (err) {
-      if (err.status === 403) return toast('Please see reception.');
+      if (err.status === 403) return toast(t('Please see reception.'));
       startFlow();
     }
   }
@@ -602,12 +843,18 @@
   const DETAIL_WIDGETS = {
     company: '#w-company', phone: '#w-phone', email: '#w-email',
     staff: '#w-host', purpose: '#w-purpose', vehicle: '#w-vehicle',
-    reference: '#w-reference', movement: '#w-movement'
+    reference: '#w-reference', movement: '#w-movement', project: '#w-project'
   };
 
   function detailFields() {
     const all = (state.cfg && state.cfg.details) || {};
     return all[state.visitType] || all.visitor || {};
+  }
+
+  /** Custom wording in the language on screen: the Spanish box, else the English one. */
+  function customWord(custom, field) {
+    const es = state.lang === 'es' ? custom[`${field}_es`] : null;
+    return ((es && String(es).trim()) || custom[field] || '').trim();
   }
 
   function applyDetailFields() {
@@ -626,12 +873,12 @@
         // Remember the wording the page shipped with, so switching visitor type
         // does not leave another type's label behind.
         if (!label.dataset.base) label.dataset.base = label.textContent.replace(/\s*\*$/, '');
-        const base = (custom.label || '').trim() || label.dataset.base;
+        const base = customWord(custom, 'label') || t(label.dataset.base);
         label.textContent = mode === 'required' ? `${base} *` : base;
       }
 
       let help = wrap.querySelector('.field-help');
-      const text = (custom.description || '').trim();
+      const text = customWord(custom, 'description');
       if (text && !help) {
         help = document.createElement('span');
         help.className = 'field-help';
@@ -640,6 +887,15 @@
       if (help) { help.textContent = text; show(help, !!text); }
     }
 
+    // The projects on offer, named in the language on screen. The choice made
+    // so far survives both a language switch and a re-render.
+    const select = $('#f-project');
+    const chosen = select.value;
+    select.innerHTML = `<option value="">${t('— choose a project —')}</option>` +
+      ((state.cfg && state.cfg.projects) || []).map((p) =>
+        `<option value="${p.id}">${escapeHtml(inLang(p, 'name'))}${p.code ? ` (${escapeHtml(p.code)})` : ''}</option>`).join('');
+    if (chosen) select.value = chosen;
+
     // The full name field is always asked, and can be worded too. It restores its
     // own default like the rest, or one type's wording would follow the next.
     const nameWrap = $('#w-name');
@@ -647,10 +903,10 @@
     if (nameLabel) {
       const custom = wording.name || {};
       if (!nameLabel.dataset.base) nameLabel.dataset.base = nameLabel.textContent.replace(/\s*\*$/, '');
-      nameLabel.textContent = `${(custom.label || '').trim() || nameLabel.dataset.base} *`;
+      nameLabel.textContent = `${customWord(custom, 'label') || t(nameLabel.dataset.base)} *`;
 
       let help = nameWrap.querySelector('.field-help');
-      const text = (custom.description || '').trim();
+      const text = customWord(custom, 'description');
       if (text && !help) {
         help = document.createElement('span');
         help.className = 'field-help';
@@ -665,14 +921,15 @@
   $('#details-continue').addEventListener('click', async () => {
     const err = $('#details-error');
     const fields = detailFields();
-    if (!$('#f-name').value.trim()) return fail('Please enter your name.');
-    if (fields.phone === 'required' && !$('#f-phone').value.trim()) return fail('Please enter a contact number.');
-    if (fields.email === 'required' && !$('#f-email').value.trim()) return fail('Please enter an email address.');
-    if (fields.company === 'required' && !$('#f-company').value.trim()) return fail('Please enter your company.');
-    if (fields.staff === 'required' && !$('#f-host-id').value) return fail('Please choose who you are here to see.');
-    if (fields.vehicle === 'required' && !$('#f-vehicle').value.trim()) return fail('Please enter your vehicle registration.');
-    if (fields.reference === 'required' && !$('#f-reference').value.trim()) return fail('Please enter your load or order reference.');
-    if (fields.movement === 'required' && !$('#f-movement').value) return fail('Please choose whether this is a pick-up or a delivery.');
+    if (!$('#f-name').value.trim()) return fail(t('Please enter your name.'));
+    if (fields.phone === 'required' && !$('#f-phone').value.trim()) return fail(t('Please enter a contact number.'));
+    if (fields.email === 'required' && !$('#f-email').value.trim()) return fail(t('Please enter an email address.'));
+    if (fields.company === 'required' && !$('#f-company').value.trim()) return fail(t('Please enter your company.'));
+    if (fields.staff === 'required' && !$('#f-host-id').value) return fail(t('Please choose who you are here to see.'));
+    if (fields.vehicle === 'required' && !$('#f-vehicle').value.trim()) return fail(t('Please enter your vehicle registration.'));
+    if (fields.reference === 'required' && !$('#f-reference').value.trim()) return fail(t('Please enter your load or order reference.'));
+    if (fields.movement === 'required' && !$('#f-movement').value) return fail(t('Please choose whether this is a pick-up or a delivery.'));
+    if (fields.project === 'required' && !$('#f-project').value) return fail(t('Please choose your project.'));
     show(err, false);
 
     if (!state.visitor) {
@@ -728,34 +985,40 @@
     return nextStep();
   }
 
-  /** Show one document: its text, its questions, and a signature box. */
-  function showDocument(index) {
+  /**
+   * Show one document: its text, its questions, and a signature box.
+   * `preserve` keeps the answers and signature already given — it re-renders the
+   * words without punishing a language switch made halfway down the page.
+   */
+  function showDocument(index, { preserve = false } = {}) {
     state.agreementIndex = index;
     state.agreement = state.agreements[index];
     const many = state.agreements.length > 1;
+    const title = inLang(state.agreement, 'name');
     $('#agreement-title').textContent = many
-      ? `${state.agreement.name} (${index + 1} of ${state.agreements.length})`
-      : state.agreement.name;
+      ? `${title} (${index + 1} ${state.lang === 'es' ? 'de' : 'of'} ${state.agreements.length})`
+      : title;
     // A questionnaire may have no text to read at all.
-    $('#agreement-body').textContent = state.agreement.body || '';
-    show($('#agreement-body'), !!String(state.agreement.body || '').trim());
+    $('#agreement-body').textContent = inLang(state.agreement, 'body');
+    show($('#agreement-body'), !!inLang(state.agreement, 'body').trim());
     // A questionnaire is a document that only asks questions — no signature box.
     const needsSignature = state.agreement.require_signature !== 0;
     show($('.sig-label'), needsSignature);
     show($('.sig-wrap'), needsSignature);
     show($('#sig-clear'), needsSignature);
     const last = index === state.agreements.length - 1;
-    $('#agreement-continue').textContent = needsSignature
+    $('#agreement-continue').textContent = t(needsSignature
       ? (last ? 'I agree & continue' : 'I agree — next document')
-      : (last ? 'Continue' : 'Next');
-    renderQuestions();
-    clearSignature();
+      : (last ? 'Continue' : 'Next'));
+    renderQuestions({ preserve });
+    if (!preserve) clearSignature();
     setScreen('agreement');
   }
 
   /** Declaration questions attached to the document, answered before signing. */
-  function renderQuestions() {
+  function renderQuestions({ preserve = false } = {}) {
     const box = $('#agreement-questions');
+    const kept = preserve ? state.answers : {};
     state.answers = {};
     let questions = [];
     try { questions = JSON.parse(state.agreement.questions || '[]'); } catch { questions = []; }
@@ -764,16 +1027,34 @@
 
     box.innerHTML = questions.map((q, i) => {
       const id = q.id || `q${i + 1}`;
-      const label = `<span class="q-label">${escapeHtml(q.label)}${q.required ? ' <span class="req">*</span>' : ''}`
-        + `${q.description ? `<span class="q-help">${escapeHtml(q.description)}</span>` : ''}</span>`;
+      const qLabel = (state.lang === 'es' && (q.label_es || '').trim()) ? q.label_es : q.label;
+      const qHelp = (state.lang === 'es' && (q.description_es || '').trim()) ? q.description_es : q.description;
+      const label = `<span class="q-label">${escapeHtml(qLabel)}${q.required ? ' <span class="req">*</span>' : ''}`
+        + `${qHelp ? `<span class="q-help">${escapeHtml(qHelp)}</span>` : ''}</span>`;
+      // Choices show their translation but always carry the English value, so
+      // the stored answers read the same however the question was answered.
+      const choices = q.type === 'choice' ? (q.options || []) : ['Yes', 'No'];
+      const shown = q.type === 'choice'
+        ? (state.lang === 'es' && Array.isArray(q.options_es) && q.options_es.length === choices.length
+          ? q.options_es : choices)
+        : choices.map((c) => t(c));
       const body = q.type === 'text'
         ? `<input class="input" data-q="${id}" autocomplete="off">`
         : `<div class="q-choices" data-qgroup="${id}">
-             ${(q.type === 'choice' ? (q.options || []) : ['Yes', 'No']).map((c) =>
-               `<button type="button" data-q="${id}" data-value="${escapeHtml(c)}" aria-pressed="false">${escapeHtml(c)}</button>`).join('')}
+             ${choices.map((c, ci) =>
+               `<button type="button" data-q="${id}" data-value="${escapeHtml(c)}" aria-pressed="false">${escapeHtml(shown[ci] || c)}</button>`).join('')}
            </div>`;
       return `<div class="question" data-question="${id}">${label}${body}</div>`;
     }).join('');
+
+    // Answers carried through a re-render: values back into text boxes, and the
+    // pressed state back onto the chosen buttons.
+    for (const [id, value] of Object.entries(kept)) {
+      const input = box.querySelector(`input[data-q="${CSS.escape(id)}"]`);
+      if (input) { input.value = value; state.answers[id] = value; continue; }
+      const btn = box.querySelector(`[data-qgroup="${CSS.escape(id)}"] button[data-value="${CSS.escape(value)}"]`);
+      if (btn) { btn.setAttribute('aria-pressed', 'true'); state.answers[id] = value; }
+    }
 
     $$('[data-qgroup] button', box).forEach((b) => b.addEventListener('click', () => {
       const group = b.closest('[data-qgroup]');
@@ -936,7 +1217,7 @@
       state.deliveryPhoto = await fileToSquareDataUrl(file, 800);
       $('#d-shot').src = state.deliveryPhoto;
       show($('#d-shot'), true);
-      toast('Photo captured');
+      toast(t('Photo captured'));
     } catch { toast('Could not read that photo'); }
     e.target.value = '';
   });
@@ -1048,7 +1329,7 @@
     }
     show(err, false);
     const needsSignature = state.agreement.require_signature !== 0;
-    if (needsSignature && !hasInk) return toast('Please sign in the box to continue');
+    if (needsSignature && !hasInk) return toast(t('Please sign in the box to continue'));
 
     state.signedDocs.push({
       agreement_id: state.agreement.id,
@@ -1079,7 +1360,7 @@
     if (slide.kind === 'image') stage.innerHTML = `<img src="${slide.image_path}" alt="">`;
     else if (slide.kind === 'pdf') stage.innerHTML = `<iframe src="${slide.image_path}#toolbar=0"></iframe>`;
     else stage.innerHTML = slide.html || '';
-    $('#deck-count').textContent = `${state.deckIndex + 1} of ${slides.length}`;
+    $('#deck-count').textContent = `${state.deckIndex + 1} ${state.lang === 'es' ? 'de' : 'of'} ${slides.length}`;
     $('#deck-progress-fill').style.width = `${((state.deckIndex + 1) / slides.length) * 100}%`;
     $('#deck-prev').disabled = state.deckIndex === 0;
     $('#deck-next').textContent = state.deckIndex === slides.length - 1 ? 'Finish' : 'Next';
@@ -1133,6 +1414,8 @@
       vehicle_reg: $('#f-vehicle').value.trim().toUpperCase(),
       reference: $('#f-reference').value.trim(),
       movement: $('#f-movement').value,
+      project_id: $('#f-project').value || null,
+      language: state.lang,
       photo: state.photo,
       documents: state.signedDocs,
       device_id: state.deviceId,
@@ -1146,16 +1429,20 @@
       state.lastResult = result;
       showDone(result);
     } catch (err) {
-      toast(err.data && err.data.message ? err.data.message : 'Sorry, something went wrong. Please see reception.');
+      toast(err.data && err.data.message ? err.data.message : t('Sorry, something went wrong. Please see reception.'));
     }
   }
 
   function showDone(result) {
     const org = state.cfg.org;
-    $('#done-title').textContent = `You're signed in, ${result.visit.full_name.split(' ')[0]}`;
+    $('#done-title').textContent = state.lang === 'es'
+      ? `Ha registrado su entrada, ${result.visit.full_name.split(' ')[0]}`
+      : `You're signed in, ${result.visit.full_name.split(' ')[0]}`;
     $('#done-sub').textContent = result.visit.host_name
-      ? `${result.visit.host_name} has been notified and will be with you shortly.`
-      : 'Reception has been notified.';
+      ? (state.lang === 'es'
+        ? `${result.visit.host_name} ha sido avisado y le atenderá en breve.`
+        : `${result.visit.host_name} has been notified and will be with you shortly.`)
+      : t('Reception has been notified.');
     // The code and its QR belong on the badge, not on screen — nobody can use a
     // code they only saw for a few seconds.
     $('#done-code').textContent = '';
@@ -1168,7 +1455,7 @@
     if (badge) {
       buildBadge(result, badge, org);
       const note = $('#done-badge-note');
-      note.textContent = badge.auto_print ? 'Your badge is printing…' : 'Tap “Print badge” to collect your badge.';
+      note.textContent = t(badge.auto_print ? 'Your badge is printing…' : 'Tap “Print badge” to collect your badge.');
       show(note, true);
       if (badge.auto_print) setTimeout(() => window.print(), 700);
     } else {
@@ -1240,9 +1527,9 @@
         : '<p class="muted">No matching visitor is signed in.</p>';
       $$('#signout-results [data-signout]').forEach((b) => b.addEventListener('click', async () => {
         const res = await api('/signout', { visit_id: Number(b.dataset.signout) }).catch(() => null);
-        if (!res) return toast('Could not sign out — please see reception.');
-        $('#done-title').textContent = 'Signed out';
-        $('#done-sub').textContent = res.goodbye || 'Thanks for visiting.';
+        if (!res) return toast(t('Could not sign out — please see reception.'));
+        $('#done-title').textContent = t('Signed out');
+        $('#done-sub').textContent = inLang(state.cfg.org, 'goodbye_message') || res.goodbye || t('Thanks for visiting.');
         $('#done-code').textContent = '';
         $('#done-qr').innerHTML = '';
         show($('#btn-print-badge'), false);
@@ -1290,7 +1577,7 @@
       }
       if (!detector) await loadJsQr();
     } catch {
-      status.textContent = 'The scanner could not load. Please type your name instead.';
+      status.textContent = t('The scanner could not load. Please type your name instead.');
       return;
     }
 
@@ -1300,7 +1587,7 @@
       });
       $('#scan-cam').srcObject = scanStream;
       await playVideo($('#scan-cam'));
-      status.textContent = 'Hold your badge up to the camera, or type your name below.';
+      status.textContent = t('Hold your badge up to the camera, or type your name below.');
       scanTimer = setInterval(scanFrame, 180);
     } catch (err) {
       // No camera here: fold the scanner away and leave the search, with the
@@ -1343,7 +1630,7 @@
     if (!text) return;
     const code = String(text).trim().toUpperCase();
     if (!/^[0-9A-F]{8}$/.test(code)) {
-      $('#scan-status').textContent = 'That is not a badge from this building.';
+      $('#scan-status').textContent = t('That is not a badge from this building.');
       return;
     }
 
@@ -1353,7 +1640,7 @@
     const input = $('#signout-q');
     input.value = code;
     input.dispatchEvent(new Event('input', { bubbles: true }));
-    toast('Badge found');
+    toast(t('Badge found'));
   }
 
   $('#btn-scan').addEventListener('click', startScanner);
@@ -1366,14 +1653,14 @@
     state.deliveryPhoto = grabFrame($('#d-cam'));
     $('#d-shot').src = state.deliveryPhoto;
     show($('#d-shot'), true);
-    toast('Photo captured');
+    toast(t('Photo captured'));
   });
 
   $('#d-submit').addEventListener('click', async () => {
     const err = $('#d-error');
     const cfg = state.cfg.deliveries;
     if (cfg.require_recipient && !$('#d-host-id').value && !$('#d-host-search').value.trim()) {
-      err.textContent = 'Please tell us who the delivery is for.';
+      err.textContent = t('Please tell us who the delivery is for.');
       return show(err, true);
     }
     show(err, false);
@@ -1388,15 +1675,15 @@
         photo: state.deliveryPhoto
       });
       stopCamera();
-      $('#done-title').textContent = 'Delivery logged';
-      $('#done-sub').textContent = 'The recipient has been notified. Thank you!';
+      $('#done-title').textContent = t('Delivery logged');
+      $('#done-sub').textContent = t('The recipient has been notified. Thank you!');
       $('#done-code').textContent = '';
       $('#done-qr').innerHTML = '';
       show($('#btn-print-badge'), false);
       show($('#done-badge-note'), false);
       setScreen('done');
     } catch (e) {
-      err.textContent = 'Could not log the delivery. Please see reception.';
+      err.textContent = t('Could not log the delivery. Please see reception.');
       show(err, true);
     }
   });

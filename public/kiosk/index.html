@@ -15,6 +15,9 @@
 <!-- Background photos, shared by the welcome and menu screens -->
 <div id="bg-stage" aria-hidden="true"><div id="bg-scrim"></div></div>
 
+<!-- Language switch, present on every screen when Spanish is enabled -->
+<button id="lang-toggle" class="lang-toggle hidden" type="button" aria-label="Cambiar idioma">Español</button>
+
 <div id="app">
 
   <!-- IDLE ------------------------------------------------------------- -->
@@ -74,6 +77,8 @@
         <input type="hidden" id="f-host-id">
         <div class="suggest" id="host-suggest"></div>
       </label>
+      <label class="field" id="w-project"><span>Project</span>
+        <select class="input" id="f-project"><option value="">— choose a project —</option></select></label>
       <label class="field" id="w-purpose"><span>Reason for visit</span><input class="input" id="f-purpose" placeholder="Meeting, delivery, site works…"></label>
       <label class="field" id="w-vehicle"><span>Vehicle registration</span><input class="input" id="f-vehicle" style="text-transform:uppercase"></label>
       <label class="field" id="w-reference"><span>Load or order reference</span>

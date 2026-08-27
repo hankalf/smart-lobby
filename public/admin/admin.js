@@ -319,7 +319,8 @@
         <div>
           <p style="margin:0"><b>${esc(v.full_name)}</b><br>
           <span class="muted">${esc(v.company || '')} ${v.phone ? '· ' + esc(v.phone) : ''} ${v.email ? '· ' + esc(v.email) : ''}</span></p>
-          <p class="muted">${esc(v.visit_type)} · ${esc(v.purpose || 'no reason given')}<br>
+          <p class="muted">${esc(v.visit_type)} · ${esc(v.purpose || 'no reason given')}${v.language === 'es' ? ' · signed in en español' : ''}<br>
+          ${v.project_name ? `Project: ${esc(v.project_name)}<br>` : ''}
           Staff member: ${esc(v.host_name || '—')} · Badge: ${esc(v.badge_no || '—')} ${v.vehicle_reg ? '· Vehicle: ' + esc(v.vehicle_reg) : ''}<br>
           ${v.reference ? `Reference: ${esc(v.reference)}${v.movement ? ' · ' + esc(v.movement) : ''}<br>` : ''}
           ${v.location_name ? `Signed in at: ${esc(v.location_name)}${v.device_name ? ` (${esc(v.device_name)})` : ''}<br>` : ''}
@@ -334,7 +335,7 @@
         let answers = [];
         try { answers = Object.entries(JSON.parse(s.answers || '{}')); } catch { answers = []; }
         const labels = questionLabels(s.agreement_questions);
-        return `<p class="muted">${esc(s.agreement_name || 'Agreement')} v${s.agreement_version} — ${fmtDate(s.signed_at)}</p>
+        return `<p class="muted">${esc(s.agreement_name || 'Agreement')} v${s.agreement_version} — ${fmtDate(s.signed_at)}${s.language === 'es' ? ' · signed in Spanish' : ''}</p>
           ${answers.length ? `<table style="margin-bottom:.6rem"><tbody>${answers.map(([k, val]) =>
             `<tr><td>${esc(labels[k] || k)}</td><td><b>${esc(val)}</b></td></tr>`).join('')}</tbody></table>` : ''}
           ${s.signature_path ? `<img src="${esc(s.signature_path)}" style="max-width:260px;border:1px solid var(--line);border-radius:8px">` : ''}`;
@@ -795,6 +796,15 @@
       <label class="field"><span>What they read and sign</span>
         <textarea class="input" id="ag-body" rows="10">${esc(doc ? doc.body : '')}</textarea></label>
 
+      <details class="howto" ${doc && ((doc.name_es || '').trim() || (doc.body_es || '').trim()) ? 'open' : ''}>
+        <summary><b>En español</b> — shown when the kiosk is switched to Spanish</summary>
+        <p class="muted" style="margin-top:.5rem">Leave a box empty and that part stays in English. The signature records
+          which language was on screen when it was signed.</p>
+        <label class="field"><span>Título</span><input class="input" id="ag-name-es" value="${esc((doc && doc.name_es) || '')}"></label>
+        <label class="field"><span>Lo que leen y firman</span>
+          <textarea class="input" id="ag-body-es" rows="10">${esc((doc && doc.body_es) || '')}</textarea></label>
+      </details>
+
       <h3>Who signs this</h3>
       <p class="muted" style="margin-top:0">Matched to the cards on the kiosk home screen.</p>
       <div class="form-grid" style="margin:.5rem 0 1rem">
@@ -818,6 +828,8 @@
         const body = {
           name: $('#ag-name', bg).value,
           body: $('#ag-body', bg).value,
+          name_es: $('#ag-name-es', bg).value.trim() || null,
+          body_es: $('#ag-body-es', bg).value.trim() || null,
           required_for: JSON.stringify($$('[data-t]', bg).filter((c) => c.checked).map((c) => c.dataset.t)),
           questions: JSON.stringify(collectQuestions(bg)),
           require_signature: $('#ag-sig', bg).checked ? 1 : 0,
@@ -865,6 +877,10 @@
             placeholder="Help text shown under the question (optional)" value="${esc(q.description || '')}">
           ${q.type === 'choice' ? `<input class="input" data-qopts="${i}" style="margin-top:.5rem"
             placeholder="Options, separated by commas" value="${esc((q.options || []).join(', '))}">` : ''}
+          <input class="input" data-qlabeles="${i}" style="margin-top:.5rem"
+            placeholder="En español (optional — English is shown if empty)" value="${esc(q.label_es || '')}">
+          ${q.type === 'choice' ? `<input class="input" data-qoptses="${i}" style="margin-top:.5rem"
+            placeholder="Options in Spanish, in the same order" value="${esc((q.options_es || []).join(', '))}">` : ''}
           <label class="field" style="margin:.5rem 0 0"><span>Only ask this if</span>
             <select class="input" data-qcond="${i}">
               <option value="">Always ask it</option>
@@ -898,6 +914,10 @@
       });
       $$('[data-qreq]', list).forEach((input) => { questions[Number(input.dataset.qreq)].required = input.checked; });
       $$('[data-qdesc]', list).forEach((input) => { questions[Number(input.dataset.qdesc)].description = input.value; });
+      $$('[data-qlabeles]', list).forEach((input) => { questions[Number(input.dataset.qlabeles)].label_es = input.value; });
+      $$('[data-qoptses]', list).forEach((input) => {
+        questions[Number(input.dataset.qoptses)].options_es = input.value.split(',').map((o) => o.trim()).filter(Boolean);
+      });
       $$('[data-qcond]', list).forEach((select) => {
         const q = questions[Number(select.dataset.qcond)];
         if (!select.value) { delete q.show_if; return; }
@@ -916,7 +936,9 @@
         type: q.type || 'yesno',
         required: !!q.required,
         ...(String(q.description || '').trim() ? { description: q.description.trim() } : {}),
+        ...(String(q.label_es || '').trim() ? { label_es: q.label_es.trim() } : {}),
         ...(q.type === 'choice' ? { options: q.options || [] } : {}),
+        ...(q.type === 'choice' && (q.options_es || []).length ? { options_es: q.options_es } : {}),
         // A condition pointing at a question that has since been deleted would
         // hide this one for ever, so it is dropped rather than kept dangling.
         ...(q.show_if && ids.has(q.show_if.id) ? { show_if: q.show_if } : {})
@@ -1571,13 +1593,83 @@
       async () => { await api(`/locations/${b.dataset.lodel}`, { method: 'DELETE' }); render('locations'); })));
   };
 
+  /* ------------------------------------------------------------- projects */
+
+  VIEWS.projects = async (root) => {
+    const rows = await api('/projects');
+    root.innerHTML = `
+      <h1 class="page">Projects</h1>
+      <p class="page-sub">The jobs a contractor can be on site for. They pick one from this list when they sign in, so a
+        report of who worked on what stays clean. Give a project a Spanish name and the kiosk shows it when switched to
+        Spanish; leave it empty and the English one is shown.</p>
+      <div class="card section">
+        <div class="inline-form" style="margin-bottom:1rem">
+          <label class="field"><span>Project name</span><input class="input" id="pj-name" placeholder="Riverside build"></label>
+          <label class="field"><span>En español (optional)</span><input class="input" id="pj-name-es" placeholder="Obra de Riverside"></label>
+          <label class="field"><span>Code (optional)</span><input class="input" id="pj-code" placeholder="RB-24" style="max-width:8rem"></label>
+          <button class="btn" id="pj-add">Add project</button>
+        </div>
+        <div class="table-wrap">${rows.length ? `<table>
+          <thead><tr><th>Project</th><th>En español</th><th>Code</th><th>On site now</th><th>Visits</th><th>Status</th><th></th></tr></thead>
+          <tbody>${rows.map((p) => `<tr>
+            <td><b>${esc(p.name)}</b></td>
+            <td class="muted">${esc(p.name_es || '')}</td>
+            <td class="muted">${esc(p.code || '')}</td>
+            <td>${p.onsite}</td>
+            <td>${p.visits_total}</td>
+            <td><span class="pill ${p.active ? 'on' : 'off'}">${p.active ? 'active' : 'closed'}</span></td>
+            <td><button class="btn ghost" data-pjedit="${p.id}">Edit</button>
+                <button class="btn ghost" data-pjdel="${p.id}">Remove</button></td></tr>`).join('')}</tbody></table>`
+          : '<p class="empty">No projects yet. Add the jobs contractors will be signing in against.</p>'}</div>
+        <p class="muted">A finished job is closed with <b>Edit → Active off</b> — it drops off the kiosk but keeps its
+          history. A project that has ever been signed in against cannot be removed, only closed.</p>
+      </div>`;
+
+    $('#pj-add').addEventListener('click', async () => {
+      if (!$('#pj-name').value.trim()) return toast('Give the project a name');
+      await api('/projects', { method: 'POST', body: {
+        name: $('#pj-name').value.trim(),
+        name_es: $('#pj-name-es').value.trim() || null,
+        code: $('#pj-code').value.trim() || null } });
+      render('projects');
+    });
+
+    $$('[data-pjedit]').forEach((b) => b.addEventListener('click', () => {
+      const p = rows.find((x) => String(x.id) === b.dataset.pjedit);
+      modal(`Edit ${p.name}`, `
+        <label class="field"><span>Name</span><input class="input" id="pe-name" value="${esc(p.name)}"></label>
+        <label class="field"><span>En español</span><input class="input" id="pe-name-es" value="${esc(p.name_es || '')}"></label>
+        <label class="field"><span>Code</span><input class="input" id="pe-code" value="${esc(p.code || '')}"></label>
+        <label class="check"><input type="checkbox" id="pe-active" ${p.active ? 'checked' : ''}>
+          <span>Active<br><span class="muted">Off = closed: hidden on the kiosk, history kept.</span></span></label>`,
+        async (bg, close) => {
+          await api(`/projects/${p.id}`, { method: 'PATCH', body: {
+            name: $('#pe-name', bg).value, name_es: $('#pe-name-es', bg).value.trim() || null,
+            code: $('#pe-code', bg).value.trim() || null, active: $('#pe-active', bg).checked } });
+          close(); render('projects');
+        });
+    }));
+
+    $$('[data-pjdel]').forEach((b) => b.addEventListener('click', () => confirmAction(
+      'Remove this project? This only works while nothing has been signed in against it.',
+      async () => {
+        try { await api(`/projects/${b.dataset.pjdel}`, { method: 'DELETE' }); } catch (err) {
+          if (err.data && err.data.error === 'project_in_use') {
+            return toast(`This project has ${err.data.visits} visit${err.data.visits === 1 ? '' : 's'} against it — close it with Edit instead.`, 5000);
+          }
+          throw err;
+        }
+        render('projects');
+      })));
+  };
+
   /* -------------------------------------------------------------- devices */
 
   const CAMERA_LABEL = { front: 'Front camera', rear: 'Rear camera' };
 
   // The home-screen cards a device can be limited to.
   const DEVICE_SECTIONS = [
-    ['signin', 'Sign in'], ['signout', 'Sign out'], ['interview', 'Interview'],
+    ['signin', 'Sign in'], ['signout', 'Sign out'], ['contractor', 'Contractor'], ['interview', 'Interview'],
     ['driver', 'Driver'], ['delivery', 'Delivery'], ['unlock', 'Request entry']
   ];
 
@@ -1781,7 +1873,8 @@
     ['purpose', 'Reason for visit', ''],
     ['vehicle', 'Vehicle registration', ''],
     ['reference', 'Load or order reference', 'Order, docket or PO number'],
-    ['movement', 'Pick-Up or Delivery', '']
+    ['movement', 'Pick-Up or Delivery', ''],
+    ['project', 'Project', 'Picked from the list on the Projects tab']
   ];
   const DETAIL_TYPES = [['visitor', 'Visitors'], ['contractor', 'Contractors'], ['interview', 'Interviews'],
     ['driver', 'Drivers']];
@@ -1806,6 +1899,9 @@
           ${txt('org.welcome_title', 'Kiosk headline')}
           ${txt('org.welcome_message', 'Kiosk sub-heading')}
           ${txt('org.goodbye_message', 'Sign-out message')}
+          ${txt('org.welcome_title_es', 'Headline en español', 'text', 'Bienvenido')}
+          ${txt('org.welcome_message_es', 'Sub-heading en español')}
+          ${txt('org.goodbye_message_es', 'Sign-out en español')}
           ${txt('org.primary_color', 'Primary colour', 'color')}
           ${txt('org.accent_color', 'Dark accent colour', 'color')}
           <label class="field"><span>Time zone</span>
@@ -1964,11 +2060,20 @@
         <p class="muted" style="margin-top:0">Sign in and sign out always share the first card. Switch the rest off
           for sites that do not need them.</p>
         <div class="check-list">
+          ${chk('kiosk.show_contractor_button', 'Contractor', 'Straight into a contractor sign-in — no card picker in between')}
           ${chk('kiosk.show_interview_button', 'Interview', 'For candidates arriving to meet the hiring team')}
           ${chk('kiosk.show_driver_button', 'Driver', 'Truck drivers delivering or collecting at a warehouse')}
           ${chk('kiosk.show_delivery_button', 'Delivery', 'Courier drop-off — also needs Deliveries enabled below')}
         </div>
         <p class="muted">A “Request entry” card appears too when you switch it on under <b>Access control</b>.</p>
+
+        <h3>Language</h3>
+        ${chk('kiosk.spanish_enabled', 'Offer Spanish', 'Puts an Español button on every kiosk screen. The kiosk’s own wording is already translated; your documents, questions and project names use the Spanish boxes beside them, and fall back to English where empty.')}
+        <label class="field" style="max-width:16rem"><span>Language the kiosk starts in</span>
+          <select class="input" data-set="kiosk.default_language">
+            <option value="en" ${s.kiosk.default_language !== 'es' ? 'selected' : ''}>English</option>
+            <option value="es" ${s.kiosk.default_language === 'es' ? 'selected' : ''}>Español</option>
+          </select></label>
 
         <h3>Visit types offered on the kiosk</h3>
         <p class="muted" style="margin-top:0">Shown when somebody taps Sign in, unless only one is ticked.</p>
@@ -1987,7 +2092,8 @@
         ${chk('induction.enabled', 'Show the induction deck during sign-in')}
         ${chk('induction.show_to_returning_visitors', 'Show it every visit', 'Off = only first-timers and anyone who has not seen the current version')}
         ${chk('induction.require_acknowledgement', 'Ask for a confirmation tap at the end')}
-        <div class="form-grid">${txt('induction.acknowledgement_text', 'Confirmation wording')}</div>
+        <div class="form-grid">${txt('induction.acknowledgement_text', 'Confirmation wording')}
+        ${txt('induction.acknowledgement_text_es', 'En español (optional)')}</div>
       </div>
 
       <div class="card section"><h2>Deliveries</h2>
@@ -2116,9 +2222,12 @@
         return `<div class="q-row">
           <div class="q-row-top">
             <input class="input" data-wlabel="${field}" placeholder="${esc(standard)}" value="${esc(w.label || '')}">
+            <input class="input" data-wlabeles="${field}" placeholder="En español (optional)" value="${esc(w.label_es || '')}">
           </div>
           <input class="input" data-wdesc="${field}" style="margin-top:.5rem"
             placeholder="Help text shown under the field (optional)" value="${esc(w.description || '')}">
+          <input class="input" data-wdesces="${field}" style="margin-top:.5rem"
+            placeholder="Help text en español (optional)" value="${esc(w.description_es || '')}">
         </div>`;
       }).join('');
 
@@ -2128,13 +2237,16 @@
         WORDING_FIELDS.forEach(([field]) => {
           const label = $(`[data-wlabel="${field}"]`).value.trim();
           const description = $(`[data-wdesc="${field}"]`).value.trim();
-          if (label || description) wording[current][field] = { label, description };
-          else delete wording[current][field];
+          const label_es = $(`[data-wlabeles="${field}"]`).value.trim();
+          const description_es = $(`[data-wdesces="${field}"]`).value.trim();
+          if (label || description || label_es || description_es) {
+            wording[current][field] = { label, description, ...(label_es ? { label_es } : {}), ...(description_es ? { description_es } : {}) };
+          } else delete wording[current][field];
         });
       };
       // Edits are captured as they are typed, against the type being shown at the
       // time; switching type only redraws, or the new type would inherit them.
-      $$('[data-wlabel], [data-wdesc]').forEach((i) => i.addEventListener('input', capture));
+      $$('[data-wlabel], [data-wdesc], [data-wlabeles], [data-wdesces]').forEach((i) => i.addEventListener('input', capture));
       $('#wording-type').onchange = drawWording;
     };
     drawWording();

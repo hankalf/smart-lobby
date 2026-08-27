@@ -269,3 +269,27 @@ body.has-bg .screen:not(.dark) > .bar .btn.ghost {
   #badge-sheet { display: block; width: var(--badge-w, 62mm); height: var(--badge-h, 100mm); overflow: hidden; }
   html, body { background: #fff; height: auto; overflow: visible; margin: 0; }
 }
+
+/* Language switch — one thumb-sized button, clear of the header bars */
+.lang-toggle {
+  position: fixed;
+  top: max(0.8rem, env(safe-area-inset-top));
+  right: max(0.8rem, env(safe-area-inset-right));
+  z-index: 60;
+  padding: 0.55rem 1.1rem;
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  border-radius: 999px;
+  background: rgba(10, 24, 18, 0.45);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+body:not(.has-bg) .lang-toggle {
+  background: #fff;
+  color: var(--brand, #2f7d5d);
+  border-color: var(--brand, #2f7d5d);
+  box-shadow: 0 2px 10px rgba(10, 30, 20, 0.12);
+}
+@media print { .lang-toggle { display: none !important; } }
