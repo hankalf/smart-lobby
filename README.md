@@ -194,6 +194,7 @@ history. A project that has ever been signed in against cannot be deleted, only 
 | Locations | Areas within a site — reception, yard gate, workshop entrance — with device and on-site counts |
 | Projects | The jobs contractors sign in against, with Spanish names, codes, and who is on each right now |
 | Visitor types | The kiosk cards themselves — add, reword (in both languages), re-icon, place or hide each type |
+| Printers | The label printers on site: name, model, loaded roll, colour, how each is reached, and where it sits |
 | Devices | Every tablet: name, location, default camera, operational mode, per-device badge printing, which cards it shows and in what order, online status |
 | Reports | Visits per day, busiest hosts, top companies, arrival times, average time on site |
 | Settings | Branding (logo, kiosk background photo, colours, time zone), kiosk flow, badges, induction, deliveries, access, notifications, retention, users |
@@ -447,6 +448,23 @@ badge prints as soon as sign-in completes; with it off, the visitor taps **Print
 
 With badge printing disabled, no badge numbers are issued and nothing else changes — visitors still
 get an on-screen QR code for sign-out.
+
+### Printers
+
+The **Printers** tab is the register of label printers: name, model, which roll is loaded (and its
+colour — Brother's DK-2251 prints black and red), how the printer is reached, a static IP where one is
+set, and which location it sits at. Each device records which printer sits beside it under **Devices**.
+
+Printing itself runs over AirPrint, so how a printer is *reached* matters more than anything:
+
+- **Network** — printer and tablet share the same Wi-Fi. The normal case.
+- **Wireless Direct** — for a tablet on cellular data with no site Wi-Fi: the printer hosts its own
+  Wi-Fi network and the tablet joins it, keeping internet over LTE. Switch it on in the printer's menu
+  (on a Brother QL-820NWB: Menu → WLAN → Wireless Direct → On; the network name and password print on
+  the info sheet, and the printer answers at 192.168.118.1). On the tablet, join that network once —
+  iPadOS keeps cellular data flowing for everything else.
+- **Bluetooth** — recorded for inventory only: iPads can print over Bluetooth solely from the maker's
+  own app, never from a web kiosk, so a Bluetooth-only printer will not print badges.
 
 ---
 

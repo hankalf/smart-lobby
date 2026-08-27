@@ -613,6 +613,69 @@ router.delete('/projects/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+/* -------------------------------------------------------------- printers */
+
+const PRINTER_PORTS = ['network', 'wireless_direct', 'bluetooth'];
+const PRINTER_COLORS = ['black', 'red', 'black_red'];
+
+/** What the dashboard may set on a printer, cleaned up. */
+function printerBody(b) {
+  return {
+    name: clean(b.name),
+    model: clean(b.model) || null,
+    label_type: clean(b.label_type) || null,
+    foreground_color: PRINTER_COLORS.includes(b.foreground_color) ? b.foreground_color : 'black',
+    port: PRINTER_PORTS.includes(b.port) ? b.port : 'network',
+    // Bluetooth has no address; network and Wireless Direct both do (a printer
+    // in Wireless Direct is reached at its own access-point address).
+    ip_address: (PRINTER_PORTS.includes(b.port) ? b.port : 'network') === 'bluetooth'
+      ? null : (clean(b.ip_address) || null),
+    // A location that no longer exists is dropped rather than turned into a
+    // foreign-key error the dashboard cannot explain.
+    location_id: b.location_id && get('SELECT id FROM locations WHERE id = ?', Number(b.location_id))
+      ? Number(b.location_id) : null,
+    notes: clean(b.notes) || null,
+    active: b.active === false || b.active === 0 ? 0 : 1
+  };
+}
+
+router.get('/printers', (req, res) => {
+  res.json(all(`SELECT pr.*, l.name AS location_name,
+                  (SELECT COUNT(*) FROM devices d WHERE d.printer_id = pr.id) AS device_count
+                FROM printers pr LEFT JOIN locations l ON l.id = pr.location_id
+                ORDER BY pr.active DESC, pr.name`));
+});
+
+router.post('/printers', (req, res) => {
+  const body = printerBody(req.body || {});
+  if (!body.name) return res.status(400).json({ error: 'name_required' });
+  const r = run(`INSERT INTO printers (name, model, label_type, foreground_color, port, ip_address,
+                                       location_id, notes, active, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    body.name, body.model, body.label_type, body.foreground_color, body.port, body.ip_address,
+    body.location_id, body.notes, body.active, nowISO());
+  audit(req, 'create', 'printer', Number(r.lastInsertRowid), body);
+  res.json(get('SELECT * FROM printers WHERE id = ?', r.lastInsertRowid));
+});
+
+router.patch('/printers/:id', (req, res) => {
+  const existing = get('SELECT * FROM printers WHERE id = ?', req.params.id);
+  if (!existing) return res.status(404).json({ error: 'not_found' });
+  const body = printerBody({ ...existing, ...req.body });
+  if (!body.name) return res.status(400).json({ error: 'name_required' });
+  run(`UPDATE printers SET name = ?, model = ?, label_type = ?, foreground_color = ?, port = ?,
+        ip_address = ?, location_id = ?, notes = ?, active = ? WHERE id = ?`,
+    body.name, body.model, body.label_type, body.foreground_color, body.port, body.ip_address,
+    body.location_id, body.notes, body.active, req.params.id);
+  audit(req, 'update', 'printer', Number(req.params.id), req.body);
+  res.json(get('SELECT * FROM printers WHERE id = ?', req.params.id));
+});
+
+router.delete('/printers/:id', (req, res) => {
+  run('DELETE FROM printers WHERE id = ?', req.params.id);
+  audit(req, 'delete', 'printer', Number(req.params.id));
+  res.json({ ok: true });
+});
+
 /* ------------------------------------------------------------- induction */
 
 router.get('/slideshows', (req, res) => {
@@ -775,7 +838,7 @@ router.post('/devices', (req, res) => {
 
 router.patch('/devices/:id', (req, res) => {
   const b = req.body || {};
-  const fields = ['site_id', 'location_id', 'name', 'mode', 'default_camera', 'print_enabled', 'sections'];
+  const fields = ['site_id', 'location_id', 'name', 'mode', 'default_camera', 'print_enabled', 'sections', 'printer_id'];
   const cols = fields.filter((f) => b[f] !== undefined);
   if (cols.length) {
     run(`UPDATE devices SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`,

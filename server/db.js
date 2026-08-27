@@ -308,6 +308,25 @@ function migrate() {
     created_at TEXT NOT NULL
   );
 
+  /*
+   * The label printers on site. AirPrint printing works without any of this —
+   * the registry records what hardware is where, which roll is loaded and how
+   * it is reached, and lets a device say which printer sits beside it.
+   */
+  CREATE TABLE IF NOT EXISTS printers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    model TEXT,
+    label_type TEXT,
+    foreground_color TEXT NOT NULL DEFAULT 'black',
+    port TEXT NOT NULL DEFAULT 'network',
+    ip_address TEXT,
+    location_id INTEGER REFERENCES locations(id) ON DELETE SET NULL,
+    notes TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS sessions (
     token TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -339,6 +358,8 @@ function migrate() {
   // The Spanish wording of documents an admin writes, alongside the English.
   addColumn('agreements', 'name_es', 'TEXT');
   addColumn('agreements', 'body_es', 'TEXT');
+  // Which registered printer sits beside this tablet.
+  addColumn('devices', 'printer_id', 'INTEGER REFERENCES printers(id) ON DELETE SET NULL');
 }
 
 function addColumn(table, column, definition) {

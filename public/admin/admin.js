@@ -1592,6 +1592,118 @@
       async () => { await api(`/locations/${b.dataset.lodel}`, { method: 'DELETE' }); render('locations'); })));
   };
 
+  /* -------------------------------------------------------------- printers */
+
+  const PRINTER_COLORS = [['black', 'Black'], ['red', 'Red'], ['black_red', 'Black & red (DK-2251 roll)']];
+  const PRINTER_PORTS = [['network', 'Network (Wi-Fi / Ethernet)'], ['wireless_direct', 'Wireless Direct (printer hosts its own Wi-Fi)'],
+    ['bluetooth', 'Bluetooth']];
+  const printerPortLabel = (p) => (PRINTER_PORTS.find(([v]) => v === p) || [p, p])[1];
+
+  VIEWS.printers = async (root) => {
+    const [rows, locations] = await Promise.all([api('/printers'), api('/locations')]);
+
+    const printerFields = (p) => `
+      <div class="form-grid">
+        <label class="field"><span>Printer name *</span><input class="input" id="pr-name" placeholder="Gate badge printer" value="${esc(p.name || '')}"></label>
+        <label class="field"><span>Model</span><input class="input" id="pr-model" placeholder="Brother QL-820NWB" value="${esc(p.model || '')}"></label>
+        <label class="field"><span>Label type</span><input class="input" id="pr-label" placeholder="DK-2205 62mm continuous" value="${esc(p.label_type || '')}"></label>
+        <label class="field"><span>Foreground colour</span>
+          <select class="input" id="pr-color">${PRINTER_COLORS.map(([v, l]) =>
+            `<option value="${v}" ${p.foreground_color === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label class="field"><span>Port</span>
+          <select class="input" id="pr-port">${PRINTER_PORTS.map(([v, l]) =>
+            `<option value="${v}" ${p.port === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label class="field" id="pr-ip-wrap"><span>Static IP (if set)</span>
+          <input class="input" id="pr-ip" placeholder="192.168.1.60" value="${esc(p.ip_address || '')}">
+          <span class="muted" id="pr-ip-hint"></span></label>
+        <label class="field"><span>Location</span>
+          <select class="input" id="pr-loc"><option value="">— none —</option>
+            ${locations.map((l) => `<option value="${l.id}" ${p.location_id === l.id ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select></label>
+        <label class="field"><span>Notes</span><input class="input" id="pr-notes" placeholder="Wireless Direct password, roll spares…" value="${esc(p.notes || '')}"></label>
+      </div>
+      <label class="check"><input type="checkbox" id="pr-active" ${p.active === 0 ? '' : 'checked'}> In service</label>`;
+
+    // The IP box only means something when the printer is reached by address.
+    const wirePortHint = (bg) => {
+      const update = () => {
+        const port = $('#pr-port', bg).value;
+        $('#pr-ip-wrap', bg).style.display = port === 'bluetooth' ? 'none' : '';
+        $('#pr-ip-hint', bg).textContent = port === 'wireless_direct'
+          ? 'In Wireless Direct the printer is its own network — Brother printers answer at 192.168.118.1.'
+          : 'Leave empty if the printer takes an address from your router.';
+        if (port === 'wireless_direct' && !$('#pr-ip', bg).value.trim()) $('#pr-ip', bg).value = '192.168.118.1';
+      };
+      $('#pr-port', bg).addEventListener('change', update);
+      update();
+    };
+
+    const collect = (bg) => ({
+      name: $('#pr-name', bg).value.trim(),
+      model: $('#pr-model', bg).value.trim(),
+      label_type: $('#pr-label', bg).value.trim(),
+      foreground_color: $('#pr-color', bg).value,
+      port: $('#pr-port', bg).value,
+      ip_address: $('#pr-ip', bg).value.trim(),
+      location_id: $('#pr-loc', bg).value ? Number($('#pr-loc', bg).value) : null,
+      notes: $('#pr-notes', bg).value.trim(),
+      active: $('#pr-active', bg).checked
+    });
+
+    root.innerHTML = `
+      <h1 class="page">Printers</h1>
+      <p class="page-sub">The label printers on site: what they are, which roll is loaded, and how each is reached.
+        Point a device at its printer under <b>Devices</b>, and set the badge design under <b>Badges</b>.</p>
+      ${locations.length ? '' : '<div class="notice">No locations yet — add them under <b>Locations</b> so each printer can say where it is.</div>'}
+      <div class="card section">
+        <div class="row" style="margin-bottom:1rem"><button class="btn" id="pr-add">Add printer</button></div>
+        <div class="table-wrap">${rows.length ? `<table>
+          <thead><tr><th>Printer</th><th>Model</th><th>Label</th><th>Colour</th><th>Port</th><th>Address</th><th>Location</th><th>Devices</th><th>Status</th><th></th></tr></thead>
+          <tbody>${rows.map((p) => `<tr>
+            <td><b>${esc(p.name)}</b>${p.notes ? `<div class="muted">${esc(p.notes)}</div>` : ''}</td>
+            <td class="muted">${esc(p.model || '')}</td>
+            <td class="muted">${esc(p.label_type || '')}</td>
+            <td class="muted">${esc((PRINTER_COLORS.find(([v]) => v === p.foreground_color) || ['', p.foreground_color])[1])}</td>
+            <td class="muted">${esc(printerPortLabel(p.port))}</td>
+            <td class="muted">${esc(p.ip_address || (p.port === 'bluetooth' ? '—' : 'auto'))}</td>
+            <td class="muted">${esc(p.location_name || '')}</td>
+            <td>${p.device_count}</td>
+            <td><span class="pill ${p.active ? 'on' : 'off'}">${p.active ? 'in service' : 'out'}</span></td>
+            <td><button class="btn ghost" data-predit="${p.id}">Edit</button>
+                <button class="btn ghost" data-prdel="${p.id}">Remove</button></td></tr>`).join('')}</tbody></table>`
+          : '<p class="empty">No printers yet. Add the badge printer so devices can point at it.</p>'}</div>
+        <p class="muted">Printing itself runs over AirPrint, so a <b>Network</b> printer just needs to share the tablet's
+          Wi-Fi. <b>Wireless Direct</b> is for a tablet on cellular data: the printer hosts its own Wi-Fi and the tablet
+          joins it, keeping internet over LTE. A <b>Bluetooth</b> entry is inventory only — iPads can only print over
+          Bluetooth from the maker's own app, not from the kiosk.</p>
+      </div>`;
+
+    $('#pr-add').addEventListener('click', () => {
+      const m = modal('Add printer', printerFields({ foreground_color: 'black', port: 'network', active: 1 }),
+        async (bg, close) => {
+          const body = collect(bg);
+          if (!body.name) return toast('Give the printer a name');
+          await api('/printers', { method: 'POST', body });
+          close(); render('printers');
+        });
+      wirePortHint(m.bg);
+    });
+
+    $$('[data-predit]').forEach((b) => b.addEventListener('click', () => {
+      const p = rows.find((x) => String(x.id) === b.dataset.predit);
+      const m = modal(`Edit ${p.name}`, printerFields(p), async (bg, close) => {
+        const body = collect(bg);
+        if (!body.name) return toast('Give the printer a name');
+        await api(`/printers/${p.id}`, { method: 'PATCH', body });
+        close(); render('printers');
+      });
+      wirePortHint(m.bg);
+    }));
+
+    $$('[data-prdel]').forEach((b) => b.addEventListener('click', () => confirmAction(
+      'Remove this printer? Devices pointed at it simply lose the link.',
+      async () => { await api(`/printers/${b.dataset.prdel}`, { method: 'DELETE' }); render('printers'); })));
+  };
+
   /* --------------------------------------------------------- visitor types */
 
   VIEWS.vtypes = async (root) => {
@@ -1783,7 +1895,7 @@
   ];
 
   VIEWS.devices = async (root) => {
-    const [rows, locations] = await Promise.all([api('/devices'), api('/locations')]);
+    const [rows, locations, printers] = await Promise.all([api('/devices'), api('/locations'), api('/printers')]);
     const origin = location.origin;
     root.innerHTML = `
       <h1 class="page">Devices</h1>
@@ -1878,6 +1990,11 @@
         <label class="check"><input type="checkbox" id="de-print" ${d.print_enabled ? 'checked' : ''}>
           <span>Print badges from this device<br><span class="muted">Only applies while badge printing is on in
             Settings. Turn it off for a device with no printer attached.</span></span></label>
+        <label class="field"><span>Printer beside this device</span><select class="input" id="de-printer">
+          <option value="">— none —</option>
+          ${printers.map((p) => `<option value="${p.id}" ${p.id === d.printer_id ? 'selected' : ''}>${esc(p.name)}${p.model ? ` (${esc(p.model)})` : ''}</option>`).join('')}
+        </select>
+        <span class="muted">From the Printers tab — records which printer this tablet prints to.</span></label>
         <p class="muted">More operational modes are coming; every device runs in kiosk mode for now.</p>`,
         async (bg, close) => {
           const picked = sectionOrder.filter((k) => enabled.has(k));
@@ -1892,7 +2009,8 @@
             // Everything ticked in the standard order means "no preference", so a
             // card added later still appears on this device.
             sections: isDefault ? null : JSON.stringify(picked),
-            print_enabled: $('#de-print', bg).checked } });
+            print_enabled: $('#de-print', bg).checked,
+            printer_id: $('#de-printer', bg).value ? Number($('#de-printer', bg).value) : null } });
           close(); render('devices');
         });
 

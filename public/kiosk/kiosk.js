@@ -432,7 +432,15 @@
       history.replaceState({}, '', location.pathname);
     }
     try {
-      state.cfg = await api('/config');
+      /*
+       * A registered device draws its card list from its first check-in. Waiting
+       * for that answer alongside the config means the first paint already shows
+       * this device's cards, instead of everyone's for a blink and then the
+       * right ones. ping() never throws, so an offline check-in cannot stop the
+       * kiosk — it just falls back to the full set, as before.
+       */
+      const [cfg] = await Promise.all([api('/config'), state.deviceToken ? ping() : Promise.resolve()]);
+      state.cfg = cfg;
     } catch {
       toast('Cannot reach the lobby server — retrying…');
       return setTimeout(boot, 5000);
@@ -440,7 +448,7 @@
     state.configRev = state.cfg.config_rev;
     state.lang = state.cfg.kiosk.default_language === 'es' ? 'es' : 'en';
     applyConfig();
-    ping();
+    if (!state.deviceToken) ping();
     setInterval(ping, 20000); // also how quickly a dashboard change reaches the kiosk
     setInterval(refreshCount, 60000);
   }
