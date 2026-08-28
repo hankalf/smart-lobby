@@ -324,6 +324,21 @@ home-screen cards:
 
 Deliveries sign nothing.
 
+### Typed wording, or an uploaded file
+
+A document is either wording typed into the dashboard or an **uploaded PDF or Word file** (also ODT,
+RTF, plain text or an image). Save the document first, then reopen it and use **Upload PDF or Word**.
+The file is rendered to page images, so it is read on the kiosk exactly as it was drafted — the layout
+of a safety document is part of what is being agreed to — and where there are several pages the kiosk
+says so, since only part of a long one is on screen at once. Where the server cannot render pages (no
+poppler), a PDF is shown as a scrollable document instead, and a Word file is converted to one first.
+
+An uploaded file replaces the typed wording on the kiosk; **Remove file** goes back to it, and the
+typed text is kept meanwhile. Spanish works the same way: upload the Spanish copy inside the
+**En español** panel, and a document with no Spanish file falls back to the English one, exactly as
+its typed wording would. Uploading, replacing or removing a file bumps the document's version, so
+copies already signed stay exactly as they were signed.
+
 A document can also carry its own **questions**, asked on the kiosk just above the signature:
 
 - **Yes / No** — a tap

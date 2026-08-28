@@ -788,7 +788,11 @@
       if (!spanishOn) return '';
       const qs = parseQs(a);
       const translatedQs = qs.filter((q) => String(q.label_es || '').trim()).length;
-      const hasBody = !!(String(a.body_es || '').trim() || !String(a.body || '').trim());
+      // An uploaded Spanish file counts as the Spanish wording, the same way
+      // an uploaded English file replaces the typed English.
+      const hasBody = docFilePages(a, false).length
+        ? docFilePages(a, true).length > 0
+        : !!(String(a.body_es || '').trim() || !String(a.body || '').trim());
       if (hasBody && translatedQs === qs.length) return '<span class="pill on">Español ✓</span>';
       if (!hasBody && !translatedQs) return '<span class="pill off" title="Open Edit and fill in the En español boxes">no Spanish — shows in English</span>';
       return `<span class="pill wait" title="Open Edit and fill in the En español boxes">Spanish incomplete${qs.length ? ` (${translatedQs}/${qs.length} questions)` : ''}</span>`;
@@ -806,7 +810,10 @@
           countQuestions(a) ? ` · ${countQuestions(a)} question${countQuestions(a) === 1 ? '' : 's'}` : ''}</span></div>
         <div class="row" style="margin:0"><button class="btn ghost" data-doc="${a.id}">Edit</button>
         <button class="btn ghost" data-docdel="${a.id}">Delete</button></div></div>
-        <pre class="muted" style="white-space:pre-wrap;margin:0">${esc(a.body.slice(0, 400))}${a.body.length > 400 ? '…' : ''}</pre></div>`).join('')
+        ${docFilePages(a, false).length
+    ? `<p class="muted" style="margin:0">📄 <b>${esc(a.source_file || 'Uploaded file')}</b> — ${docFilePages(a, false).length} page(s)${
+      docFilePages(a, true).length ? `, plus ${esc(a.source_file_es || 'a Spanish file')} for Spanish` : ''}. Shown on the kiosk in place of typed wording.</p>`
+    : `<pre class="muted" style="white-space:pre-wrap;margin:0">${esc(String(a.body || '').slice(0, 400))}${String(a.body || '').length > 400 ? '…' : ''}</pre>`}</div>`).join('')
         || '<div class="card section"><p class="empty">No documents yet.</p></div>'}`;
     $('#a-new').addEventListener('click', () => docEditor(null));
     $$('[data-doc]').forEach((b) => b.addEventListener('click', async () =>
@@ -814,6 +821,45 @@
     $$('[data-docdel]').forEach((b) => b.addEventListener('click', () => confirmAction('Delete this document?',
       async () => { await api(`/agreements/${b.dataset.docdel}`, { method: 'DELETE' }); render('documents'); })));
   };
+
+  /** Pages already attached to a document, for one language. */
+  function docFilePages(doc, es) {
+    if (!doc) return [];
+    try { return JSON.parse((es ? doc.pages_es : doc.pages) || '[]'); } catch { return []; }
+  }
+
+  /**
+   * The upload control for one language. A file can only be attached to a
+   * document that exists, so on a new document it says to save first rather
+   * than offering a button that cannot work.
+   */
+  function docFileBlock(doc, es) {
+    const label = es ? 'Archivo en español' : 'Or upload the document';
+    if (!doc) {
+      return `<p class="muted">${es ? 'Guarde el documento para poder subir un archivo.'
+        : 'Save the document first, then reopen it to upload a PDF or Word file instead of typing the wording.'}</p>`;
+    }
+    const pages = docFilePages(doc, es);
+    const source = es ? doc.source_file_es : doc.source_file;
+    const mode = es ? doc.render_mode_es : doc.render_mode;
+    const id = es ? 'es' : 'en';
+    return `<div class="field">
+      <span>${label}</span>
+      ${pages.length ? `<div class="notice" style="margin:.4rem 0">
+          <b>${esc(source || 'Uploaded file')}</b> — ${pages.length} page${pages.length === 1 ? '' : 's'}${
+        mode === 'pdf' ? ', shown as a scrollable PDF' : mode === 'image' ? ', an image' : ', rendered as designed'}.
+          <br><span class="muted">Shown on the kiosk instead of the wording above.</span>
+        </div>
+        <div class="row" style="margin:0">
+          <label class="btn subtle">Replace file<input type="file" id="ag-file-${id}" accept=".pdf,.doc,.docx,.odt,.rtf,.txt,image/*" hidden></label>
+          <button class="btn ghost" type="button" data-agfiledel="${id}">Remove file</button>
+        </div>`
+    : `<div class="row" style="margin:0">
+          <label class="btn subtle">Upload PDF or Word<input type="file" id="ag-file-${id}" accept=".pdf,.doc,.docx,.odt,.rtf,.txt,image/*" hidden></label>
+        </div>
+        <span class="muted">Rendered to pages so it is read exactly as drafted. Leave empty to use the wording above.</span>`}
+    </div>`;
+  }
 
   function docEditor(doc) {
     const req = doc ? JSON.parse(doc.required_for) : ['visitor', 'contractor'];
@@ -824,6 +870,7 @@
       <label class="field"><span>Title</span><input class="input" id="ag-name" value="${esc(doc ? doc.name : '')}"></label>
       <label class="field"><span>What they read and sign</span>
         <textarea class="input" id="ag-body" rows="10">${esc(doc ? doc.body : '')}</textarea></label>
+      ${docFileBlock(doc, false)}
 
       <details class="howto" ${(doc && ((doc.name_es || '').trim() || (doc.body_es || '').trim()))
         || (SETTINGS && SETTINGS.kiosk && SETTINGS.kiosk.spanish_enabled) ? 'open' : ''}>
@@ -833,6 +880,7 @@
         <label class="field"><span>Título</span><input class="input" id="ag-name-es" value="${esc((doc && doc.name_es) || '')}"></label>
         <label class="field"><span>Lo que leen y firman</span>
           <textarea class="input" id="ag-body-es" rows="10">${esc((doc && doc.body_es) || '')}</textarea></label>
+        ${docFileBlock(doc, true)}
       </details>
 
       <h3>Who signs this</h3>
@@ -870,6 +918,49 @@
         else await api('/agreements', { method: 'POST', body });
         close(); render('documents');
       });
+
+    /*
+     * Files are attached to the document itself, not to the form: uploading
+     * saves straight away and reopens the editor on the updated document, so
+     * what is on screen always matches what the kiosk will show.
+     */
+    ['en', 'es'].forEach((lang) => {
+      const input = $(`#ag-file-${lang}`, m.bg);
+      if (input) {
+        input.addEventListener('change', async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          toast('Uploading…', 8000);
+          try {
+            const out = await upload(`/agreements/${doc.id}/file?language=${lang}`, file);
+            toast(out.method === 'rendered'
+              ? `Uploaded — ${out.pages.length} page${out.pages.length === 1 ? '' : 's'} rendered`
+              : out.method === 'pdf'
+                ? 'Uploaded — shown as a scrollable PDF (install poppler for rendered pages)'
+                : 'Uploaded', 5000);
+            m.close();
+            docEditor((await api('/agreements')).find((x) => x.id === doc.id));
+            render('documents');
+          } catch (err) {
+            toast((err.data && err.data.error) === 'unsupported_file_type'
+              ? 'That file type is not supported — use PDF, Word, ODT, RTF or text.'
+              : 'Could not read that file', 5000);
+          }
+          e.target.value = '';
+        });
+      }
+      const del = $(`[data-agfiledel="${lang}"]`, m.bg);
+      if (del) {
+        del.addEventListener('click', () => confirmAction(
+          'Remove the uploaded file? The document goes back to the wording typed above.',
+          async () => {
+            await api(`/agreements/${doc.id}/file?language=${lang}`, { method: 'DELETE' });
+            m.close();
+            docEditor((await api('/agreements')).find((x) => x.id === doc.id));
+            render('documents');
+          }));
+      }
+    });
 
     const list = $('#q-list', m.bg);
     /*

@@ -363,3 +363,11 @@ body:has(.screen[data-screen="induction"]:not([hidden])) .lang-toggle { display:
 }
 .offline-note.hidden { display: none; }
 @media print { .offline-note { display: none !important; } }
+
+/* An uploaded PDF or Word document, shown as the pages it was drafted as */
+.doc-pages { padding: 0; display: flex; flex-direction: column; gap: .5rem; background: #f2f5f3; }
+.doc-pages img { width: 100%; height: auto; display: block; background: #fff; }
+.doc-pages iframe { width: 100%; height: 34vh; border: 0; display: block; background: #fff; }
+.doc-pages.hidden { display: none; }
+.doc-scroll { margin: .4rem 0 0; }
+.doc-scroll.hidden { display: none; }

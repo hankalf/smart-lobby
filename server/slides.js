@@ -205,4 +205,54 @@ function ingest(file, slideshowId) {
   }
 }
 
-module.exports = { ingest, capabilities, replaceSlides };
+const DOC_EXT = new Set(['.pdf', '.docx', '.doc', '.odt', '.rtf', '.txt']);
+
+/**
+ * Render an uploaded document to page images, for anything that must be read
+ * and signed exactly as it was drafted. Same ladder as the decks: rendered
+ * pages where LibreOffice and poppler are present, the PDF itself embedded
+ * where they are not, and an image kept as-is.
+ *
+ * @param {{buffer: Buffer, originalname: string}} file
+ * @param {string} folder  where under the public uploads the pages belong
+ * @returns {{pages: string[], method: 'rendered'|'pdf'|'image', source: string}}
+ */
+function renderPages(file, folder) {
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  const source = file.originalname || 'document';
+
+  if (IMAGE_EXT.has(ext)) {
+    return { pages: [saveBuffer(file.buffer, 'public', folder, source)], method: 'image', source };
+  }
+  if (!DOC_EXT.has(ext)) throw new Error('unsupported_file_type');
+
+  const work = tmpDir('doc');
+  try {
+    const inputPath = path.join(work, `input${ext}`);
+    fs.writeFileSync(inputPath, file.buffer);
+
+    const pdfPath = ext === '.pdf' ? inputPath : convertToPdf(inputPath, work);
+    const pngs = pdfPath ? pdfToPngs(pdfPath, work) : null;
+    if (pngs && pngs.length) {
+      return {
+        pages: pngs.map((p) => saveBuffer(fs.readFileSync(p), 'public', folder, path.basename(p))),
+        method: 'rendered',
+        source
+      };
+    }
+    /*
+     * Without poppler the pages cannot be split, but the document is still
+     * readable as a scrollable PDF — including a Word file, which LibreOffice
+     * has just converted to one. Better than refusing the upload.
+     */
+    if (pdfPath) {
+      const name = ext === '.pdf' ? source : `${path.basename(source, ext)}.pdf`;
+      return { pages: [saveBuffer(fs.readFileSync(pdfPath), 'public', folder, name)], method: 'pdf', source };
+    }
+    throw new Error('could_not_read_document');
+  } finally {
+    try { fs.rmSync(work, { recursive: true, force: true }); } catch { /* ignore */ }
+  }
+}
+
+module.exports = { ingest, capabilities, replaceSlides, renderPages };

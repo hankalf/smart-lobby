@@ -366,6 +366,17 @@ function migrate() {
   // A reference minted on the kiosk for each sign-in, so one queued offline
   // and retried is recorded once however many times the retry lands.
   addColumn('visits', 'client_ref', 'TEXT');
+  /*
+   * A document can be an uploaded PDF or Word file instead of typed text,
+   * rendered to page images so it is read exactly as it was drafted. Kept per
+   * language, like the wording it replaces.
+   */
+  addColumn('agreements', 'pages', 'TEXT');          // JSON array of image paths
+  addColumn('agreements', 'pages_es', 'TEXT');
+  addColumn('agreements', 'source_file', 'TEXT');
+  addColumn('agreements', 'source_file_es', 'TEXT');
+  addColumn('agreements', 'render_mode', 'TEXT');    // rendered | pdf | image
+  addColumn('agreements', 'render_mode_es', 'TEXT');
 }
 
 function addColumn(table, column, definition) {

@@ -613,6 +613,55 @@ router.delete('/projects/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+/* ------------------------------------------------- documents to sign */
+
+/**
+ * Attach a PDF or Word file to a document. It is rendered to page images so a
+ * contractor reads it exactly as it was drafted — the layout of a safety
+ * document is part of what they are agreeing to. Uploading to `es` attaches
+ * the Spanish copy of the same document, alongside the English one.
+ */
+router.post('/agreements/:id/file', files.memoryUpload.single('file'), (req, res) => {
+  const doc = get('SELECT * FROM agreements WHERE id = ?', req.params.id);
+  if (!doc) return res.status(404).json({ error: 'not_found' });
+  if (!req.file) return res.status(400).json({ error: 'no_file' });
+  const es = req.query.language === 'es';
+
+  try {
+    const out = decks.renderPages(
+      { buffer: req.file.buffer, originalname: req.file.originalname },
+      `documents/${doc.id}${es ? '/es' : ''}`
+    );
+    // A replaced file leaves its old pages behind otherwise.
+    removeDocPages(doc, es);
+    run(`UPDATE agreements SET ${es ? 'pages_es = ?, source_file_es = ?, render_mode_es = ?' : 'pages = ?, source_file = ?, render_mode = ?'},
+         version = version + 1 WHERE id = ?`,
+    JSON.stringify(out.pages), out.source, out.method, doc.id);
+    audit(req, 'upload_document', 'agreement', doc.id, { file: out.source, language: es ? 'es' : 'en', method: out.method });
+    res.json({ ok: true, ...out, agreement: get('SELECT * FROM agreements WHERE id = ?', doc.id) });
+  } catch (err) {
+    res.status(400).json({ error: String(err.message || err) });
+  }
+});
+
+function removeDocPages(doc, es) {
+  let pages = [];
+  try { pages = JSON.parse((es ? doc.pages_es : doc.pages) || '[]'); } catch { pages = []; }
+  pages.forEach((p) => files.removeFile(p));
+}
+
+/** Drop the uploaded file and go back to the typed wording. */
+router.delete('/agreements/:id/file', (req, res) => {
+  const doc = get('SELECT * FROM agreements WHERE id = ?', req.params.id);
+  if (!doc) return res.status(404).json({ error: 'not_found' });
+  const es = req.query.language === 'es';
+  removeDocPages(doc, es);
+  run(`UPDATE agreements SET ${es ? 'pages_es = NULL, source_file_es = NULL, render_mode_es = NULL'
+    : 'pages = NULL, source_file = NULL, render_mode = NULL'}, version = version + 1 WHERE id = ?`, doc.id);
+  audit(req, 'remove_document_file', 'agreement', doc.id, { language: es ? 'es' : 'en' });
+  res.json({ ok: true, agreement: get('SELECT * FROM agreements WHERE id = ?', doc.id) });
+});
+
 /* -------------------------------------------------------------- printers */
 
 const PRINTER_PORTS = ['network', 'wireless_direct', 'bluetooth'];

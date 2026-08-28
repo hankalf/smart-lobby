@@ -97,7 +97,8 @@ function defaultSite() {
 router.get('/config', (req, res) => {
   const site = defaultSite();
   const pub = settings.publicSettings();
-  const agreements = all(`SELECT id, name, name_es, body, body_es, version, required_for, questions, require_signature
+  const agreements = all(`SELECT id, name, name_es, body, body_es, pages, pages_es, render_mode, render_mode_es,
+                                 version, required_for, questions, require_signature
                           FROM agreements WHERE active = 1`);
   const inductions = all('SELECT id, name, version, required_for FROM slideshows WHERE active = 1');
   res.json({

@@ -163,6 +163,7 @@
     'Door unlocked — please come in': 'Puerta abierta — adelante',
     'Could not unlock the door': 'No se pudo abrir la puerta',
     'Photo captured': 'Foto tomada',
+    '{n} pages — scroll to read all of it.': '{n} páginas — desplácese para leerlo todo.',
     'The camera is not ready yet — try again in a moment.':
       'La cámara aún no está lista — inténtelo de nuevo en un momento.',
     'Your badge is printing…': 'Su credencial se está imprimiendo…',
@@ -1201,8 +1202,34 @@
       ? `${title} (${index + 1} ${state.lang === 'es' ? 'de' : 'of'} ${state.agreements.length})`
       : title;
     // A questionnaire may have no text to read at all.
-    $('#agreement-body').textContent = inLang(state.agreement, 'body');
-    show($('#agreement-body'), !!inLang(state.agreement, 'body').trim());
+    /*
+     * A document is either typed wording or an uploaded PDF/Word file rendered
+     * to pages. The pages win where they exist for the language on screen — the
+     * layout of a document being signed is part of what is agreed to.
+     */
+    const pages = docPages(state.agreement);
+    const pagesBox = $('#agreement-pages');
+    if (pages.list.length) {
+      pagesBox.innerHTML = pages.mode === 'pdf'
+        ? `<iframe src="${escapeHtml(pages.list[0])}#toolbar=0" title=""></iframe>`
+        : pages.list.map((p, i) =>
+          `<img src="${escapeHtml(p)}" alt="${escapeHtml(`Page ${i + 1}`)}" loading="${i ? 'lazy' : 'eager'}">`).join('');
+      pagesBox.scrollTop = 0;
+      // Only part of a long document is on screen at once; say so, or someone
+      // signs having read the first page and not known there were more.
+      const hint = $('#agreement-scroll');
+      const many = pages.mode !== 'pdf' && pages.list.length > 1;
+      if (many) hint.textContent = t('{n} pages — scroll to read all of it.', { n: pages.list.length });
+      show(hint, many);
+      show(pagesBox, true);
+      show($('#agreement-body'), false);
+    } else {
+      pagesBox.innerHTML = '';
+      show(pagesBox, false);
+      show($('#agreement-scroll'), false);
+      $('#agreement-body').textContent = inLang(state.agreement, 'body');
+      show($('#agreement-body'), !!inLang(state.agreement, 'body').trim());
+    }
     // A questionnaire is a document that only asks questions — no signature box.
     const needsSignature = state.agreement.require_signature !== 0;
     show($('.sig-label'), needsSignature);
@@ -1215,6 +1242,22 @@
     renderQuestions({ preserve });
     if (!preserve) clearSignature();
     setScreen('agreement');
+  }
+
+  /**
+   * The rendered pages of an uploaded document, in the language on screen.
+   * A document with no Spanish upload falls back to the English file, exactly
+   * as its typed wording would.
+   */
+  function docPages(agreement) {
+    const read = (field) => {
+      try { return JSON.parse(agreement[field] || '[]'); } catch { return []; }
+    };
+    if (state.lang === 'es') {
+      const es = read('pages_es');
+      if (es.length) return { list: es, mode: agreement.render_mode_es || 'rendered' };
+    }
+    return { list: read('pages'), mode: agreement.render_mode || 'rendered' };
   }
 
   /** Declaration questions attached to the document, answered before signing. */
