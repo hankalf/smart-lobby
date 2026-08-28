@@ -455,6 +455,17 @@
   const homeScreen = () => (state.cfg && state.cfg.kiosk.welcome_shows_menu ? 'idle' : 'menu');
 
   function goBack() {
+    /*
+     * Part way through a set of documents, Back means the document before this
+     * one. Popping the screen history instead dropped the whole step and
+     * landed them back on the photo — where carrying on ran the flow forward
+     * again, so Back behaved like Next.
+     */
+    if (state.screen === 'agreement' && state.agreementIndex > 0) {
+      // Re-signing replaces what was stored for that document.
+      state.signedDocs = state.signedDocs.slice(0, state.agreementIndex - 1);
+      return showDocument(state.agreementIndex - 1);
+    }
     let prev = state.history.pop();
     while (prev === 'menu' && homeScreen() === 'idle') prev = state.history.pop();
     setScreen(prev || homeScreen(), { push: false });
@@ -1246,6 +1257,14 @@
     renderQuestions({ preserve });
     if (!preserve) clearSignature();
     setScreen('agreement');
+    /*
+     * The panel is wider for an uploaded document than for typed wording, so
+     * moving between the two changes how wide the signature box is. The canvas
+     * has to be re-measured or it keeps the old width and strokes land outside
+     * the picture — a box that will not write. Done after a frame, once the
+     * new width has actually been laid out, and never while ink is on it.
+     */
+    if (!preserve) requestAnimationFrame(() => { if (!hasInk) sizeSignaturePad(); });
   }
 
   /**
@@ -1594,6 +1613,23 @@
     padCtx.strokeStyle = '#12211b';
     hasInk = false;
   }
+
+  /*
+   * Anything that changes the box's width — a tablet rotated, a document page
+   * loading and reflowing the panel — leaves the canvas measured for the old
+   * one, and it stops taking a signature. Re-measure, but never over a
+   * signature already being written.
+   */
+  let resizePad = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizePad);
+    resizePad = setTimeout(() => {
+      if (state.screen !== 'agreement' || hasInk) return;
+      if (Math.abs(pad.getBoundingClientRect().width * (window.devicePixelRatio || 1) - pad.width) > 2) {
+        sizeSignaturePad();
+      }
+    }, 150);
+  });
 
   function clearSignature() {
     if (padCtx) padCtx.clearRect(0, 0, pad.width, pad.height);
