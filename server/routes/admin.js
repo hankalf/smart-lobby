@@ -922,7 +922,6 @@ const maskSecrets = (s) => ({
   ...s,
   notify: {
     ...s.notify,
-    smtp_pass: s.notify.smtp_pass ? MASK : '',
     twilio_auth_token: s.notify.twilio_auth_token ? MASK : ''
   }
 });
@@ -957,7 +956,7 @@ router.put('/settings', (req, res) => {
 
   // A masked secret means "unchanged" — never write the mask itself back.
   if (patch.notify) {
-    for (const key of ['smtp_pass', 'twilio_auth_token']) {
+    for (const key of ['twilio_auth_token']) {
       if (patch.notify[key] === MASK) delete patch.notify[key];
     }
   }
@@ -1043,76 +1042,6 @@ router.get('/notifications', (req, res) => {
                 LEFT JOIN visits v ON v.id = n.visit_id
                 LEFT JOIN visitors p ON p.id = v.visitor_id
                 ORDER BY n.id DESC LIMIT 50`));
-});
-
-/**
- * When a test email cannot reach the server, this answers the question that
- * matters: is the host name wrong, or is the platform this runs on blocking
- * the SMTP ports altogether? It resolves the name, then tries raw TCP to the
- * configured port, to 465, and to a known-good mail server as a control, and
- * proves general internet access over HTTPS. The combination says which it is.
- */
-router.post('/settings/email-diagnose', async (req, res) => {
-  const net = require('net');
-  const dns = require('dns').promises;
-  const n = settings.getSection('notify');
-  const host = clean(n.smtp_host);
-  const port = Number(n.smtp_port) || 587;
-
-  const tcp = (h, p) => new Promise((resolve) => {
-    const sock = net.connect({ host: h, port: p, timeout: 8000 });
-    sock.once('connect', () => { sock.destroy(); resolve(true); });
-    sock.once('timeout', () => { sock.destroy(); resolve(false); });
-    sock.once('error', () => resolve(false));
-  });
-
-  const out = { host, port };
-  if (!host) return res.json({ ...out, error: 'No SMTP host is set.' });
-
-  try { await dns.lookup(host); out.dns = true; } catch { out.dns = false; }
-  if (out.dns) {
-    [out.port_open, out.port_465, out.control_smtp] = await Promise.all([
-      tcp(host, port), port === 465 ? Promise.resolve(null) : tcp(host, 465), tcp('smtp.gmail.com', 587)
-    ]);
-  }
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 8000);
-    const r = await fetch('https://www.apple.com/library/test/success.html', { signal: controller.signal });
-    clearTimeout(timer);
-    out.https = r.ok;
-  } catch { out.https = false; }
-
-  out.verdict = !out.dns
-    ? 'That host name does not exist — check the spelling.'
-    : out.port_open
-    ? 'The mail server is reachable from here. The earlier failure was momentary or something else — run the test again.'
-    : out.port_465
-    ? 'Port 587 is closed but 465 answers: set the port to 465, tick “Use TLS on connect”, save, and test again.'
-    : out.https && !out.control_smtp
-    ? 'The internet is reachable but no mail server answers on any SMTP port — this hosting platform is blocking '
-      + 'outgoing email ports (Railway does this on some plans). SMTP cannot work from here no matter the settings. '
-      + 'Switch the provider to Brevo or SendGrid below — they send over HTTPS, which is open — or ask the platform '
-      + 'to unblock SMTP.'
-    : out.https
-    ? 'General internet works and other mail servers answer, but this one does not — the host name or port is wrong '
-      + 'for that provider.'
-    : 'Nothing outside is reachable right now — the server itself has no internet access. Try again shortly.';
-  res.json(out);
-});
-
-router.post('/settings/test-email', async (req, res) => {
-  // Fixed by configuration rather than taken from the request, so a test can
-  // never be aimed at a staff member or a visitor by accident.
-  const n = settings.getSection('notify');
-  const to = clean(n.test_email_to) || req.user.email;
-  const result = await notify.sendTest(to);
-  res.json({ ...result, to });
-});
-
-// "Sent" only means accepted — this asks Brevo what became of the message.
-router.post('/settings/email-status', async (req, res) => {
-  res.json(await notify.deliveryStatus(clean(req.body.message_id)));
 });
 
 router.post('/settings/test-sms', async (req, res) => {

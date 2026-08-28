@@ -131,26 +131,18 @@ const DEFAULTS = {
     require_host_approval: false
   },
   notify: {
-    email_enabled: false,
-    // 'smtp' talks to a mail server directly; 'brevo' and 'sendgrid' go over
-    // HTTPS instead, for hosting platforms that block the SMTP ports outright.
-    email_provider: 'smtp',
-    email_api_key: '',
-    from_name: 'Smart Lobby',
-    from_email: 'lobby@example.com',
-    smtp_host: '',
-    smtp_port: 587,
-    smtp_secure: false,
-    smtp_user: '',
-    smtp_pass: '',
-    // Tests always go here, never to a staff member or a visitor.
-    test_email_to: 'hank.alfred@naturestouch.ca',
+    /*
+     * Notifications go to Microsoft Teams: a company channel that sees every
+     * arrival, and each staff member's own Teams link for their own visitors.
+     * Email was removed — this deployment cannot reach a mail server, and a
+     * channel post is what the site actually watches.
+     */
     on_signin: true,
     on_signout: false,
     on_delivery: true,
     global_webhook_url: '',
     webhook_channel_always: true,
-    webhook_format: 'slack',
+    webhook_format: 'teams',
     sms_enabled: false,
     sms_provider: 'twilio',
     twilio_account_sid: '',
@@ -322,12 +314,33 @@ function deepMerge(base, override) {
   return out;
 }
 
+/*
+ * Settings saved before email was removed still carry its keys — including an
+ * SMTP password and an API key. They are dropped on read so nothing dead is
+ * served to the dashboard, and cleared from storage the first time, so the
+ * credentials do not sit in the database for a feature that no longer exists.
+ */
+const DEAD_NOTIFY_KEYS = ['email_enabled', 'email_provider', 'email_api_key', 'from_name', 'from_email',
+  'smtp_host', 'smtp_port', 'smtp_secure', 'smtp_user', 'smtp_pass', 'test_email_to'];
+
+function stripDeadKeys(stored) {
+  if (!stored.notify || typeof stored.notify !== 'object') return false;
+  const found = DEAD_NOTIFY_KEYS.filter((k) => k in stored.notify);
+  if (!found.length) return false;
+  for (const k of found) delete stored.notify[k];
+  run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    'notify', JSON.stringify(stored.notify));
+  console.log(`[settings] removed ${found.length} stored email setting(s) left over from the email notifications`);
+  return true;
+}
+
 function getAll() {
   const rows = all('SELECT key, value FROM settings');
   const stored = {};
   for (const r of rows) {
     try { stored[r.key] = JSON.parse(r.value); } catch { stored[r.key] = r.value; }
   }
+  stripDeadKeys(stored);
   const merged = deepMerge(DEFAULTS, stored);
   // A site that has never opened the Visitor types tab gets its list built from
   // the older switches, so nothing moves on the kiosk until someone edits it.

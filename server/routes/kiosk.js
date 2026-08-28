@@ -358,16 +358,34 @@ router.post('/signin', async (req, res) => {
     // Which entrance or area they signed in at, taken from the kiosk itself.
     const device = b.device_id ? get('SELECT * FROM devices WHERE id = ?', Number(b.device_id)) : null;
 
-    const visitRes = run(`INSERT INTO visits
-      (site_id, visitor_id, host_id, visit_type, purpose, vehicle_reg, badge_no, checkout_code, photo_path,
-       induction_shown, signed_in_at, status, device_id, location_id, reference, movement, project_id,
-       language, client_ref, created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,'onsite',?,?,?,?,?,?,?,?)`,
-      site ? site.id : null, visitor.id, b.host_id ? Number(b.host_id) : null, visitType,
-      clean(b.purpose) || null, (clean(b.vehicle_reg) || '').toUpperCase() || null, badgeNo, code, photoPath,
-      b.induction_completed ? 1 : 0, signedInAt, device ? device.id : null,
-      device ? device.location_id : null, clean(b.reference) || null, clean(b.movement) || null,
-      project ? project.id : null, language, clientRef, nowISO());
+    let visitRes;
+    try {
+      visitRes = run(`INSERT INTO visits
+        (site_id, visitor_id, host_id, visit_type, purpose, vehicle_reg, badge_no, checkout_code, photo_path,
+         induction_shown, signed_in_at, status, device_id, location_id, reference, movement, project_id,
+         language, client_ref, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,'onsite',?,?,?,?,?,?,?,?)`,
+        site ? site.id : null, visitor.id, b.host_id ? Number(b.host_id) : null, visitType,
+        clean(b.purpose) || null, (clean(b.vehicle_reg) || '').toUpperCase() || null, badgeNo, code, photoPath,
+        b.induction_completed ? 1 : 0, signedInAt, device ? device.id : null,
+        device ? device.location_id : null, clean(b.reference) || null, clean(b.movement) || null,
+        project ? project.id : null, language, clientRef, nowISO());
+    } catch (err) {
+      /*
+       * Two retries of the same queued sign-in racing each other: the earlier
+       * SELECT saw nothing for either, and the unique index on client_ref
+       * stopped the second insert. Answer it as the duplicate it is.
+       */
+      if (clientRef && /UNIQUE.*client_ref|client_ref.*UNIQUE/i.test(String(err.message))) {
+        const dup = get('SELECT id, checkout_code FROM visits WHERE client_ref = ?', clientRef);
+        if (dup) {
+          const visit = get(`SELECT v.*, p.full_name, p.company FROM visits v
+                             JOIN visitors p ON p.id = v.visitor_id WHERE v.id = ?`, dup.id);
+          return res.json({ ok: true, duplicate: true, visit, badge: null, checkout_code: dup.checkout_code });
+        }
+      }
+      throw err;
+    }
     const visitId = Number(visitRes.lastInsertRowid);
 
     // One row per document signed, each with the answers given to its questions.

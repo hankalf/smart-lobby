@@ -387,8 +387,13 @@
     try {
       const items = (await queueAll()) || [];
       for (const item of items) {
+        // A hung request here would wedge the flush flag and stop every
+        // future retry until the page reloads. Bounded, like the live submit.
+        // (AbortController rather than AbortSignal.timeout — older iPads.)
+        const ctl = new AbortController();
+        const timer = setTimeout(() => ctl.abort(), 20000);
         try {
-          await api('/signin', item);
+          await api('/signin', item, { signal: ctl.signal });
           await queueRemove(item.client_ref);
         } catch (err) {
           // The server said no (a project closed in the meantime, say): the
@@ -400,6 +405,8 @@
             // Leave it for the next round unless it landed as a duplicate.
             if (err.data && err.data.duplicate) await queueRemove(item.client_ref);
           }
+        } finally {
+          clearTimeout(timer);
         }
       }
     } finally {
@@ -483,6 +490,10 @@
     if (state.lang !== defaultLang) setLanguage(defaultLang);
     state.history = [];
     state.visitor = null;
+    // One reference per visit, minted at the first submit. A double-tapped
+    // confirm or a retried request then carries the same reference, and the
+    // server records the check-in once however many times it arrives.
+    state.clientRef = null;
     state.agreements = [];
     state.agreementIndex = 0;
     state.signedDocs = [];
@@ -1924,7 +1935,15 @@
 
   /* --------------------------------------------------------------- sign in */
 
+  // A confirm button tapped twice must not become two check-ins.
+  let submitting = false;
   async function submitSignIn() {
+    if (submitting) return;
+    submitting = true;
+    try { await doSubmitSignIn(); } finally { submitting = false; }
+  }
+
+  async function doSubmitSignIn() {
     const inductionDone = state.inductionDone;
     const payload = {
       visitor_id: state.visitor ? state.visitor.id : null,
@@ -1952,11 +1971,26 @@
       induction_started_at: state.deckStart,
       induction_seconds: state.deckStart ? Math.round((Date.now() - new Date(state.deckStart).getTime()) / 1000) : null
     };
-    // Minted per attempt: however many times a queued copy is retried, the
-    // server records this sign-in once.
-    payload.client_ref = `k${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+    // One reference for the whole visit, whatever happens to this attempt:
+    // a hung request, a second tap, and the later queued retry all carry it,
+    // and the server (backed by a unique index) records the check-in once.
+    if (!state.clientRef) state.clientRef = `k${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+    payload.client_ref = state.clientRef;
     try {
-      const result = await api('/signin', payload);
+      /*
+       * On patchy LTE a request can hang for minutes with the visitor stood in
+       * front of a stuck screen — and anything they tap then risks a second
+       * copy. Give up after 15 seconds and treat it as offline: the sign-in is
+       * saved on the device and they carry on.
+       */
+      const timeoutCtl = new AbortController();
+      const timer = setTimeout(() => timeoutCtl.abort(), 15000);
+      let result;
+      try {
+        result = await api('/signin', payload, { signal: timeoutCtl.signal });
+      } finally {
+        clearTimeout(timer);
+      }
       state.lastResult = result;
       showDone(result);
     } catch (err) {

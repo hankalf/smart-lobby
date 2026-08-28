@@ -1408,7 +1408,7 @@
     const rows = await api('/staff');
     root.innerHTML = `
       <h1 class="page">Staff</h1>
-      <p class="page-sub">The people visitors can ask for. Each staff member can have their own email, mobile and chat webhook for arrival alerts.</p>
+      <p class="page-sub">The people visitors can ask for. Give each one their own Teams link and their visitors' arrivals go straight to them; a mobile number adds an optional text.</p>
       <div class="card section">
         <div class="inline-form" style="margin-bottom:1rem">
           <label class="field"><span>Name</span><input class="input" id="h-name"></label>
@@ -1447,27 +1447,11 @@
 
       <div class="card section">
         <h2>Setting up a chat webhook</h2>
-        <p class="muted" style="margin-top:0">A webhook posts arrivals straight into a Slack channel, a Teams
-          channel or a Google Chat space — no email needed. Paste the URL into a staff member's <b>Chat webhook</b> field
-          above and that person's arrivals go to that channel. Leave it blank and the fallback webhook in
-          <b>Settings → Notifications</b> is used instead. The format is detected from the URL, so different people
-          can be on different platforms.</p>
-
-        <details class="howto">
-          <summary><b>Slack</b> — posts with the visitor's photo</summary>
-          <ol>
-            <li>Go to <b>api.slack.com/apps</b> → <b>Create New App</b> → <b>From scratch</b>. Name it
-              “Smart Lobby” and pick your workspace.</li>
-            <li>In the left menu choose <b>Incoming Webhooks</b> and switch it <b>On</b>.</li>
-            <li>Click <b>Add New Webhook to Workspace</b>, choose the channel (or a direct message to that person),
-              then <b>Allow</b>.</li>
-            <li>Copy the URL — it looks like
-              <code class="token">https://hooks.slack.com/services/T00000/B00000/XXXX</code>.</li>
-            <li>Paste it into the host's <b>Chat webhook</b> box above and click <b>Add staff member</b> (or edit an
-              existing one).</li>
-          </ol>
-          <p class="muted">Repeat steps 3–5 for each channel you want to post to; one app can hold many webhooks.</p>
-        </details>
+        <p class="muted" style="margin-top:0">A link posts arrivals straight into Microsoft Teams — a channel, or a
+          direct message to one person. Paste it into a staff member's <b>Chat webhook</b> field above and that
+          person's arrivals go there. Leave it blank and the company channel from
+          <b>Settings → Notifications</b> is used instead. Slack and Google Chat links work too, recognised from the
+          URL, so different people can be on different platforms.</p>
 
         <details class="howto">
           <summary><b>Microsoft Teams</b> — to a channel, or as a direct message to one person</summary>
@@ -1501,6 +1485,22 @@
             Some tenants restrict the chat template — if you cannot see it, your IT admin controls that.
             Microsoft is also retiring the older Office 365 connectors; if your tenant still offers
             <b>⋯ → Connectors → Incoming Webhook</b> it works, but it is channel-only and going away.</p>
+        </details>
+
+        <details class="howto">
+          <summary><b>Slack</b> — posts with the visitor's photo</summary>
+          <ol>
+            <li>Go to <b>api.slack.com/apps</b> → <b>Create New App</b> → <b>From scratch</b>. Name it
+              “Smart Lobby” and pick your workspace.</li>
+            <li>In the left menu choose <b>Incoming Webhooks</b> and switch it <b>On</b>.</li>
+            <li>Click <b>Add New Webhook to Workspace</b>, choose the channel (or a direct message to that person),
+              then <b>Allow</b>.</li>
+            <li>Copy the URL — it looks like
+              <code class="token">https://hooks.slack.com/services/T00000/B00000/XXXX</code>.</li>
+            <li>Paste it into the host's <b>Chat webhook</b> box above and click <b>Add staff member</b> (or edit an
+              existing one).</li>
+          </ol>
+          <p class="muted">Repeat steps 3–5 for each channel you want to post to; one app can hold many webhooks.</p>
         </details>
 
         <details class="howto">
@@ -2610,103 +2610,35 @@
       </div>
 
       <div class="card section"><h2>Notifications</h2>
-        <h3>Email</h3>
-        ${chk('notify.email_enabled', 'Send staff emails')}
-        <label class="field" style="max-width:26rem"><span>How email leaves the server</span>
-          <select class="input" data-set="notify.email_provider" id="email-provider">
-            <option value="smtp" ${(s.notify.email_provider || 'smtp') === 'smtp' ? 'selected' : ''}>Direct to a mail server (SMTP) — Gmail, iCloud, Microsoft 365</option>
-            <option value="brevo" ${s.notify.email_provider === 'brevo' ? 'selected' : ''}>Brevo — over HTTPS, works where SMTP is blocked</option>
-            <option value="sendgrid" ${s.notify.email_provider === 'sendgrid' ? 'selected' : ''}>SendGrid — over HTTPS, works where SMTP is blocked</option>
+        <h3>Microsoft Teams</h3>
+        <p class="muted" style="margin-top:0">Arrivals go to a Teams channel everybody watches, and to the individual
+          person being visited. Each staff member's own Teams link lives on their record under <b>Staff</b>; the
+          channel below is the one that sees everything.</p>
+        ${chk('notify.webhook_channel_always', 'Post every arrival to the company channel',
+          'With this off, the channel is only used for people who have no Teams link of their own')}
+        <div class="form-grid">
+          ${txt('notify.global_webhook_url', 'Company channel link')}
+          <label class="field"><span>Format for unrecognised URLs</span><select class="input" data-set="notify.webhook_format">
+            ${[['teams', 'Microsoft Teams'], ['slack', 'Slack'], ['google_chat', 'Google Chat'], ['generic', 'Generic JSON']]
+              .map(([v, l]) => `<option value="${v}" ${(s.notify.webhook_format || 'teams') === v ? 'selected' : ''}>${l}</option>`).join('')}
           </select>
-          <span class="muted">Some hosting platforms (Railway included, on some plans) block the SMTP ports outright —
-            “Could not reach that SMTP server” with correct settings is the sign. Brevo and SendGrid go over ordinary
-            HTTPS instead, which is never blocked, and their free tiers cover a lobby many times over.</span></label>
-        <div class="form-grid">
-          ${txt('notify.from_name', 'From name')}
-          ${txt('notify.from_email', 'From address', 'email')}
+          <span class="muted">A Teams, Slack or Google Chat link is recognised on sight; this only applies to
+            anything else.</span></label>
         </div>
-
-        <div id="email-api-fields" ${(s.notify.email_provider === 'brevo' || s.notify.email_provider === 'sendgrid') ? '' : 'hidden'}>
-          ${txt('notify.email_api_key', 'API key', 'password')}
-          <p class="muted">A free-mail From address (…@icloud.com, …@gmail.com) often lands in <b>spam</b> when relayed
-            this way — those domains tell receivers nobody else may send for them. Fine for testing; for the real thing,
-            a company address is the reliable choice, ideally with the company domain authenticated inside the service.</p>
-          <details class="howto">
-            <summary><b>Setting up Brevo (free, 300 emails a day)</b></summary>
-            <ol>
-              <li>Create a free account at <code class="token">brevo.com</code>.</li>
-              <li>Under <b>Senders, Domains &amp; Dedicated IPs → Senders</b>, add the address you want the emails to
-                come from — your iCloud address works. Brevo emails it a confirmation; open it there and confirm.</li>
-              <li>Under <b>SMTP &amp; API → API Keys</b>, generate a key and paste it above.</li>
-              <li>Put the same verified address in <b>From address</b>, pick Brevo above, save, and send a test.</li>
-            </ol>
-          </details>
-          <details class="howto">
-            <summary><b>Setting up SendGrid (free, 100 emails a day)</b></summary>
-            <ol>
-              <li>Create a free account at <code class="token">sendgrid.com</code>.</li>
-              <li>Under <b>Settings → Sender Authentication → Single Sender Verification</b>, add the address the
-                emails should come from — your iCloud address works. SendGrid emails it a confirmation link.</li>
-              <li>Under <b>Settings → API Keys</b>, create a key with <b>Mail Send</b> permission and paste it above.</li>
-              <li>Put the same verified address in <b>From address</b>, pick SendGrid above, save, and send a test.</li>
-            </ol>
-          </details>
-        </div>
-
-        <div id="email-smtp-fields" ${(s.notify.email_provider === 'brevo' || s.notify.email_provider === 'sendgrid') ? 'hidden' : ''}>
-        <div class="row" style="margin-bottom:.5rem">
-          <span class="muted">Fill in the server settings for:</span>
-          <button class="btn subtle" type="button" data-smtp="gmail">Gmail</button>
-          <button class="btn subtle" type="button" data-smtp="m365">Microsoft 365</button>
-          <button class="btn subtle" type="button" data-smtp="icloud">iCloud</button>
-        </div>
-        <details class="howto" id="gmail-howto">
-          <summary><b>Using a Gmail address — what you need first</b></summary>
+        <details class="howto" ${s.notify.global_webhook_url ? '' : 'open'}>
+          <summary><b>Getting the Teams link for a channel</b></summary>
           <ol>
-            <li>Gmail refuses ordinary passwords here, so turn on <b>2-Step Verification</b> at
-              <code class="token">myaccount.google.com/security</code> if it is not on already.</li>
-            <li>Go to <code class="token">myaccount.google.com/apppasswords</code>, name it “Smart Lobby”, and
-              create it. Google shows a <b>16-character password</b> once — copy it.</li>
-            <li>Press <b>Gmail</b> above to fill in the server settings.</li>
-            <li>Put your full Gmail address in both <b>From address</b> and <b>SMTP username</b>, and paste the
-              16-character App Password into <b>SMTP password</b> (spaces do not matter).</li>
-            <li><b>Save settings</b>, then <b>Send test email</b>.</li>
+            <li>In Teams, hover the channel &rarr; <b>&ctdot;</b> &rarr; <b>Workflows</b>.</li>
+            <li>Choose the template <b>“Post to a channel when a webhook request is received”</b>.</li>
+            <li>Name it “Smart Lobby”, confirm the team and channel, then <b>Add workflow</b>.</li>
+            <li>Copy the HTTPS URL it shows — you only get it once — and paste it above.</li>
+            <li>Save, then press <b>Send test to Teams</b> below.</li>
           </ol>
-          <p class="muted">Gmail always sends as the account you signed in with, so the From address has to be that
-            same address. A personal account can send roughly 500 messages a day, a Workspace one about 2,000 —
-            far beyond a lobby's needs. If <b>App passwords</b> is missing from your Google account, 2-Step
-            Verification is not on yet, or a Workspace admin has blocked them.</p>
+          <p class="muted">For an individual person, the same thing with the <i>chat</i> template, pasted into their
+            record on the <b>Staff</b> tab. Full instructions for both, including what to do when your tenant hides
+            the chat template, are on that tab under <b>Setting up a chat webhook</b>.</p>
         </details>
-        <details class="howto" id="icloud-howto">
-          <summary><b>Using an iCloud address (an iPad&rsquo;s own email) — what you need first</b></summary>
-          <ol>
-            <li>Apple refuses ordinary passwords here too. On any browser, sign in at
-              <code class="token">account.apple.com</code> with the Apple ID behind that iCloud address.</li>
-            <li>Open <b>Sign-In and Security → App-Specific Passwords</b>, press +, name it “Smart Lobby”, and copy
-              the password Apple shows you once. (If the option is missing, turn on two-factor authentication for
-              the Apple ID first.)</li>
-            <li>Press <b>iCloud</b> above to fill in the server settings.</li>
-            <li>Put the full iCloud address (<code class="token">…@icloud.com</code>) in both <b>From address</b> and
-              <b>SMTP username</b>, and paste the app-specific password into <b>SMTP password</b>.</li>
-            <li><b>Save settings</b>, then <b>Send test email</b>.</li>
-          </ol>
-          <p class="muted">The sending happens on this server, not on the iPad — the iPad just owns the address, and
-            nothing needs to change on it. Apple only sends as the iCloud address itself (or an alias set up in
-            iCloud Mail), so the From address must be that address; anything else is refused. iCloud allows up to
-            1,000 messages a day, far beyond a lobby&rsquo;s needs.</p>
-        </details>
-        <div class="form-grid">
-          ${txt('notify.smtp_host', 'SMTP host')}
-          ${txt('notify.smtp_port', 'SMTP port', 'number')}
-          ${txt('notify.smtp_user', 'SMTP username')}
-          ${txt('notify.smtp_pass', 'SMTP password', 'password')}
-        </div>
-        ${chk('notify.smtp_secure', 'Use TLS on connect (port 465)')}
-        </div>
 
-        ${chk('notify.on_signin', 'Notify the staff member on arrival')}
-        ${chk('notify.on_signout', 'Notify the staff member on sign-out')}
-        ${chk('notify.on_delivery', 'Notify on deliveries')}
         <h3>Chat</h3>
         <p class="muted" style="margin-top:0">A company channel that sees everything, and each person's own webhook
           for their own visitors. Set either, or both.</p>
@@ -2728,16 +2660,10 @@
         </div>
         ${chk('notify.sms_on_signin', 'Text the staff member when a visitor arrives')}
         ${chk('notify.sms_on_delivery', 'Text the recipient when a parcel arrives')}
-        <div class="row"><button class="btn subtle" id="test-email">Send test email</button>
-          <button class="btn subtle" id="test-hook">Send test webhook</button>
+        <div class="row"><button class="btn subtle" id="test-hook">Send test to Teams</button>
           <button class="btn subtle" id="test-sms">Send test SMS</button>
           <input class="input" id="test-sms-to" placeholder="Number for the test SMS" style="max-width:15rem"></div>
         <div id="email-result"></div>
-        <label class="field" style="max-width:26rem;margin-top:.75rem"><span>Send test emails to</span>
-          <input class="input" data-set="notify.test_email_to" type="email"
-            value="${esc(s.notify.test_email_to || '')}" placeholder="${esc(ME.email)}">
-          <span class="muted">Every test goes here and nowhere else — never to a staff member or a visitor.
-            Left empty, tests go to whoever is signed in.</span></label>
 
         <h3>Activity</h3>
         <p class="muted" style="margin-top:0">The last 50 attempts on every channel — what is being sent right now,
@@ -3017,110 +2943,6 @@
       SETTINGS = await api('/settings', { method: 'PUT', body: patch });
     }
 
-    // Server settings for the common providers, so nobody has to look up a port.
-    const SMTP_PRESETS = {
-      gmail: { host: 'smtp.gmail.com', port: 587, secure: false },
-      m365: { host: 'smtp.office365.com', port: 587, secure: false },
-      icloud: { host: 'smtp.mail.me.com', port: 587, secure: false }
-    };
-    $$('[data-smtp]').forEach((b) => b.addEventListener('click', () => {
-      const preset = SMTP_PRESETS[b.dataset.smtp];
-      $('[data-set="notify.smtp_host"]').value = preset.host;
-      $('[data-set="notify.smtp_port"]').value = preset.port;
-      $('[data-set="notify.smtp_secure"]').checked = preset.secure;
-      $('[data-set="notify.email_enabled"]').checked = true;
-      toast('Server settings filled in — now add your address and password, then save');
-    }));
-
-    // The SMTP boxes or the API-key box, depending on the way out chosen.
-    $('#email-provider').addEventListener('change', (e) => {
-      const api = e.target.value === 'brevo' || e.target.value === 'sendgrid';
-      $('#email-api-fields').hidden = !api;
-      $('#email-smtp-fields').hidden = api;
-    });
-
-    /**
-     * Ask Brevo what became of the message, a few times over half a minute —
-     * events take a moment to appear. Ends with delivered, a named blocker, or
-     * where to look next.
-     */
-    async function followDelivery(box, messageId) {
-      box.insertAdjacentHTML('beforeend', '<p class="muted" id="dlv-wait">Brevo accepted it — following the delivery…</p>');
-      const waits = [4000, 8000, 12000, 8000];
-      for (const ms of waits) {
-        await new Promise((r) => setTimeout(r, ms));
-        let s;
-        try { s = await api('/settings/email-status', { method: 'POST', body: { message_id: messageId } }); }
-        catch { break; }
-        if (s.known) {
-          const good = s.state === 'delivered';
-          $('#dlv-wait').outerHTML = `<div class="notice ${good ? '' : 'error'}"><b>${
-            good ? 'Delivered.' : s.state === 'pending' ? 'Still delivering…' : 'Not delivered.'}</b> ${esc(s.detail || '')}</div>`;
-          if (s.state !== 'pending') return;
-          box.insertAdjacentHTML('beforeend', '<p class="muted" id="dlv-wait"></p>');
-        }
-      }
-      const wait = $('#dlv-wait');
-      if (wait) wait.outerHTML = '<div class="notice"><b>No verdict yet.</b> Brevo has the message but has not logged '
-        + 'the outcome. Check the recipient&rsquo;s spam folder, and <b>Transactional → Logs</b> inside Brevo — if that '
-        + 'page shows it blocked, the account is still under review and needs the validation steps finished.</div>';
-    }
-
-    /**
-     * "Could not reach the server" has two very different fixes, so run the
-     * connection check and show which one this is.
-     */
-    async function diagnoseEmail(box) {
-      box.insertAdjacentHTML('beforeend', '<p class="muted" id="diag-wait">Checking what this server can reach…</p>');
-      try {
-        const d = await api('/settings/email-diagnose', { method: 'POST' });
-        const mark = (v) => (v === null ? '—' : v ? '✓' : '✗');
-        $('#diag-wait').remove();
-        box.insertAdjacentHTML('beforeend', `<div class="notice">
-          <b>Connection check.</b>
-          <span class="muted">${esc(d.host)} resolves: ${mark(d.dns)} ·
-          port ${esc(String(d.port))}: ${mark(d.port_open)} ·
-          port 465: ${mark(d.port_465)} ·
-          other mail servers: ${mark(d.control_smtp)} ·
-          general internet: ${mark(d.https)}</span>
-          <p style="margin:.4rem 0 0">${esc(d.verdict || d.error || '')}</p></div>`);
-      } catch {
-        const wait = $('#diag-wait');
-        if (wait) wait.textContent = 'The connection check itself failed — try again in a moment.';
-      }
-    }
-
-    $('#test-email').addEventListener('click', async (e) => {
-      const btn = e.currentTarget;
-      const box = $('#email-result');
-      btn.disabled = true;
-      box.innerHTML = '<p class="muted">Saving the settings above, then sending — a server that does not answer '
-        + 'gives up after about 30 seconds…</p>';
-      box.scrollIntoView({ block: 'nearest' });
-      try {
-        await saveNotifySettings();
-        const r = await api('/settings/test-email', { method: 'POST' });
-        box.innerHTML = r.ok
-          ? `<div class="notice">Test email sent to <b>${esc(r.to)}</b>. If it does not arrive, check the spam folder.</div>`
-          : `<div class="notice error"><b>Could not send.</b> ${esc(r.error || '')}</div>`;
-        // A reach failure gets the connection check straight away — it answers
-        // whether the settings are wrong or the ports are blocked.
-        if (!r.ok && /could not reach|never answered/i.test(r.error || '')) await diagnoseEmail(box);
-        // "Sent" only means the service accepted it. With Brevo the delivery
-        // can be looked up, so follow the message and say what became of it.
-        if (r.ok && r.provider === 'brevo' && r.message_id) await followDelivery(box, r.message_id);
-        if (r.ok && r.provider === 'sendgrid') {
-          box.insertAdjacentHTML('beforeend', '<p class="muted">SendGrid accepted it. If nothing arrives, check the '
-            + 'spam folder first, then the <b>Activity</b> page inside SendGrid — its free plan does not let this '
-            + 'dashboard look the delivery up.</p>');
-        }
-      } catch (err) {
-        box.innerHTML = `<div class="notice error"><b>Could not send.</b> ${esc(err.message || 'The server did not answer.')}</div>`;
-      } finally {
-        btn.disabled = false;
-        drawNotifications();
-      }
-    });
     $('#test-sms').addEventListener('click', async () => {
       const to = $('#test-sms-to').value.trim();
       if (!to) return toast('Enter a number to send the test to');
@@ -3129,14 +2951,26 @@
       toast(r.ok ? `Test SMS sent to ${r.to}` : 'SMS failed — check the Twilio details');
       drawNotifications();
     });
-    $('#test-hook').addEventListener('click', async () => {
+    $('#test-hook').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
       const box = $('#email-result');
-      box.innerHTML = '<p class="muted">Sending…</p>';
-      const r = await api('/settings/test-webhook', { method: 'POST', body: { url: $('[data-set="notify.global_webhook_url"]').value } });
-      box.innerHTML = r.ok
-        ? '<div class="notice"><b>Webhook delivered.</b></div>'
-        : `<div class="notice error"><b>Webhook failed.</b> ${esc(r.detail || '')}</div>`;
-      drawNotifications();
+      const url = $('[data-set="notify.global_webhook_url"]').value.trim();
+      if (!url) return toast('Paste the Teams channel link first');
+      btn.disabled = true;
+      box.innerHTML = '<p class="muted">Saving, then posting to the channel…</p>';
+      try {
+        // Test what is on screen, not whatever was saved last.
+        await saveNotifySettings();
+        const r = await api('/settings/test-webhook', { method: 'POST', body: { url } });
+        box.innerHTML = r.ok
+          ? '<div class="notice"><b>Posted.</b> It should be in the Teams channel now — from <b>Flow bot</b>, which is normal.</div>'
+          : `<div class="notice error"><b>Teams refused it.</b> ${esc(r.detail || '')}</div>`;
+      } catch (err) {
+        box.innerHTML = `<div class="notice error"><b>Could not post.</b> ${esc(err.message || 'The server did not answer.')}</div>`;
+      } finally {
+        btn.disabled = false;
+        drawNotifications();
+      }
     });
     const goBadges = $('#go-badges');
     if (goBadges) goBadges.addEventListener('click', () => {

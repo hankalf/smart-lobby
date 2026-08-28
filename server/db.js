@@ -400,6 +400,24 @@ function migrate() {
   addColumn('devices', 'slug', 'TEXT');
   backfillDeviceSlugs();
   exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_slug ON devices(slug)');
+  /*
+   * The check-then-insert dedupe of queued sign-ins has a race two concurrent
+   * retries can slip through; the database itself refusing the second copy
+   * does not. Existing duplicates would break index creation, so any already
+   * recorded are cleared first — keeping the earliest of each.
+   */
+  dedupeClientRefs();
+  exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_visits_client_ref ON visits(client_ref) WHERE client_ref IS NOT NULL`);
+}
+
+function dedupeClientRefs() {
+  const dupes = all(`SELECT client_ref FROM visits WHERE client_ref IS NOT NULL
+                     GROUP BY client_ref HAVING COUNT(*) > 1`);
+  for (const d of dupes) {
+    const n = run(`DELETE FROM visits WHERE client_ref = ? AND id != (
+                     SELECT MIN(id) FROM visits WHERE client_ref = ?)`, d.client_ref, d.client_ref).changes;
+    console.log(`[migrate] removed ${n} duplicate visit(s) for queued sign-in ${d.client_ref}`);
+  }
 }
 
 /** Give every device registered before slugs existed one, derived from its name. */
