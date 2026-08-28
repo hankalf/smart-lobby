@@ -599,6 +599,24 @@
 
   /* ------------------------------------------------------------ induction */
 
+  /*
+   * A deck converted from PowerPoint carries a risk a PDF does not: PowerPoint
+   * shrinks overflowing text to fit its box and records only the shrink factor,
+   * which the converter ignores — so a slide whose text was already tight comes
+   * out with its words drawn at full size, over whatever sat beside them. The
+   * deck cannot be inspected from here, so the deck that came from a .pptx says
+   * what to look for and how to settle it.
+   */
+  function pptxHint(s) {
+    const from = String(s.source_file || '').toLowerCase();
+    if (!/\.(pptx|ppt|odp)$/.test(from) || s.render_mode !== 'rendered') return '';
+    return `<div class="notice" style="margin:.75rem 0 0">
+      <b>Converted from PowerPoint.</b> Check it with <b>Preview</b> — if any slide's text runs under a picture
+      or off the edge, that is PowerPoint's “shrink text on overflow” being ignored by the converter, and no
+      setting here fixes it. Open the deck in PowerPoint, <b>File → Export → PDF</b>, and upload that PDF here
+      instead: it renders exactly as you see it, and is still split into slides.</div>`;
+  }
+
   VIEWS.induction = async (root) => {
     const { rows, capabilities } = await api('/slideshows');
     root.innerHTML = `
@@ -641,10 +659,15 @@
               <button class="btn ghost" data-del="${s.id}">Delete</button>
             </div>
           </div>
+          ${pptxHint(s)}
           <div class="dropzone" data-drop="${s.id}">
-            <p><b>Drop a .pptx, .pdf or image here</b> — or
+            <p><b>Drop a PDF, .pptx or image here</b> — or
               <label class="btn subtle" style="display:inline-flex">Choose file<input type="file" hidden data-file="${s.id}"
-                accept=".pptx,.ppt,.odp,.pdf,image/*"></label></p>
+                accept=".pdf,.pptx,.ppt,.odp,image/*"></label></p>
+            <p class="muted"><b>A PDF is the safest thing to upload.</b> PowerPoint shrinks text to fit its boxes;
+              the converter here does not, so a tight slide can come out with its words running under the pictures.
+              Exporting from PowerPoint with <b>File → Export → PDF</b> settles the layout before it ever reaches
+              this server. A .pptx works too, and usually looks right — check it with <b>Preview</b>.</p>
             <p class="muted">Uploading a deck replaces the current slides and bumps the version, so everyone sees the new induction once.</p>
           </div>
           <div class="slide-grid" data-slides="${s.id}" style="margin-top:1rem"></div>

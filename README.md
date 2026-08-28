@@ -113,6 +113,13 @@ from their text, delete the Dockerfile and upload PDF exports instead.
 Check which you have at any time: `/api/health` reports `slide_rendering`, and the **Induction decks**
 page says plainly whether it can render properly.
 
+**Upload a PDF if a slide's layout matters.** PowerPoint shrinks text that overflows its box and stores
+only the shrink factor; LibreOffice ignores it and draws the text at full size, so a slide whose text was
+already tight comes out with its words running under the pictures. Nothing on the server can undo that —
+the shrunk layout only exists inside PowerPoint. **File → Export → PDF** bakes it in, and the PDF is still
+split into slides here, so nothing else about the deck changes. A `.pptx` usually renders fine; check it
+with **Preview** after uploading.
+
 **Fonts decide whether a rendered slide looks right.** A font PowerPoint used that the server does not
 have is swapped for one with different letter widths; the text reflows onto more lines than the slide
 had room for and spills over whatever was beside it, so the wording ends up pushed into the pictures.
