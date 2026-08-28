@@ -364,10 +364,23 @@ body:has(.screen[data-screen="induction"]:not([hidden])) .lang-toggle { display:
 .offline-note.hidden { display: none; }
 @media print { .offline-note { display: none !important; } }
 
-/* An uploaded PDF or Word document, shown as the pages it was drafted as */
-.doc-pages { padding: 0; display: flex; flex-direction: column; gap: .5rem; background: #f2f5f3; }
-.doc-pages img { width: 100%; height: auto; display: block; background: #fff; }
-.doc-pages iframe { width: 100%; height: 34vh; border: 0; display: block; background: #fff; }
+/* An uploaded PDF or Word document. Its pages are the document, so they run
+   the full width of the panel and down the screen — the screen scrolls, rather
+   than the pages being squeezed into a box inside it. */
+.doc-pages { display: flex; flex-direction: column; gap: .75rem; }
+.doc-pages img {
+  width: 100%; height: auto; display: block; background: #fff;
+  border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 1px 6px rgba(16, 32, 24, .10);
+}
+.doc-pages iframe {
+  width: 100%; height: 78vh; border: 1px solid var(--line); border-radius: 8px;
+  display: block; background: #fff;
+}
 .doc-pages.hidden { display: none; }
-.doc-scroll { margin: .4rem 0 0; }
+
+/* Wider panel while a document is on screen, so a page is read at a sensible
+   size on a tablet rather than in a column meant for a form. */
+.panel.doc-full { max-width: min(64rem, 96vw); }
+.doc-scroll { margin: 0 0 .6rem; }
 .doc-scroll.hidden { display: none; }
