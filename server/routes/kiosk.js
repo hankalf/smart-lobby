@@ -8,6 +8,7 @@ const notify = require('../notify');
 const accessCtl = require('../access');
 const { nextBadgeNo } = require('../badges');
 const localtime = require('../localtime');
+const devices = require('../devices');
 
 const router = express.Router();
 
@@ -499,36 +500,46 @@ router.post('/unlock', async (req, res) => {
 
 router.post('/ping', (req, res) => {
   const rev = settings.configRev();
+  // A tablet says which one it is by its address — /kiosk/north-gate — or, for
+  // links handed out before device pages existed, by its token.
+  const slug = String(req.body.slug || '');
   const token = String(req.body.token || '');
-  if (token) {
-    const device = get('SELECT * FROM devices WHERE token = ?', token);
-    if (device) {
-      // The kiosk reports the cameras it can see so they can be chosen in the dashboard.
-      const cameras = Array.isArray(req.body.cameras)
-        ? JSON.stringify(req.body.cameras.slice(0, 8).map((c) => ({
-            id: String(c.id || '').slice(0, 120),
-            label: String(c.label || '').slice(0, 120)
-          })))
-        : device.cameras;
-      run('UPDATE devices SET last_seen_at = ?, last_ip = ?, app_version = ?, cameras = ? WHERE id = ?',
-        nowISO(), req.ip, String(req.body.version || ''), cameras, device.id);
-      const location = device.location_id ? get('SELECT name FROM locations WHERE id = ?', device.location_id) : null;
-      return res.json({
-        ok: true,
-        config_rev: rev,
-        device_id: device.id,
-        name: device.name,
-        site_id: device.site_id,
-        location_id: device.location_id,
-        location_name: location ? location.name : null,
-        mode: device.mode,
-        default_camera: device.default_camera || 'front',
-        sections: (() => { try { return JSON.parse(device.sections || 'null'); } catch { return null; } })(),
-        print_enabled: !!device.print_enabled
-      });
-    }
+  const device = devices.resolve({ slug, token });
+
+  if (device) {
+    // The kiosk reports the cameras it can see so they can be chosen in the dashboard.
+    const cameras = Array.isArray(req.body.cameras)
+      ? JSON.stringify(req.body.cameras.slice(0, 8).map((c) => ({
+          id: String(c.id || '').slice(0, 120),
+          label: String(c.label || '').slice(0, 120)
+        })))
+      : device.cameras;
+    run('UPDATE devices SET last_seen_at = ?, last_ip = ?, app_version = ?, cameras = ? WHERE id = ?',
+      nowISO(), req.ip, String(req.body.version || ''), cameras, device.id);
+    const location = device.location_id ? get('SELECT name FROM locations WHERE id = ?', device.location_id) : null;
+    return res.json({
+      ok: true,
+      config_rev: rev,
+      device_id: device.id,
+      name: device.name,
+      slug: device.slug,
+      site_id: device.site_id,
+      location_id: device.location_id,
+      location_name: location ? location.name : null,
+      mode: device.mode,
+      default_camera: device.default_camera || 'front',
+      sections: (() => { try { return JSON.parse(device.sections || 'null'); } catch { return null; } })(),
+      print_enabled: !!device.print_enabled
+    });
   }
-  res.json({ ok: true, config_rev: rev, device_id: null });
+
+  /*
+   * Nothing matched. If the tablet did offer a name or a token, that is a
+   * mistake worth showing — a renamed device, a mistyped address, a link from a
+   * device since deleted. Saying so beats falling back to every card on screen
+   * and leaving whoever set the tablet up to wonder why its link did nothing.
+   */
+  res.json({ ok: true, config_rev: rev, device_id: null, unknown: !!(slug || token) });
 });
 
 module.exports = router;

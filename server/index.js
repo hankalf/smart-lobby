@@ -76,6 +76,51 @@ app.get('/', (req, res) => res.redirect('/kiosk/'));
 app.get('/kiosk', (req, res) => res.redirect('/kiosk/'));
 app.get('/admin', (req, res) => res.redirect('/admin/'));
 
+/*
+ * Each tablet has its own address: /kiosk/north-gate. These come after the
+ * static handler above, so a real file — /kiosk/kiosk.js — is always served as
+ * itself and a slug can never shadow one.
+ */
+const devices = require('./devices');
+
+/**
+ * A web app manifest per device, so "Add to Home Screen" on an iPad saves an
+ * icon named after the tablet that reopens on that tablet's own page. Without
+ * one, iOS saves whatever is in the address bar and the device is only as
+ * durable as the URL — which is how a home-screen icon used to come back to
+ * the shared page showing every card.
+ */
+app.get('/kiosk/:slug/manifest.webmanifest', (req, res) => {
+  const device = devices.bySlug(req.params.slug);
+  if (!device) return res.status(404).json({ error: 'unknown_device' });
+  const org = settings.getSection('org');
+  res.type('application/manifest+json').set('Cache-Control', 'no-cache').json({
+    name: `${device.name} — ${org.name || 'Smart Lobby'}`,
+    short_name: device.name,
+    // Reopening the icon lands on this device's page, token or no token.
+    start_url: `/kiosk/${device.slug}`,
+    scope: `/kiosk/${device.slug}`,
+    display: 'standalone',
+    orientation: 'any',
+    background_color: '#0f172a',
+    theme_color: '#0f172a'
+  });
+});
+
+/*
+ * Express matches this with or without a trailing slash, so /kiosk/north-gate
+ * and /kiosk/north-gate/ are the same page — the kiosk normalises the address
+ * bar itself once it knows which device it is.
+ *
+ * An address naming no device still serves the page rather than a 404: the
+ * tablet stays usable, and the kiosk shows a notice saying the link matches
+ * nothing, which is far more use to whoever is setting it up than a browser
+ * error. The ping is what decides that, so there is one answer, not two.
+ */
+app.get('/kiosk/:slug', (req, res) => {
+  res.set('Cache-Control', 'no-cache').sendFile(path.join(PUBLIC_WEB, 'kiosk', 'index.html'));
+});
+
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   console.error('[error]', err);
   res.status(500).json({ error: 'server_error', detail: String(err.message || err) });

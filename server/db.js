@@ -377,6 +377,25 @@ function migrate() {
   addColumn('agreements', 'source_file_es', 'TEXT');
   addColumn('agreements', 'render_mode', 'TEXT');    // rendered | pdf | image
   addColumn('agreements', 'render_mode_es', 'TEXT');
+  /*
+   * Each tablet's own address: /kiosk/north-gate rather than a shared page with
+   * a ?token= parameter. See server/devices.js for why the path, and not a
+   * query parameter, is what survives "Add to Home Screen" on an iPad.
+   */
+  addColumn('devices', 'slug', 'TEXT');
+  backfillDeviceSlugs();
+  exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_slug ON devices(slug)');
+}
+
+/** Give every device registered before slugs existed one, derived from its name. */
+function backfillDeviceSlugs() {
+  const pending = all("SELECT id, name FROM devices WHERE slug IS NULL OR slug = ''");
+  if (!pending.length) return;
+  const { uniqueSlug } = require('./devices');
+  for (const d of pending) {
+    run('UPDATE devices SET slug = ? WHERE id = ?', uniqueSlug(d.name, d.id), d.id);
+  }
+  console.log(`[migrate] named ${pending.length} device URL(s)`);
 }
 
 function addColumn(table, column, definition) {

@@ -231,3 +231,10 @@ input[type="range"] { width: 100%; accent-color: var(--brand); }
 .howto pre.token { padding: .8rem; border-radius: 8px; line-height: 1.5; overflow-x: auto; }
 
 code.token { background: var(--bg); padding: .15rem .4rem; border-radius: 5px; font-size: .85rem; word-break: break-all; }
+
+/* A link beside the button that copies it. The link keeps growing to fit and
+   stays selectable, so it can still be copied by hand where the clipboard API
+   is unavailable — a dashboard opened over plain http:// on the LAN. */
+.copy-row { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+.copy-row code.token { flex: 1 1 18rem; padding: .5rem .6rem; user-select: all; }
+.copy-row .btn { white-space: nowrap; }

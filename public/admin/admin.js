@@ -86,6 +86,36 @@
     return { bg, close };
   }
 
+  /**
+   * Copy to the clipboard, and say so on the button that was pressed.
+   *
+   * navigator.clipboard needs a secure context, which a dashboard opened over
+   * plain http:// on the LAN is not — so there is a fallback through a hidden
+   * textarea, and the text stays selectable on screen either way.
+   */
+  async function copyText(text, btn) {
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { ok = document.execCommand('copy'); } catch { ok = false; }
+      ta.remove();
+    }
+    if (btn) {
+      const was = btn.textContent;
+      btn.textContent = ok ? 'Copied' : 'Press ⌘/Ctrl+C';
+      setTimeout(() => { btn.textContent = was; }, 1600);
+    }
+    if (!ok) toast('Could not copy automatically — select the link and copy it.');
+    return ok;
+  }
+
   const confirmAction = (message, onYes) =>
     modal('Please confirm', `<p>${esc(message)}</p>`, async (bg, close) => { await onYes(); close(); }, 'Yes, continue');
 
@@ -2070,28 +2100,58 @@
           <button class="btn" id="dv-add">Register device</button>
         </div>
         <div class="table-wrap">${rows.length ? `<table>
-          <thead><tr><th>Name</th><th>Location</th><th>Camera</th><th>Mode</th><th>Printing</th><th>Last seen</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Device link</th><th>Location</th><th>Camera</th><th>Mode</th><th>Printing</th><th>Last seen</th><th>Status</th><th></th></tr></thead>
           <tbody>${rows.map((d) => {
             const online = d.last_seen_at && (Date.now() - new Date(d.last_seen_at).getTime()) < 5 * 60000;
             return `<tr>
               <td><b>${esc(d.name)}</b></td>
+              <td><code class="token">/kiosk/${esc(d.slug || '')}</code></td>
               <td>${esc(d.location_name || '—')}</td>
               <td>${esc(cameraName(d))}</td>
               <td>${esc(d.mode || 'kiosk')}</td>
               <td><span class="pill ${d.print_enabled ? 'on' : 'off'}">${d.print_enabled ? 'on' : 'off'}</span></td>
               <td>${fmtDate(d.last_seen_at)}</td>
               <td><span class="pill ${online ? 'on' : 'off'}">${online ? 'online' : 'offline'}</span></td>
-              <td><button class="btn ghost" data-dvedit="${d.id}">Edit</button>
+              <td><button class="btn ghost" data-dvcopy="${d.id}">Copy link</button>
+                  <button class="btn ghost" data-dvedit="${d.id}">Edit</button>
                   <button class="btn ghost" data-dvlink="${d.id}">Link</button>
                   <button class="btn ghost" data-dvdel="${d.id}">Remove</button></td></tr>`;
           }).join('')}</tbody></table>` : '<p class="empty">No devices registered yet.</p>'}</div>
       </div>`;
 
-    const showLink = (d) => modal(`${d.name} — setup link`, `
-      <p>On the device, open:</p>
-      <p><code class="token">${origin}/kiosk/?token=${d.token}</code></p>
-      <p class="muted">It stores the token locally and reports in every minute, so this page shows whether it is online.
-        Add the page to the home screen for a full-screen kiosk.</p>`, null);
+    /*
+     * Each tablet has its own address. It is the whole link — not a token
+     * tucked in a query parameter — so saving it to an iPad's home screen keeps
+     * this device's cards. A saved icon used to come back to the shared page
+     * showing everything, because the token never survived the trip.
+     */
+    const deviceUrl = (d) => `${origin}/kiosk/${d.slug || ''}`;
+
+    const showLink = (d) => {
+      const url = deviceUrl(d);
+      const { bg } = modal(`${d.name} — device link`, `
+        <p>Open this on the tablet:</p>
+        <div class="copy-row">
+          <code class="token" id="dv-url">${esc(url)}</code>
+          <button class="btn" id="dv-copy">Copy link</button>
+        </div>
+        <p class="muted">On the iPad, open it in Safari, then <b>Share → Add to Home Screen</b>. The icon is named
+          after this device and reopens on this page, so it always shows this device's cards — no Wi-Fi or sign-in
+          needed to get back to it.</p>
+        <p class="muted">The tablet reports in every minute, so this page shows whether it is online. Rename the
+          device freely; its link only changes if you change it under Edit.</p>
+        <details><summary class="muted">Older token link (still works)</summary>
+          <div class="copy-row" style="margin-top:0.5rem">
+            <code class="token">${origin}/kiosk/?token=${d.token}</code>
+            <button class="btn ghost" id="dv-copy-token">Copy</button>
+          </div>
+          <p class="muted">Kept so links already handed out keep working. A tablet opened this way moves itself onto
+            the address above, so anything saved to the home screen from then on is the durable one.</p>
+        </details>`, null);
+      $('#dv-copy', bg).addEventListener('click', (e) => copyText(url, e.currentTarget));
+      $('#dv-copy-token', bg).addEventListener('click', (e) =>
+        copyText(`${origin}/kiosk/?token=${d.token}`, e.currentTarget));
+    };
 
     $('#dv-add').addEventListener('click', async () => {
       const d = await api('/devices', { method: 'POST', body: {
@@ -2102,6 +2162,11 @@
 
     $$('[data-dvlink]').forEach((b) => b.addEventListener('click', () =>
       showLink(rows.find((x) => String(x.id) === b.dataset.dvlink))));
+
+    // One press, straight from the list — the common case is emailing a link to
+    // whoever is standing at the tablet.
+    $$('[data-dvcopy]').forEach((b) => b.addEventListener('click', () =>
+      copyText(deviceUrl(rows.find((x) => String(x.id) === b.dataset.dvcopy)), b)));
 
     $$('[data-dvedit]').forEach((b) => b.addEventListener('click', () => {
       const d = rows.find((x) => String(x.id) === b.dataset.dvedit);
@@ -2123,6 +2188,9 @@
       const m = modal(`Edit ${d.name}`, `
         <div class="form-grid">
           <label class="field"><span>Device name</span><input class="input" id="de-name" value="${esc(d.name)}"></label>
+          <label class="field"><span>Device link</span><input class="input" id="de-slug" value="${esc(d.slug || '')}">
+            <small class="muted">The tablet's own address: ${esc(origin)}/kiosk/<b id="de-slug-preview">${esc(d.slug || '')}</b>.
+              Changing it breaks any icon already saved to a home screen, so leave it alone once the tablet is set up.</small></label>
           <label class="field"><span>Location</span><select class="input" id="de-loc">
             <option value="">— none —</option>
             ${locations.map((l) => `<option value="${l.id}" ${l.id === d.location_id ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}
@@ -2159,8 +2227,12 @@
           const defaults = DEVICE_SECTIONS();
           const isDefault = picked.length === defaults.length
             && picked.every((k, i) => k === defaults[i][0]);
+          const slug = $('#de-slug', bg).value.trim();
           await api(`/devices/${d.id}`, { method: 'PATCH', body: {
             name: $('#de-name', bg).value,
+            // Only sent when it was actually edited: a rename must not quietly
+            // move a tablet whose link is already on someone's home screen.
+            ...(slug && slug !== (d.slug || '') ? { slug } : {}),
             location_id: $('#de-loc', bg).value || null,
             default_camera: $('#de-cam', bg).value,
             mode: $('#de-mode', bg).value,
@@ -2171,6 +2243,12 @@
             printer_id: $('#de-printer', bg).value ? Number($('#de-printer', bg).value) : null } });
           close(); render('devices');
         });
+
+      // Show what the address will actually become as it is typed.
+      $('#de-slug', m.bg).addEventListener('input', (e) => {
+        $('#de-slug-preview', m.bg).textContent = e.target.value.trim()
+          .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      });
 
       const drawSections = () => {
         const box = $('#de-sections', m.bg);

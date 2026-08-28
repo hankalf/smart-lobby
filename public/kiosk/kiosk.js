@@ -31,8 +31,12 @@
     flowIndex: -1,
     lastResult: null,
     deviceToken: localStorage.getItem('sl_device_token') || '',
+    // Which tablet this is, taken from the address: /kiosk/north-gate. The path
+    // is the reliable part — see deviceSlug() below.
+    deviceSlug: '',
     deviceId: null,
     device: null,
+    deviceUnknown: false,
     configRev: null,
     configPending: false,
     appliedSections: undefined
@@ -542,13 +546,33 @@
 
   /* ------------------------------------------------------------ bootstrap */
 
+  /**
+   * Which tablet this is, from the address bar: /kiosk/north-gate -> north-gate.
+   *
+   * The path is what survives being saved to an iPad's home screen. A query
+   * parameter does not, and neither does localStorage: iOS gives a standalone
+   * home-screen web app a storage jar of its own, separate from the Safari tab
+   * the link was first opened in. So the path is read on every load and is
+   * always believed over anything remembered locally.
+   */
+  function deviceSlug() {
+    const m = location.pathname.match(/^\/kiosk\/([^/]+)\/?$/);
+    const slug = m ? decodeURIComponent(m[1]) : '';
+    return /\.(js|css|html|webmanifest)$/i.test(slug) ? '' : slug;
+  }
+
   async function boot() {
+    state.deviceSlug = deviceSlug();
     const urlToken = new URLSearchParams(location.search).get('token');
     if (urlToken) {
       localStorage.setItem('sl_device_token', urlToken);
       state.deviceToken = urlToken;
-      history.replaceState({}, '', location.pathname);
+      // The token is deliberately left in the address bar until ping() can swap
+      // it for this device's own page. Clearing it here is what used to break
+      // "Add to Home Screen": by the time anyone reached for the share sheet the
+      // URL said /kiosk/ and the saved icon came back to every card.
     }
+    const identified = state.deviceSlug || state.deviceToken;
     try {
       /*
        * A registered device draws its card list from its first check-in. Waiting
@@ -557,7 +581,7 @@
        * right ones. ping() never throws, so an offline check-in cannot stop the
        * kiosk — it just falls back to the full set, as before.
        */
-      const [cfg] = await Promise.all([api('/config'), state.deviceToken ? ping() : Promise.resolve()]);
+      const [cfg] = await Promise.all([api('/config'), identified ? ping() : Promise.resolve()]);
       state.cfg = cfg;
     } catch {
       toast('Cannot reach the lobby server — retrying…');
@@ -718,6 +742,50 @@
     } catch { /* offline */ }
   }
 
+  /**
+   * Settle onto this device's own page and advertise its manifest.
+   *
+   * A tablet opened from an older ?token= link is moved to /kiosk/its-name
+   * without reloading, so whatever anyone saves to the home screen from here on
+   * is the durable address. The manifest link is added at the same time, which
+   * is what gives the saved icon the tablet's name and reopens it on this page.
+   */
+  function adoptDevice(d) {
+    if (!d.slug) return;
+    state.deviceSlug = d.slug;
+    if (d.token || state.deviceToken) localStorage.setItem('sl_device_token', state.deviceToken);
+
+    const canonical = `/kiosk/${encodeURIComponent(d.slug)}`;
+    if (location.pathname !== canonical || location.search) {
+      history.replaceState({}, '', canonical);
+    }
+    let link = document.querySelector('link[rel="manifest"]');
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'manifest';
+      document.head.appendChild(link);
+    }
+    link.href = `${canonical}/manifest.webmanifest`;
+    document.title = `${d.name} — ${(state.cfg && state.cfg.org && state.cfg.org.name) || 'Smart Lobby'}`;
+  }
+
+  /**
+   * A link that names no device this server knows about is a setup mistake, not
+   * a reason to quietly show every card. Say so on screen, where the person
+   * setting the tablet up will see it.
+   */
+  function showDeviceWarning() {
+    const el = $('#device-warning');
+    if (!el) return;
+    const named = state.deviceSlug || state.deviceToken;
+    show(el, state.deviceUnknown && !!named);
+    if (state.deviceUnknown && named) {
+      el.textContent = state.deviceSlug
+        ? `This tablet’s link (${state.deviceSlug}) does not match any device in the dashboard — showing every card. Check Devices in the admin panel.`
+        : 'This tablet’s link does not match any device in the dashboard — showing every card. Check Devices in the admin panel.';
+    }
+  }
+
   async function ping() {
     // Report the cameras this tablet has, so one can be picked in the dashboard.
     let cameras = [];
@@ -731,11 +799,14 @@
       const res = await fetch('/api/kiosk/ping', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: state.deviceToken, version: '1.0.0', cameras })
+        body: JSON.stringify({ slug: state.deviceSlug, token: state.deviceToken, version: '1.0.0', cameras })
       });
       const d = await res.json();
       state.deviceId = d.device_id;
       state.device = d.device_id ? d : null;
+      state.deviceUnknown = !!d.unknown;
+      if (d.device_id) adoptDevice(d);
+      showDeviceWarning();
 
       // The cards are built before the first check-in, so the kiosk does not yet
       // know which device it is. Rebuild them once that answer arrives, and again

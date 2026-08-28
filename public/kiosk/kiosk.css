@@ -364,6 +364,26 @@ body:has(.screen[data-screen="induction"]:not([hidden])) .lang-toggle { display:
 .offline-note.hidden { display: none; }
 @media print { .offline-note { display: none !important; } }
 
+/* A device link that matches nothing. Along the bottom rather than the top, so
+   it does not sit on top of the offline pill when both are up. */
+.device-warning {
+  position: fixed;
+  left: 50%;
+  bottom: max(0.6rem, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 69;
+  max-width: min(92vw, 40rem);
+  padding: 0.55rem 1.1rem;
+  border-radius: 0.8rem;
+  background: #7f1d1d;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+}
+.device-warning.hidden { display: none; }
+@media print { .device-warning { display: none !important; } }
+
 /* An uploaded PDF or Word document. Its pages are the document, so they run
    the full width of the panel and down the screen — the screen scrolls, rather
    than the pages being squeezed into a box inside it. */

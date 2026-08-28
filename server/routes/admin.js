@@ -10,6 +10,7 @@ const accessCtl = require('../access');
 const decks = require('../slides');
 const { nextBadgeNo } = require('../badges');
 const localtime = require('../localtime');
+const deviceSlugs = require('../devices');
 
 const router = express.Router();
 const clean = (v) => (typeof v === 'string' ? v.trim() : v);
@@ -878,11 +879,12 @@ router.get('/devices', (req, res) => {
 router.post('/devices', (req, res) => {
   const b = req.body || {};
   const token = crypto.randomBytes(16).toString('hex');
-  const r = run(`INSERT INTO devices (site_id, location_id, name, token, mode, default_camera, print_enabled, created_at)
-                 VALUES (?,?,?,?,?,?,?,?)`,
-    b.site_id || null, b.location_id || null, clean(b.name) || 'Reception kiosk', token,
+  const name = clean(b.name) || 'Reception kiosk';
+  const r = run(`INSERT INTO devices (site_id, location_id, name, slug, token, mode, default_camera, print_enabled, created_at)
+                 VALUES (?,?,?,?,?,?,?,?,?)`,
+    b.site_id || null, b.location_id || null, name, deviceSlugs.uniqueSlug(clean(b.slug) || name), token,
     clean(b.mode) || 'kiosk', clean(b.default_camera) || 'front', b.print_enabled === false ? 0 : 1, nowISO());
-  audit(req, 'create', 'device', Number(r.lastInsertRowid), { name: b.name });
+  audit(req, 'create', 'device', Number(r.lastInsertRowid), { name });
   res.json(get('SELECT * FROM devices WHERE id = ?', r.lastInsertRowid));
 });
 
@@ -893,6 +895,15 @@ router.patch('/devices/:id', (req, res) => {
   if (cols.length) {
     run(`UPDATE devices SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`,
       ...cols.map((c) => (typeof b[c] === 'boolean' ? (b[c] ? 1 : 0) : b[c])), req.params.id);
+  }
+  /*
+   * The address is only changed when it is asked for. Renaming a tablet leaves
+   * its URL alone on purpose: the link is on an iPad's home screen by then, and
+   * silently moving it would strand the tablet on a page that no longer exists.
+   */
+  if (b.slug !== undefined) {
+    run('UPDATE devices SET slug = ? WHERE id = ?',
+      deviceSlugs.uniqueSlug(clean(b.slug) || clean(b.name) || 'kiosk', req.params.id), req.params.id);
   }
   audit(req, 'update', 'device', Number(req.params.id), b);
   res.json(get('SELECT * FROM devices WHERE id = ?', req.params.id));

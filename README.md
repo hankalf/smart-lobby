@@ -56,8 +56,11 @@ a Mac mini, a NUC, an old laptop or a Raspberry Pi. iPadOS cannot host the Node 
 
 1. On the host machine: `npm install && npm start`.
 2. Find its LAN address (`ipconfig` on Windows, `ifconfig` on macOS/Linux) — e.g. `192.168.1.40`.
-3. On the iPad, open `http://192.168.1.40:3000/kiosk/`, then Share → **Add to Home Screen**. Launched
-   from the home screen it runs full screen with no browser chrome.
+3. On the iPad, open the tablet's own link — register the device under **Devices** in the admin panel and
+   press **Copy link**; it looks like `http://192.168.1.40:3000/kiosk/north-gate-ipad` — then Share →
+   **Add to Home Screen**. Launched from the home screen it runs full screen with no browser chrome, and
+   because the device is named in the address itself, the saved icon always comes back showing that
+   device's cards. (A plain `/kiosk/` works too, but shows every card.)
 4. Turn on **Guided Access** (Settings → Accessibility) so visitors cannot leave the app.
 
 **Kiosk apps and the camera.** A third-party kiosk browser must both hold iOS camera permission itself and
@@ -226,7 +229,7 @@ history. A project that has ever been signed in against cannot be deleted, only 
 | Projects | The jobs contractors sign in against, with Spanish names, codes, and who is on each right now |
 | Visitor types | The kiosk cards themselves — add, reword (in both languages), re-icon, place or hide each type |
 | Printers | The label printers on site: name, model, loaded roll, colour, how each is reached, and where it sits |
-| Devices | Every tablet: name, location, default camera, operational mode, per-device badge printing, which cards it shows and in what order, online status |
+| Devices | Every tablet: name, its own kiosk URL (`/kiosk/north-gate-ipad`, with a one-press copy button), location, default camera, operational mode, per-device badge printing, which cards it shows and in what order, online status |
 | Reports | Visits per day, busiest hosts, top companies, arrival times, average time on site |
 | Settings | Branding (logo, kiosk background photo, colours, time zone), kiosk flow, badges, induction, deliveries, access, notifications, retention, users |
 

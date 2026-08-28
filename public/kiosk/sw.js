@@ -13,7 +13,7 @@
  */
 'use strict';
 
-const CACHE = 'sl-kiosk-v1';
+const CACHE = 'sl-kiosk-v2';
 const SHELL = ['/kiosk/', '/kiosk/kiosk.js', '/kiosk/kiosk.css', '/shared/theme.css', '/kiosk/vendor/jsQR.js'];
 
 self.addEventListener('install', (event) => {
@@ -41,7 +41,13 @@ async function networkFirst(request) {
     return res;
   } catch (err) {
     const cached = await cache.match(request)
-      // A device link like /kiosk/?token=… is still the kiosk page.
+      /*
+       * Any device address — /kiosk/north-gate, or an older /kiosk/?token=… —
+       * is the same kiosk page, so the shell answers for one that has not been
+       * opened on this tablet before. The page still reads the device from the
+       * address bar, which the browser keeps as requested, so it comes up as
+       * the right tablet even when served from the generic cache entry.
+       */
       || (request.mode === 'navigate' ? await cache.match('/kiosk/') : null);
     if (cached) return cached;
     throw err;
