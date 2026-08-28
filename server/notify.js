@@ -291,9 +291,10 @@ function explainSmtpError(err) {
   const code = (err && err.code) || '';
   const response = String((err && err.response) || '');
 
-  if (code === 'EAUTH' || /535|password not accepted|invalid credentials/i.test(response + message)) {
-    return 'The username or password was rejected. Gmail needs a 16-character App Password rather than your '
-      + 'normal password, and the username must be the full address.';
+  if (code === 'EAUTH' || /535|password not accepted|invalid credentials|authentication failed/i.test(response + message)) {
+    return 'The username or password was rejected. Gmail and iCloud both refuse normal account passwords here — '
+      + 'create an app-specific password (myaccount.google.com/apppasswords for Gmail, account.apple.com → '
+      + 'Sign-In and Security for iCloud) and use the full email address as the username.';
   }
   if (/must issue a starttls|STARTTLS/i.test(response + message)) {
     return 'The server wants an encrypted connection. Use port 587 with TLS-on-connect switched off, or port 465 with it on.';
@@ -304,8 +305,9 @@ function explainSmtpError(err) {
   if (code === 'ECONNECTION' || code === 'ETIMEDOUT' || code === 'EDNS' || /getaddrinfo|ENOTFOUND/i.test(message)) {
     return 'Could not reach that SMTP server — check the host name and port.';
   }
-  if (/5\.7\.0|denied|not allowed to send/i.test(response)) {
-    return 'The server accepted the login but refused to send. The From address usually has to match the account you signed in with.';
+  if (/5\.7\.0|denied|not allowed to send|relay|invalid sender|554/i.test(response)) {
+    return 'The server accepted the login but refused to send. The From address has to match the account you '
+      + 'signed in with — for iCloud that means the @icloud.com address itself, or an alias set up in iCloud Mail.';
   }
   return message;
 }

@@ -2634,6 +2634,24 @@
             far beyond a lobby's needs. If <b>App passwords</b> is missing from your Google account, 2-Step
             Verification is not on yet, or a Workspace admin has blocked them.</p>
         </details>
+        <details class="howto" id="icloud-howto">
+          <summary><b>Using an iCloud address (an iPad&rsquo;s own email) — what you need first</b></summary>
+          <ol>
+            <li>Apple refuses ordinary passwords here too. On any browser, sign in at
+              <code class="token">account.apple.com</code> with the Apple ID behind that iCloud address.</li>
+            <li>Open <b>Sign-In and Security → App-Specific Passwords</b>, press +, name it “Smart Lobby”, and copy
+              the password Apple shows you once. (If the option is missing, turn on two-factor authentication for
+              the Apple ID first.)</li>
+            <li>Press <b>iCloud</b> above to fill in the server settings.</li>
+            <li>Put the full iCloud address (<code class="token">…@icloud.com</code>) in both <b>From address</b> and
+              <b>SMTP username</b>, and paste the app-specific password into <b>SMTP password</b>.</li>
+            <li><b>Save settings</b>, then <b>Send test email</b>.</li>
+          </ol>
+          <p class="muted">The sending happens on this server, not on the iPad — the iPad just owns the address, and
+            nothing needs to change on it. Apple only sends as the iCloud address itself (or an alias set up in
+            iCloud Mail), so the From address must be that address; anything else is refused. iCloud allows up to
+            1,000 messages a day, far beyond a lobby&rsquo;s needs.</p>
+        </details>
         ${chk('notify.email_enabled', 'Send staff emails over SMTP')}
         <div class="form-grid">
           ${txt('notify.from_name', 'From name')}
