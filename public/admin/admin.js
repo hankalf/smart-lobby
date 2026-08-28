@@ -606,7 +606,16 @@
       <p class="page-sub">Upload a PowerPoint, PDF or images. First-time visitors watch it before they finish signing in;
         people who have already seen the current version skip straight through.</p>
       ${capabilities.libreoffice && capabilities.poppler
-        ? '<div class="notice">Slides are rendered exactly as they look in PowerPoint.</div>'
+        ? `<div class="notice">Slides are rendered as designed.
+           <details style="margin-top:.4rem"><summary>If a slide comes out with its text pushed into the pictures</summary>
+             <p style="margin:.5rem 0 0">That is a font this server does not have. PowerPoint drew the text in one
+             font, the renderer substituted another with different letter widths, and the wording reflowed onto more
+             lines than the slide had room for. Stand-ins for Arial, Calibri, Cambria and Times are installed, but a
+             brand font — or Microsoft's newer <b>Aptos</b> — has none.</p>
+             <p style="margin:.5rem 0 0"><b>The fix takes a minute:</b> in PowerPoint choose <b>File → Save a Copy
+             / Export → PDF</b> and upload the PDF here instead. A PDF carries its fonts inside it, so it renders
+             exactly as you see it, every time. Everything else works the same — it is still split into slides.</p>
+           </details></div>`
         : `<div class="notice error"><b>This server cannot render PowerPoint properly.</b>
            Missing: ${[capabilities.libreoffice ? null : 'LibreOffice', capabilities.poppler ? null : 'poppler (pdftoppm)'].filter(Boolean).join(' and ')}.
            Decks are rebuilt from their text and images instead, which loses the original layout, fonts and colours.

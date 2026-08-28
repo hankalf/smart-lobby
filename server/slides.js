@@ -69,7 +69,9 @@ function convertToPdf(inputPath, workDir) {
 function pdfToPngs(pdfPath, workDir) {
   if (!which('pdftoppm')) return null;
   const outBase = path.join(workDir, 'slide');
-  const res = spawnSync('pdftoppm', ['-png', '-r', '150', pdfPath, outBase], { encoding: 'utf8', timeout: 180000 });
+  // 200dpi: a 16:9 slide comes out about 2660px wide, which still looks sharp
+  // on a retina iPad held close, without making the files unreasonable.
+  const res = spawnSync('pdftoppm', ['-png', '-r', '200', pdfPath, outBase], { encoding: 'utf8', timeout: 180000 });
   if (res.error) return null;
   const files = fs.readdirSync(workDir).filter((f) => f.startsWith('slide') && f.endsWith('.png')).sort();
   return files.length ? files.map((f) => path.join(workDir, f)) : null;

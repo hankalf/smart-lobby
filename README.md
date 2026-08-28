@@ -113,6 +113,15 @@ from their text, delete the Dockerfile and upload PDF exports instead.
 Check which you have at any time: `/api/health` reports `slide_rendering`, and the **Induction decks**
 page says plainly whether it can render properly.
 
+**Fonts decide whether a rendered slide looks right.** A font PowerPoint used that the server does not
+have is swapped for one with different letter widths; the text reflows onto more lines than the slide
+had room for and spills over whatever was beside it, so the wording ends up pushed into the pictures.
+The image installs metric-compatible stand-ins — Liberation for Arial/Times/Courier, Carlito for
+Calibri, Caladea for Cambria, Noto and DejaVu for the rest — which covers the usual Office fonts. A
+deck built on a brand font, or on Microsoft's newer **Aptos**, has no stand-in and can still reflow.
+The certain fix in that case takes a minute: in PowerPoint choose **File → Export → PDF** and upload
+the PDF instead. A PDF carries its fonts inside it, renders exactly, and is still split into slides.
+
 The database is a single file, so keep **one** instance running — do not scale to multiple replicas.
 
 ---
