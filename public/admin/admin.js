@@ -2611,6 +2611,46 @@
 
       <div class="card section"><h2>Notifications</h2>
         <h3>Email</h3>
+        ${chk('notify.email_enabled', 'Send staff emails')}
+        <label class="field" style="max-width:26rem"><span>How email leaves the server</span>
+          <select class="input" data-set="notify.email_provider" id="email-provider">
+            <option value="smtp" ${(s.notify.email_provider || 'smtp') === 'smtp' ? 'selected' : ''}>Direct to a mail server (SMTP) — Gmail, iCloud, Microsoft 365</option>
+            <option value="brevo" ${s.notify.email_provider === 'brevo' ? 'selected' : ''}>Brevo — over HTTPS, works where SMTP is blocked</option>
+            <option value="sendgrid" ${s.notify.email_provider === 'sendgrid' ? 'selected' : ''}>SendGrid — over HTTPS, works where SMTP is blocked</option>
+          </select>
+          <span class="muted">Some hosting platforms (Railway included, on some plans) block the SMTP ports outright —
+            “Could not reach that SMTP server” with correct settings is the sign. Brevo and SendGrid go over ordinary
+            HTTPS instead, which is never blocked, and their free tiers cover a lobby many times over.</span></label>
+        <div class="form-grid">
+          ${txt('notify.from_name', 'From name')}
+          ${txt('notify.from_email', 'From address', 'email')}
+        </div>
+
+        <div id="email-api-fields" ${(s.notify.email_provider === 'brevo' || s.notify.email_provider === 'sendgrid') ? '' : 'hidden'}>
+          ${txt('notify.email_api_key', 'API key', 'password')}
+          <details class="howto">
+            <summary><b>Setting up Brevo (free, 300 emails a day)</b></summary>
+            <ol>
+              <li>Create a free account at <code class="token">brevo.com</code>.</li>
+              <li>Under <b>Senders, Domains &amp; Dedicated IPs → Senders</b>, add the address you want the emails to
+                come from — your iCloud address works. Brevo emails it a confirmation; open it there and confirm.</li>
+              <li>Under <b>SMTP &amp; API → API Keys</b>, generate a key and paste it above.</li>
+              <li>Put the same verified address in <b>From address</b>, pick Brevo above, save, and send a test.</li>
+            </ol>
+          </details>
+          <details class="howto">
+            <summary><b>Setting up SendGrid (free, 100 emails a day)</b></summary>
+            <ol>
+              <li>Create a free account at <code class="token">sendgrid.com</code>.</li>
+              <li>Under <b>Settings → Sender Authentication → Single Sender Verification</b>, add the address the
+                emails should come from — your iCloud address works. SendGrid emails it a confirmation link.</li>
+              <li>Under <b>Settings → API Keys</b>, create a key with <b>Mail Send</b> permission and paste it above.</li>
+              <li>Put the same verified address in <b>From address</b>, pick SendGrid above, save, and send a test.</li>
+            </ol>
+          </details>
+        </div>
+
+        <div id="email-smtp-fields" ${(s.notify.email_provider === 'brevo' || s.notify.email_provider === 'sendgrid') ? 'hidden' : ''}>
         <div class="row" style="margin-bottom:.5rem">
           <span class="muted">Fill in the server settings for:</span>
           <button class="btn subtle" type="button" data-smtp="gmail">Gmail</button>
@@ -2652,16 +2692,15 @@
             iCloud Mail), so the From address must be that address; anything else is refused. iCloud allows up to
             1,000 messages a day, far beyond a lobby&rsquo;s needs.</p>
         </details>
-        ${chk('notify.email_enabled', 'Send staff emails over SMTP')}
         <div class="form-grid">
-          ${txt('notify.from_name', 'From name')}
-          ${txt('notify.from_email', 'From address', 'email')}
           ${txt('notify.smtp_host', 'SMTP host')}
           ${txt('notify.smtp_port', 'SMTP port', 'number')}
           ${txt('notify.smtp_user', 'SMTP username')}
           ${txt('notify.smtp_pass', 'SMTP password', 'password')}
         </div>
         ${chk('notify.smtp_secure', 'Use TLS on connect (port 465)')}
+        </div>
+
         ${chk('notify.on_signin', 'Notify the staff member on arrival')}
         ${chk('notify.on_signout', 'Notify the staff member on sign-out')}
         ${chk('notify.on_delivery', 'Notify on deliveries')}
@@ -2990,6 +3029,37 @@
       toast('Server settings filled in — now add your address and password, then save');
     }));
 
+    // The SMTP boxes or the API-key box, depending on the way out chosen.
+    $('#email-provider').addEventListener('change', (e) => {
+      const api = e.target.value === 'brevo' || e.target.value === 'sendgrid';
+      $('#email-api-fields').hidden = !api;
+      $('#email-smtp-fields').hidden = api;
+    });
+
+    /**
+     * "Could not reach the server" has two very different fixes, so run the
+     * connection check and show which one this is.
+     */
+    async function diagnoseEmail(box) {
+      box.insertAdjacentHTML('beforeend', '<p class="muted" id="diag-wait">Checking what this server can reach…</p>');
+      try {
+        const d = await api('/settings/email-diagnose', { method: 'POST' });
+        const mark = (v) => (v === null ? '—' : v ? '✓' : '✗');
+        $('#diag-wait').remove();
+        box.insertAdjacentHTML('beforeend', `<div class="notice">
+          <b>Connection check.</b>
+          <span class="muted">${esc(d.host)} resolves: ${mark(d.dns)} ·
+          port ${esc(String(d.port))}: ${mark(d.port_open)} ·
+          port 465: ${mark(d.port_465)} ·
+          other mail servers: ${mark(d.control_smtp)} ·
+          general internet: ${mark(d.https)}</span>
+          <p style="margin:.4rem 0 0">${esc(d.verdict || d.error || '')}</p></div>`);
+      } catch {
+        const wait = $('#diag-wait');
+        if (wait) wait.textContent = 'The connection check itself failed — try again in a moment.';
+      }
+    }
+
     $('#test-email').addEventListener('click', async (e) => {
       const btn = e.currentTarget;
       const box = $('#email-result');
@@ -3003,6 +3073,9 @@
         box.innerHTML = r.ok
           ? `<div class="notice">Test email sent to <b>${esc(r.to)}</b>. If it does not arrive, check the spam folder.</div>`
           : `<div class="notice error"><b>Could not send.</b> ${esc(r.error || '')}</div>`;
+        // A reach failure gets the connection check straight away — it answers
+        // whether the settings are wrong or the ports are blocked.
+        if (!r.ok && /could not reach|never answered/i.test(r.error || '')) await diagnoseEmail(box);
       } catch (err) {
         box.innerHTML = `<div class="notice error"><b>Could not send.</b> ${esc(err.message || 'The server did not answer.')}</div>`;
       } finally {

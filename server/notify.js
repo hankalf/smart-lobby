@@ -39,25 +39,100 @@ function logFinish(id, status, error) {
   run('UPDATE notifications SET status = ?, error = ? WHERE id = ?', status, error || null, id);
 }
 
+/*
+ * Where the HTTPS mail APIs live. Overridable so the whole path can be tested
+ * against a local stand-in; production never sets these variables.
+ */
+const API_BASES = {
+  brevo: () => process.env.BREVO_API_BASE || 'https://api.brevo.com',
+  sendgrid: () => process.env.SENDGRID_API_BASE || 'https://api.sendgrid.com'
+};
+
+/**
+ * Send over an HTTPS mail API instead of SMTP. Exists because some hosting
+ * platforms (Railway among them, on some plans) block the SMTP ports outright
+ * — port 443 is never blocked. Both services can send as an address they have
+ * verified by emailing it a confirmation, so the From address can stay the
+ * lobby's own.
+ */
+async function sendViaApi({ provider, apiKey, fromName, fromEmail, to, subject, text, html }) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  try {
+    const url = provider === 'brevo'
+      ? `${API_BASES.brevo()}/v3/smtp/email`
+      : `${API_BASES.sendgrid()}/v3/mail/send`;
+    const body = provider === 'brevo'
+      ? { sender: { name: fromName, email: fromEmail }, to: [{ email: to }], subject,
+          textContent: text || undefined, htmlContent: html || undefined }
+      : { personalizations: [{ to: [{ email: to }] }], from: { email: fromEmail, name: fromName }, subject,
+          content: [
+            ...(text ? [{ type: 'text/plain', value: text }] : []),
+            ...(html ? [{ type: 'text/html', value: html }] : [])
+          ] };
+    const headers = provider === 'brevo'
+      ? { 'Content-Type': 'application/json', 'api-key': apiKey }
+      : { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` };
+    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: controller.signal });
+    if (res.ok || res.status === 202) return { ok: true };
+    const detail = await res.text().catch(() => '');
+    return { ok: false, error: explainApiError(provider, res.status, detail) };
+  } catch (err) {
+    const reason = /abort/i.test(String(err.message)) ? 'The service did not answer within 20 seconds.'
+      : String(err.message || err);
+    return { ok: false, error: `Could not reach ${provider === 'brevo' ? 'Brevo' : 'SendGrid'} — ${reason}` };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function explainApiError(provider, status, body) {
+  const name = provider === 'brevo' ? 'Brevo' : 'SendGrid';
+  if (status === 401 || status === 403) {
+    if (/verif|sender identity|from address does not match/i.test(body)) {
+      return `${name} accepted the key but refused the From address: it has to be a sender you have verified in your `
+        + `${name} account first (${name} emails that address a confirmation link).`;
+    }
+    return `${name} rejected the API key — check it was copied whole, and that it is a key with permission to send.`;
+  }
+  if (/verif|sender|from/i.test(body) && status === 400) {
+    return `${name} refused the From address: verify it as a sender in your ${name} account first `
+      + `(${name} emails that address a confirmation link).`;
+  }
+  return `${name} answered ${status}: ${String(body).slice(0, 300)}`;
+}
+
+/** One email, over whichever way out is configured. Returns {ok, error}. */
+async function deliverEmail({ to, subject, text, html }) {
+  const n = settings.getSection('notify');
+  if (n.email_provider === 'brevo' || n.email_provider === 'sendgrid') {
+    if (!n.email_api_key) return { ok: false, error: 'No API key is set. Paste the key from your account, save, and test again.' };
+    return sendViaApi({
+      provider: n.email_provider, apiKey: n.email_api_key,
+      fromName: n.from_name, fromEmail: n.from_email, to, subject, text, html
+    });
+  }
+  const t = transport();
+  if (!t) return { ok: false, error: 'Email is switched off, or no SMTP host is set. Save those settings, then test.' };
+  try {
+    await t.sendMail({ from: `"${n.from_name}" <${n.from_email}>`, to, subject, text, html });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: explainSmtpError(err) };
+  }
+}
+
 async function sendEmail({ to, subject, html, text, visit_id, delivery_id }) {
   const n = settings.getSection('notify');
-  const t = transport();
-  if (!t || !to) {
-    log({ visit_id, delivery_id, channel: 'email', target: to, subject, status: t ? 'skipped_no_address' : 'skipped_disabled' });
+  const configured = n.email_enabled && (n.email_provider === 'smtp' ? !!n.smtp_host : !!n.email_api_key);
+  if (!configured || !to) {
+    log({ visit_id, delivery_id, channel: 'email', target: to, subject, status: configured ? 'skipped_no_address' : 'skipped_disabled' });
     return false;
   }
   const id = logStart({ visit_id, delivery_id, channel: 'email', target: to, subject });
-  try {
-    await t.sendMail({
-      from: `"${n.from_name}" <${n.from_email}>`,
-      to, subject, text, html
-    });
-    logFinish(id, 'sent');
-    return true;
-  } catch (err) {
-    logFinish(id, 'error', explainSmtpError(err));
-    return false;
-  }
+  const result = await deliverEmail({ to, subject, text, html });
+  logFinish(id, result.ok ? 'sent' : 'error', result.error);
+  return result.ok;
 }
 
 /**
@@ -337,31 +412,23 @@ function explainSmtpError(err) {
 async function sendTest(to) {
   const org = settings.getSection('org');
   const n = settings.getSection('notify');
-  const t = transport();
-  if (!t) {
+  if (!n.email_enabled) {
     // Recorded too, so the log explains why a test produced nothing.
     log({ channel: 'email', target: to, subject: 'test', status: 'skipped_disabled' });
-    return { ok: false, error: 'Email is switched off, or no SMTP host is set. Save those settings, then test.' };
+    return { ok: false, error: 'Email is switched off. Tick “Send staff emails”, save, then test.' };
   }
   if (!to) return { ok: false, error: 'No address to send the test to.' };
 
   const id = logStart({ channel: 'email', target: to, subject: 'test' });
-  try {
-    await t.sendMail({
-      from: `"${n.from_name}" <${n.from_email}>`,
-      to,
-      subject: `${org.name} Smart Lobby test email`,
-      text: 'This is a test notification from your Smart Lobby install. If you can read this, SMTP is configured correctly.',
-      html: '<p>This is a test notification from your Smart Lobby install.</p>'
-        + '<p>If you can read this, SMTP is configured correctly.</p>'
-    });
-    logFinish(id, 'sent');
-    return { ok: true };
-  } catch (err) {
-    const friendly = explainSmtpError(err);
-    logFinish(id, 'error', friendly);
-    return { ok: false, error: friendly };
-  }
+  const result = await deliverEmail({
+    to,
+    subject: `${org.name} Smart Lobby test email`,
+    text: 'This is a test notification from your Smart Lobby install. If you can read this, email is configured correctly.',
+    html: '<p>This is a test notification from your Smart Lobby install.</p>'
+      + '<p>If you can read this, email is configured correctly.</p>'
+  });
+  logFinish(id, result.ok ? 'sent' : 'error', result.error);
+  return result;
 }
 
 async function sendTestSms(to) {

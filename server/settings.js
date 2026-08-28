@@ -132,6 +132,10 @@ const DEFAULTS = {
   },
   notify: {
     email_enabled: false,
+    // 'smtp' talks to a mail server directly; 'brevo' and 'sendgrid' go over
+    // HTTPS instead, for hosting platforms that block the SMTP ports outright.
+    email_provider: 'smtp',
+    email_api_key: '',
     from_name: 'Smart Lobby',
     from_email: 'lobby@example.com',
     smtp_host: '',
