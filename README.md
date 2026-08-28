@@ -292,7 +292,7 @@ screen is back at the welcome page, so nobody has a form rearranged under them m
 
 ---
 
-## The order things are asked
+## Field wording
 
 Field wording is editable per type under **Settings → The “Your details” form → Wording**: rename a field —
 a driver is asked for a haulier, not a company — and add a line of help underneath it. Questions can carry
@@ -338,84 +338,6 @@ typed text is kept meanwhile. Spanish works the same way: upload the Spanish cop
 **En español** panel, and a document with no Spanish file falls back to the English one, exactly as
 its typed wording would. Uploading, replacing or removing a file bumps the document's version, so
 copies already signed stay exactly as they were signed.
-
-A document can also carry its own **questions**, asked on the kiosk just above the signature:
-
-- **Yes / No** — a tap
-- **Short answer** — free text
-- **Choose one** — your own options
-
-A document with questions and the signature switched off is a **questionnaire — leave the signature off**
-and the visitor simply answers and carries on; the text body can be left empty too.
-
-A question can also depend on an earlier answer — **Only ask this if** — so a No opens the follow-up and a
-Yes opens a different one. A question nobody was shown is never required of them, and if they change the
-answer above it, the branch they abandoned is cleared rather than being stored.
-
-Mark a question as required and the visitor cannot continue until it is answered. Answers are stored
-against that visit alongside the signature, and shown on the visit record with the wording used at
-the time — so a later edit to a question never changes what a past answer appears to mean.
-
-Where more than one document applies to a category, they are signed one after another, titled
-"Site rules (1 of 2)" and so on, each with its own questions and signature.
-
----
-
-## Staff
-
-The people visitors ask for. Each can have an email address, a mobile number for SMS and their own
-chat webhook, so alerts reach them directly.
-
-**Add several at once from a spreadsheet** — upload an `.xlsx` or `.csv`. The first row should be
-headings — first and last name in separate columns, or a single full-name column; only the name is required, and headings are matched loosely, so "Full name", "Phone",
-"Mobile", "Team" and similar all work. Someone already on the list is updated rather than
-duplicated — matched on email, or on name where there is no email — so a corrected sheet can simply
-be uploaded again. A template is downloadable from that panel.
-
----
-
-## Changes reaching the kiosks
-
-Every change saved in the dashboard bumps a configuration revision. Kiosks check in every 20 seconds and
-reload their settings when that number moves, so branding, sections, form fields, documents and
-inductions all reach the tablets by themselves.
-
-A kiosk part-way through a sign-in waits: it applies the change once the visitor has finished and the
-screen is back at the welcome page, so nobody has a form rearranged under them mid-typing.
-
----
-
-## The order things are asked
-
-Field wording is editable per type under **Settings → The “Your details” form → Wording**: rename a field —
-a driver is asked for a haulier, not a company — and add a line of help underneath it. Questions can carry
-help text the same way.
-
----
-
-## The order things are asked
-
-**Settings → The order things are asked.** Each visitor type has its own order for the four sign-in
-steps — their details, photo, documents and questions, induction deck — reorderable with the arrows.
-A contractor can watch the induction before signing anything, while visitors keep the usual order.
-
-Finding the visitor always comes first, because it decides whether the induction is needed at all. A
-step that does not apply is skipped wherever it sits.
-
----
-
-## Documents and questions
-
-Each document in **Documents** is assigned to the categories that must sign it, matching the kiosk
-home-screen cards:
-
-| Category | Card |
-| --- | --- |
-| Visitors, Contractors | Sign in / Sign out |
-| Interviews | Interview |
-| Drivers | Driver |
-
-Deliveries sign nothing.
 
 A document can also carry its own **questions**, asked on the kiosk just above the signature:
 
