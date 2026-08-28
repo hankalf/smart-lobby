@@ -12,14 +12,31 @@ function transport() {
     host: n.smtp_host,
     port: Number(n.smtp_port) || 587,
     secure: !!n.smtp_secure,
-    auth: n.smtp_user ? { user: n.smtp_user, pass: n.smtp_pass } : undefined
+    auth: n.smtp_user ? { user: n.smtp_user, pass: n.smtp_pass } : undefined,
+    /*
+     * Without these, a host that silently drops the connection — a wrong port,
+     * a firewall — leaves the send hanging for two minutes. That is what a
+     * "nothing happened" test button feels like. Fail inside half a minute
+     * with a reason instead.
+     */
+    connectionTimeout: 15000,
+    greetingTimeout: 10000,
+    socketTimeout: 30000
   });
 }
 
 function log(entry) {
-  run('INSERT INTO notifications (visit_id, delivery_id, channel, target, subject, status, error, created_at) VALUES (?,?,?,?,?,?,?,?)',
+  const r = run('INSERT INTO notifications (visit_id, delivery_id, channel, target, subject, status, error, created_at) VALUES (?,?,?,?,?,?,?,?)',
     entry.visit_id || null, entry.delivery_id || null, entry.channel, entry.target || null,
     entry.subject || null, entry.status, entry.error || null, nowISO());
+  return Number(r.lastInsertRowid);
+}
+
+// A row goes in before the attempt and is settled after, so the dashboard can
+// show what is in flight right now, not just what already finished.
+const logStart = (entry) => log({ ...entry, status: 'sending' });
+function logFinish(id, status, error) {
+  run('UPDATE notifications SET status = ?, error = ? WHERE id = ?', status, error || null, id);
 }
 
 async function sendEmail({ to, subject, html, text, visit_id, delivery_id }) {
@@ -29,15 +46,16 @@ async function sendEmail({ to, subject, html, text, visit_id, delivery_id }) {
     log({ visit_id, delivery_id, channel: 'email', target: to, subject, status: t ? 'skipped_no_address' : 'skipped_disabled' });
     return false;
   }
+  const id = logStart({ visit_id, delivery_id, channel: 'email', target: to, subject });
   try {
     await t.sendMail({
       from: `"${n.from_name}" <${n.from_email}>`,
       to, subject, text, html
     });
-    log({ visit_id, delivery_id, channel: 'email', target: to, subject, status: 'sent' });
+    logFinish(id, 'sent');
     return true;
   } catch (err) {
-    log({ visit_id, delivery_id, channel: 'email', target: to, subject, status: 'error', error: String(err.message || err) });
+    logFinish(id, 'error', explainSmtpError(err));
     return false;
   }
 }
@@ -305,6 +323,10 @@ function explainSmtpError(err) {
   if (code === 'ECONNECTION' || code === 'ETIMEDOUT' || code === 'EDNS' || /getaddrinfo|ENOTFOUND/i.test(message)) {
     return 'Could not reach that SMTP server — check the host name and port.';
   }
+  if (/greeting never received|timed? ?out/i.test(message)) {
+    return 'The SMTP server never answered — usually the wrong port, or a firewall between this server and it. '
+      + 'For iCloud and Gmail use port 587 with “TLS on connect” switched off.';
+  }
   if (/5\.7\.0|denied|not allowed to send|relay|invalid sender|554/i.test(response)) {
     return 'The server accepted the login but refused to send. The From address has to match the account you '
       + 'signed in with — for iCloud that means the @icloud.com address itself, or an alias set up in iCloud Mail.';
@@ -323,6 +345,7 @@ async function sendTest(to) {
   }
   if (!to) return { ok: false, error: 'No address to send the test to.' };
 
+  const id = logStart({ channel: 'email', target: to, subject: 'test' });
   try {
     await t.sendMail({
       from: `"${n.from_name}" <${n.from_email}>`,
@@ -332,11 +355,12 @@ async function sendTest(to) {
       html: '<p>This is a test notification from your Smart Lobby install.</p>'
         + '<p>If you can read this, SMTP is configured correctly.</p>'
     });
-    log({ channel: 'email', target: to, subject: 'test', status: 'sent' });
+    logFinish(id, 'sent');
     return { ok: true };
   } catch (err) {
-    log({ channel: 'email', target: to, subject: 'test', status: 'error', error: String(err.message || err) });
-    return { ok: false, error: explainSmtpError(err) };
+    const friendly = explainSmtpError(err);
+    logFinish(id, 'error', friendly);
+    return { ok: false, error: friendly };
   }
 }
 

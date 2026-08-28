@@ -2697,9 +2697,11 @@
           <span class="muted">Every test goes here and nowhere else — never to a staff member or a visitor.
             Left empty, tests go to whoever is signed in.</span></label>
 
-        <h3>What has been sent</h3>
-        <p class="muted" style="margin-top:0">The last 50 attempts on every channel, including the ones that were
-          skipped because a channel is switched off.</p>
+        <h3>Activity</h3>
+        <p class="muted" style="margin-top:0">The last 50 attempts on every channel — what is being sent right now,
+          what went through, what failed and why, and what was skipped because a channel is switched off.</p>
+        <div class="row" style="margin:.4rem 0"><span id="notify-summary"></span>
+          <button class="btn ghost" id="notify-refresh" type="button">Refresh</button></div>
         <div class="table-wrap" id="notify-log"><p class="muted">Loading…</p></div>
       </div>
 
@@ -2917,24 +2919,61 @@
 
     // What was actually sent, so a test is not a black box.
     const drawNotifications = async () => {
+      const box = $('#notify-log');
+      if (!box) return; // the page has moved on
       const rows = await api('/notifications').catch(() => []);
       const status = (r) => {
+        if (r.status === 'sending') return '<span class="pill wait">sending…</span>';
         if (r.status === 'sent') return '<span class="pill on">sent</span>';
         if (String(r.status).startsWith('skipped')) return `<span class="pill off">${esc(r.status.replace('skipped_', 'skipped: '))}</span>`;
         return `<span class="pill" style="background:#fdecea;color:var(--danger)">${esc(r.status)}</span>`;
       };
-      $('#notify-log').innerHTML = rows.length ? `<table>
+      const inFlight = rows.filter((r) => r.status === 'sending').length;
+      const failed = rows.filter((r) => r.status === 'error' || String(r.status).startsWith('http_')).length;
+      const sent = rows.filter((r) => r.status === 'sent').length;
+      const summary = $('#notify-summary');
+      if (summary) {
+        summary.innerHTML = [
+          inFlight ? `<span class="pill wait">${inFlight} sending now</span>` : '',
+          `<span class="pill on">${sent} sent</span>`,
+          failed ? `<span class="pill" style="background:#fdecea;color:var(--danger)">${failed} failed</span>` : ''
+        ].filter(Boolean).join(' ');
+      }
+      box.innerHTML = rows.length ? `<table>
         <thead><tr><th>When</th><th>Channel</th><th>Sent to</th><th>About</th><th>Result</th></tr></thead>
         <tbody>${rows.map((r) => `<tr>
           <td>${fmtDate(r.created_at)}</td>
           <td>${esc(r.channel)}</td>
           <td>${esc(r.target || '—')}</td>
           <td>${esc(r.visitor_name || r.subject || '—')}</td>
-          <td>${status(r)}${r.error ? `<div class="muted">${esc(String(r.error).slice(0, 120))}</div>` : ''}</td>
+          <td>${status(r)}${r.error ? `<div class="muted">${esc(String(r.error).slice(0, 160))}</div>` : ''}</td>
         </tr>`).join('')}</tbody></table>`
-        : '<p class="empty">Nothing has been sent yet.</p>';
+        : '<p class="empty">Nothing has been sent yet. Press “Send test email” above to try the settings.</p>';
+
+      // While something is mid-send, keep the list fresh so its row is watched
+      // settling into sent or failed, rather than found stale later.
+      if (inFlight && !drawNotifications._timer) {
+        drawNotifications._timer = setTimeout(() => { drawNotifications._timer = null; drawNotifications(); }, 4000);
+      }
     };
     drawNotifications();
+    $('#notify-refresh').addEventListener('click', drawNotifications);
+
+    /*
+     * The test buttons test what is on screen, not what happened to be saved
+     * last — pressing Test after typing a password but before Save was the
+     * easiest way to a test that reported the old settings' failure.
+     */
+    async function saveNotifySettings() {
+      const patch = {};
+      $$('[data-set^="notify."]').forEach((input) => {
+        const value = input.type === 'checkbox' ? input.checked
+          : (input.type === 'number' || input.type === 'range') ? Number(input.value)
+          : input.value;
+        setPath(patch, input.dataset.set, value);
+      });
+      SETTINGS = await api('/settings', { method: 'PUT', body: patch });
+    }
 
     // Server settings for the common providers, so nobody has to look up a port.
     const SMTP_PRESETS = {
@@ -2951,20 +2990,33 @@
       toast('Server settings filled in — now add your address and password, then save');
     }));
 
-    $('#test-email').addEventListener('click', async () => {
+    $('#test-email').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
       const box = $('#email-result');
-      box.innerHTML = '<p class="muted">Sending…</p>';
-      const r = await api('/settings/test-email', { method: 'POST' });
-      box.innerHTML = r.ok
-        ? `<div class="notice">Test email sent to <b>${esc(r.to)}</b>. If it does not arrive, check the spam folder.</div>`
-        : `<div class="notice error"><b>Could not send.</b> ${esc(r.error || '')}</div>`;
-      drawNotifications();
+      btn.disabled = true;
+      box.innerHTML = '<p class="muted">Saving the settings above, then sending — a server that does not answer '
+        + 'gives up after about 30 seconds…</p>';
+      box.scrollIntoView({ block: 'nearest' });
+      try {
+        await saveNotifySettings();
+        const r = await api('/settings/test-email', { method: 'POST' });
+        box.innerHTML = r.ok
+          ? `<div class="notice">Test email sent to <b>${esc(r.to)}</b>. If it does not arrive, check the spam folder.</div>`
+          : `<div class="notice error"><b>Could not send.</b> ${esc(r.error || '')}</div>`;
+      } catch (err) {
+        box.innerHTML = `<div class="notice error"><b>Could not send.</b> ${esc(err.message || 'The server did not answer.')}</div>`;
+      } finally {
+        btn.disabled = false;
+        drawNotifications();
+      }
     });
     $('#test-sms').addEventListener('click', async () => {
       const to = $('#test-sms-to').value.trim();
       if (!to) return toast('Enter a number to send the test to');
+      await saveNotifySettings().catch(() => {});
       const r = await api('/settings/test-sms', { method: 'POST', body: { to } });
-      toast(r.ok ? `Test SMS sent to ${r.to}` : 'SMS failed — check the Twilio details (save first)');
+      toast(r.ok ? `Test SMS sent to ${r.to}` : 'SMS failed — check the Twilio details');
+      drawNotifications();
     });
     $('#test-hook').addEventListener('click', async () => {
       const box = $('#email-result');
