@@ -26,6 +26,7 @@
     deckIndex: 0,
     deckStart: null,
     inductionDone: false,
+    inductionSignature: null,
     deckWatched: null,
     flow: [],
     flowIndex: -1,
@@ -232,7 +233,7 @@
     '[data-screen="details"] .bar h2', '[data-screen="details"] .bar button',
     '[data-screen="photo"] .bar h2', '[data-screen="photo"] .bar button',
     '#btn-capture', '#btn-retake', '#btn-photo-continue', '#btn-photo-skip',
-    '[data-screen="agreement"] .bar button', '.sig-label', '#sig-clear',
+    '[data-screen="agreement"] .bar button', '.sig-label', '#sig-clear', '#ack-sig-clear',
     '#deck-prev', '#deck-next',
     '[data-screen="ack"] h2', '#ack-replay', '#ack-confirm',
     '#btn-print-badge', '[data-screen="done"] [data-go="idle"]',
@@ -494,6 +495,7 @@
     state.lastResult = null;
     state.deckIndex = 0;
     state.inductionDone = false;
+    state.inductionSignature = null;
     state.deckWatched = null;
     // A countdown left ticking by an abandoned visit must not unlock anything
     // for the next person.
@@ -1831,11 +1833,65 @@
     }
   }
 
+  /*
+   * The signature box on the confirmation screen, for a deck set to ask for
+   * one. Its own small pad rather than the document one: that canvas lives on
+   * the agreement screen and is measured for it, and the two can both be used
+   * in a single sign-in.
+   */
+  const ackPad = $('#ack-sig-pad');
+  let ackDrawing = false, ackInk = false, ackCtx = null;
+  function sizeAckPad() {
+    const rect = ackPad.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    ackPad.width = Math.max(1, rect.width * dpr);
+    ackPad.height = Math.max(1, rect.height * dpr);
+    ackCtx = ackPad.getContext('2d');
+    ackCtx.scale(dpr, dpr);
+    ackCtx.lineWidth = 2.4;
+    ackCtx.lineCap = 'round';
+    ackCtx.lineJoin = 'round';
+    ackCtx.strokeStyle = '#12211b';
+    ackInk = false;
+  }
+  ackPad.addEventListener('pointerdown', (e) => {
+    if (!ackCtx) sizeAckPad();
+    ackDrawing = true; ackInk = true;
+    ackPad.setPointerCapture(e.pointerId);
+    const r = ackPad.getBoundingClientRect();
+    ackCtx.beginPath();
+    ackCtx.moveTo(e.clientX - r.left, e.clientY - r.top);
+  });
+  ackPad.addEventListener('pointermove', (e) => {
+    if (!ackDrawing) return;
+    const r = ackPad.getBoundingClientRect();
+    ackCtx.lineTo(e.clientX - r.left, e.clientY - r.top);
+    ackCtx.stroke();
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach((ev) =>
+    ackPad.addEventListener(ev, () => { ackDrawing = false; }));
+  $('#ack-sig-clear').addEventListener('click', () => {
+    if (ackCtx) ackCtx.clearRect(0, 0, ackPad.width, ackPad.height);
+    ackInk = false;
+  });
+  window.addEventListener('resize', () => { if (state.screen === 'ack' && !ackInk) sizeAckPad(); });
+
+  const deckWantsSignature = () => !!(state.induction.slideshow && state.induction.slideshow.require_signature);
+
+  function showAck() {
+    show($('#ack-sig-block'), deckWantsSignature());
+    setScreen('ack');
+    // Measured after the screen is visible — a hidden canvas has no size.
+    if (deckWantsSignature()) requestAnimationFrame(sizeAckPad);
+  }
+
   $('#deck-next').addEventListener('click', () => {
     const slides = state.induction.slideshow.slides;
     if (state.deckIndex < slides.length - 1) { state.deckIndex += 1; return renderSlide(); }
     clearInterval(renderSlide._t);
-    if (state.cfg.induction.require_acknowledgement) setScreen('ack');
+    // A deck that asks for a signature always ends on the confirmation screen —
+    // the signature is the acknowledgement, whatever the site-wide tap setting.
+    if (deckWantsSignature() || state.cfg.induction.require_acknowledgement) showAck();
     else { state.inductionDone = true; nextStep(); }
   });
 
@@ -1844,7 +1900,14 @@
   });
 
   $('#ack-replay').addEventListener('click', () => { state.deckIndex = 0; renderSlide(); setScreen('induction'); });
-  $('#ack-confirm').addEventListener('click', () => { state.inductionDone = true; nextStep(); });
+  $('#ack-confirm').addEventListener('click', () => {
+    if (deckWantsSignature()) {
+      if (!ackInk) return toast(t('Please sign in the box to continue'));
+      state.inductionSignature = ackPad.toDataURL('image/png');
+    }
+    state.inductionDone = true;
+    nextStep();
+  });
 
   /* --------------------------------------------------------------- sign in */
 
@@ -1871,6 +1934,7 @@
       documents: state.signedDocs,
       device_id: state.deviceId,
       induction_completed: inductionDone,
+      induction_signature: inductionDone ? state.inductionSignature : null,
       slideshow_id: inductionDone && state.induction.slideshow ? state.induction.slideshow.id : null,
       induction_started_at: state.deckStart,
       induction_seconds: state.deckStart ? Math.round((Date.now() - new Date(state.deckStart).getTime()) / 1000) : null

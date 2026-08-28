@@ -358,7 +358,8 @@
         </div>
       </div>
       <h3>Induction</h3>
-      ${v.inductions.length ? v.inductions.map((i) => `<p class="muted">${esc(i.slideshow_name || 'Deck')} v${i.slideshow_version} — completed ${fmtDate(i.completed_at)}${i.seconds ? ` (${i.seconds}s)` : ''}</p>`).join('')
+      ${v.inductions.length ? v.inductions.map((i) => `<p class="muted">${esc(i.slideshow_name || 'Deck')} v${i.slideshow_version} — completed ${fmtDate(i.completed_at)}${i.seconds ? ` (${i.seconds}s)` : ''}</p>
+        ${i.signature_path ? `<img src="${esc(i.signature_path)}" alt="Induction signature" style="max-width:260px;border:1px solid var(--line);border-radius:8px">` : ''}`).join('')
         : '<p class="muted">Not shown for this visit (already completed previously, or not required).</p>'}
       <h3>Signed documents</h3>
       ${v.signatures.length ? v.signatures.map((s) => {
@@ -457,8 +458,9 @@
       <p class="page-sub">Truck drivers delivering and collecting. Everything they sign in with — haulier, vehicle,
         reference — is kept here.</p>
 
-      ${cfg.kiosk.show_driver_button ? '' : `<div class="notice">The <b>Driver</b> card is switched off, so nobody can
-        check in as one yet. Turn it on in <b>Settings → Sections on the home screen</b>.</div>`}
+      ${((SETTINGS && SETTINGS.types) || []).some((ty) => ty.key === 'driver' && ty.mode !== 'off') ? ''
+        : `<div class="notice">The <b>Driver</b> card is switched off, so nobody can
+        check in as one yet. Turn it on under <b>Visitor types</b>.</div>`}
 
       <div class="grid cards" style="margin-bottom:1.25rem">
         ${[['On site now', data.stats.onsite], ['Arrived today', data.stats.today],
@@ -780,6 +782,10 @@
           <span class="muted">Stops the deck being clicked through unread: Next shows a countdown and only
             unlocks once the time is up, on every slide not yet watched. 0 = no wait.</span></label>
       </div>
+      <label class="check"><input type="checkbox" id="dk-sig" ${existing && existing.require_signature ? 'checked' : ''}>
+        <span>Ask for a signature at the end<br><span class="muted">The confirmation screen after the last slide asks
+          them to sign in a box, not just tap a button. The signature is kept on their induction record — proof they
+          sat through it, the same as a signed document.</span></span></label>
       <label class="check"><input type="checkbox" id="dk-active" ${!existing || existing.active ? 'checked' : ''}> Active</label>`,
       async (bg, close) => {
         const body = {
@@ -789,6 +795,7 @@
           repeat_after_days: Number($('#dk-repeat', bg).value) || null,
           min_seconds_per_slide: Number($('#dk-min', bg).value) || 0,
           language: $('#dk-lang', bg).value,
+          require_signature: $('#dk-sig', bg).checked,
           active: $('#dk-active', bg).checked
         };
         if (existing) await api(`/slideshows/${existing.id}`, { method: 'PATCH', body });

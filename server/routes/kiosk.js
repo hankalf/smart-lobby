@@ -112,7 +112,8 @@ router.get('/config', (req, res) => {
     agreements,
     // The active decks, slides and all: with these and the agreements above the
     // kiosk can run a complete sign-in with the connection down.
-    decks: all(`SELECT id, name, language, required_for, version, min_seconds_per_slide, repeat_after_days
+    decks: all(`SELECT id, name, language, required_for, version, min_seconds_per_slide, repeat_after_days,
+                       require_signature
                 FROM slideshows WHERE active = 1 ORDER BY id`)
       .map((s) => ({ ...s, slides: slidesFor(s.id) }))
       .filter((s) => s.slides.length),
@@ -364,9 +365,14 @@ router.post('/signin', async (req, res) => {
     if (b.induction_completed && b.slideshow_id) {
       const show = get('SELECT * FROM slideshows WHERE id = ?', Number(b.slideshow_id));
       if (show) {
-        run(`INSERT INTO slide_views (visit_id, visitor_id, slideshow_id, slideshow_version, started_at, completed_at, seconds)
-             VALUES (?,?,?,?,?,?,?)`,
-          visitId, visitor.id, show.id, show.version, b.induction_started_at || nowISO(), nowISO(), Number(b.induction_seconds) || null);
+        // Kept with the completion record, so "who signed off the induction and
+        // when" is one row, the same shape as a signed document.
+        const inductionSig = files.saveDataUrl(b.induction_signature, 'private', 'signatures');
+        run(`INSERT INTO slide_views (visit_id, visitor_id, slideshow_id, slideshow_version, started_at, completed_at,
+                                      seconds, signature_path)
+             VALUES (?,?,?,?,?,?,?,?)`,
+          visitId, visitor.id, show.id, show.version, b.induction_started_at || nowISO(), nowISO(),
+          Number(b.induction_seconds) || null, inductionSig);
         run('UPDATE visitors SET induction_slideshow_id = ?, induction_version = ?, induction_completed_at = ? WHERE id = ?',
           show.id, show.version, nowISO(), visitor.id);
       }

@@ -177,7 +177,9 @@ body.has-bg .screen:not(.dark) > .bar .btn.ghost {
 
 .sig-label { font-weight: 600; color: var(--ink-soft); margin: 1.2rem 0 .4rem; }
 .sig-wrap { border: 2px dashed var(--line); border-radius: 12px; background: var(--surface); }
-#sig-pad { width: 100%; height: 180px; display: block; touch-action: none; }
+#sig-pad, #ack-sig-pad { width: 100%; height: 180px; display: block; touch-action: none; }
+#ack-sig-block { text-align: left; margin-top: .8rem; }
+#ack-sig-block.hidden { display: none; }
 
 /* ---------------------------------------------------------------- deck */
 .deck { display: flex; flex-direction: column; height: 100%; }

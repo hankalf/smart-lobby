@@ -165,6 +165,12 @@
     <div class="panel center">
       <h2>Nearly done</h2>
       <p class="lead" id="ack-text">I confirm I have watched and understood the site induction.</p>
+      <!-- Only when the deck asks for a signature rather than just a tap. -->
+      <div id="ack-sig-block" class="hidden">
+        <p class="sig-label" id="ack-sig-label">Please sign below</p>
+        <div class="sig-wrap"><canvas id="ack-sig-pad"></canvas></div>
+        <div class="actions"><button class="btn ghost" id="ack-sig-clear">Clear</button></div>
+      </div>
       <div class="actions">
         <button class="btn ghost" id="ack-replay">Watch again</button>
         <button class="btn big" id="ack-confirm">I confirm</button>

@@ -378,6 +378,14 @@ function migrate() {
   addColumn('agreements', 'render_mode', 'TEXT');    // rendered | pdf | image
   addColumn('agreements', 'render_mode_es', 'TEXT');
   /*
+   * A deck can ask for a drawn signature at the end instead of only a
+   * confirmation tap — proof a contractor sat through the induction that
+   * stands up the way a signed document does. The signature itself is kept
+   * on the completion record, beside when and how long they watched.
+   */
+  addColumn('slideshows', 'require_signature', 'INTEGER NOT NULL DEFAULT 0');
+  addColumn('slide_views', 'signature_path', 'TEXT');
+  /*
    * Each tablet's own address: /kiosk/north-gate rather than a shared page with
    * a ?token= parameter. See server/devices.js for why the path, and not a
    * query parameter, is what survives "Add to Home Screen" on an iPad.

@@ -744,19 +744,20 @@ router.get('/slideshows', (req, res) => {
 router.post('/slideshows', (req, res) => {
   const b = req.body || {};
   const r = run(`INSERT INTO slideshows (name, description, required_for, repeat_after_days, allow_skip,
-                   min_seconds_per_slide, language, active, created_at)
-                 VALUES (?,?,?,?,?,?,?,?,?)`,
+                   min_seconds_per_slide, language, require_signature, active, created_at)
+                 VALUES (?,?,?,?,?,?,?,?,?,?)`,
     clean(b.name) || 'Site induction', clean(b.description) || null,
     JSON.stringify(b.required_for || ['visitor', 'contractor']), Number(b.repeat_after_days) || null,
     b.allow_skip ? 1 : 0, Number(b.min_seconds_per_slide) || 0, b.language === 'es' ? 'es' : 'en',
-    b.active === false ? 0 : 1, nowISO());
+    b.require_signature ? 1 : 0, b.active === false ? 0 : 1, nowISO());
   audit(req, 'create', 'slideshow', Number(r.lastInsertRowid), b);
   res.json(get('SELECT * FROM slideshows WHERE id = ?', r.lastInsertRowid));
 });
 
 router.patch('/slideshows/:id', (req, res) => {
   const b = req.body || {};
-  const fields = ['name', 'description', 'repeat_after_days', 'allow_skip', 'min_seconds_per_slide', 'language', 'active'];
+  const fields = ['name', 'description', 'repeat_after_days', 'allow_skip', 'min_seconds_per_slide', 'language',
+    'require_signature', 'active'];
   const cols = fields.filter((f) => b[f] !== undefined);
   if (cols.length) {
     run(`UPDATE slideshows SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`,
