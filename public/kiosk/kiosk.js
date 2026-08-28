@@ -1241,6 +1241,19 @@
     }
 
     if (step === 'documents') {
+      /*
+       * The list loaded when the card was tapped is for a stranger — everything.
+       * Now the visitor is known, ask again: a document set to "once" or "every
+       * 90 days" drops out if their signature is still fresh, exactly like the
+       * induction deck. Offline, or for a new face, the full list stands, which
+       * errs on the side of a signature that was not needed over one missing.
+       */
+      if (state.visitor) {
+        try {
+          state.agreements = await api(
+            `/agreements/${encodeURIComponent(state.visitType)}?visitor_id=${state.visitor.id}`);
+        } catch { /* unreachable server: the earlier list stands */ }
+      }
       if (!state.agreements || !state.agreements.length) return nextStep();
       return showDocument(0);
     }

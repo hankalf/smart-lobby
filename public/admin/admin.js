@@ -876,7 +876,9 @@
       ${rows.map((a) => `<div class="card section">
         <div class="row between"><div><h2 style="margin:0">${esc(a.name)} <span class="pill ${a.active ? 'on' : 'off'}">${a.active ? 'active' : 'off'}</span> ${langPill(a)}</h2>
         <span class="muted">v${a.version} · signed by ${esc(JSON.parse(a.required_for).map(categoryLabel).join(', ') || 'nobody')}${
-          countQuestions(a) ? ` · ${countQuestions(a)} question${countQuestions(a) === 1 ? '' : 's'}` : ''}</span></div>
+          countQuestions(a) ? ` · ${countQuestions(a)} question${countQuestions(a) === 1 ? '' : 's'}` : ''} · ${
+          a.repeat_after_days === null || a.repeat_after_days === undefined ? 'every visit'
+            : a.repeat_after_days === 0 ? 'signed once' : `every ${a.repeat_after_days} days`}</span></div>
         <div class="row" style="margin:0"><button class="btn ghost" data-doc="${a.id}">Edit</button>
         <button class="btn ghost" data-docdel="${a.id}">Delete</button></div></div>
         ${docFilePages(a, false).length
@@ -959,6 +961,22 @@
           <span>${label}<br><span class="muted">${hint}</span></span></label>`).join('')}
       </div>
 
+      <h3>How often</h3>
+      <p class="muted" style="margin-top:0">Same as the induction decks: how often the same person is asked to sign
+        this again. Editing the wording brings it back to everyone regardless, so nobody stays signed onto an old
+        version.</p>
+      <div class="inline-form" style="margin:.5rem 0 1rem">
+        <label class="field" style="max-width:18rem"><span>Ask them to sign</span>
+          <select class="input" id="ag-repeat-mode">
+            <option value="always" ${!doc || doc.repeat_after_days === null || doc.repeat_after_days === undefined ? 'selected' : ''}>Every visit</option>
+            <option value="once" ${doc && doc.repeat_after_days === 0 ? 'selected' : ''}>Once — until the document changes</option>
+            <option value="days" ${doc && doc.repeat_after_days > 0 ? 'selected' : ''}>Again after a number of days</option>
+          </select></label>
+        <label class="field" style="max-width:10rem" id="ag-repeat-days-wrap" ${doc && doc.repeat_after_days > 0 ? '' : 'hidden'}>
+          <span>Days</span>
+          <input class="input" id="ag-repeat-days" type="number" min="1" value="${doc && doc.repeat_after_days > 0 ? doc.repeat_after_days : 90}"></label>
+      </div>
+
       <h3>Questions</h3>
       <p class="muted" style="margin-top:0">Asked on the kiosk before they finish. Answers are stored against the visit.</p>
       <div id="q-list"></div>
@@ -972,6 +990,7 @@
       <label class="check" style="margin-top:1rem"><input type="checkbox" id="ag-active" ${!doc || doc.active ? 'checked' : ''}> Active</label>
       ${doc ? '<p class="muted">Saving bumps the version, so copies already signed stay exactly as they were signed.</p>' : ''}`,
       async (bg, close) => {
+        const repeatMode = $('#ag-repeat-mode', bg).value;
         const body = {
           name: $('#ag-name', bg).value,
           body: $('#ag-body', bg).value,
@@ -980,13 +999,30 @@
           required_for: JSON.stringify($$('[data-t]', bg).filter((c) => c.checked).map((c) => c.dataset.t)),
           questions: JSON.stringify(collectQuestions(bg)),
           require_signature: $('#ag-sig', bg).checked ? 1 : 0,
+          repeat_after_days: repeatMode === 'always' ? null
+            : repeatMode === 'once' ? 0
+            : Math.max(1, Number($('#ag-repeat-days', bg).value) || 90),
           active: $('#ag-active', bg).checked ? 1 : 0
         };
         if (!body.name.trim()) return toast('Give the document a title');
-        if (doc) { body.version = doc.version + 1; await api(`/agreements/${doc.id}`, { method: 'PATCH', body }); }
-        else await api('/agreements', { method: 'POST', body });
+        if (doc) {
+          /*
+           * The version only moves when what people read or answer has changed.
+           * It is what brings a "once" or "every 90 days" document back to
+           * everyone — so flipping a setting like the frequency itself must not
+           * bump it and quietly void every standing signature.
+           */
+          const changed = ['name', 'body', 'name_es', 'body_es', 'questions']
+            .some((f) => String(body[f] || '') !== String(doc[f] || (f === 'questions' ? '[]' : '')));
+          if (changed) body.version = doc.version + 1;
+          await api(`/agreements/${doc.id}`, { method: 'PATCH', body });
+        } else await api('/agreements', { method: 'POST', body });
         close(); render('documents');
       });
+
+    $('#ag-repeat-mode', m.bg).addEventListener('change', (e) => {
+      $('#ag-repeat-days-wrap', m.bg).hidden = e.target.value !== 'days';
+    });
 
     /*
      * Files are attached to the document itself, not to the form: uploading

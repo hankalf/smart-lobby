@@ -89,6 +89,32 @@ function agreementsFor(visitType) {
 
 const activeAgreementFor = (visitType) => agreementsFor(visitType)[0] || null;
 
+/**
+ * The documents this particular person still has to sign, mirroring how the
+ * decks repeat: a document set to every visit is always due; one set to "once"
+ * is due until they have signed the current version — editing the wording bumps
+ * the version, so a changed document comes back to everyone; one set to N days
+ * is due again once their newest signature of the current version is older
+ * than that. Someone the kiosk cannot identify signs everything, which is also
+ * what happens offline.
+ */
+function agreementsDueFor(visitor, visitType) {
+  const docs = agreementsFor(visitType);
+  if (!visitor) return docs;
+  return docs.filter((a) => {
+    const days = a.repeat_after_days;
+    if (days === null || days === undefined) return true; // every visit
+    const signed = get(
+      `SELECT sg.signed_at FROM signatures sg JOIN visits v ON v.id = sg.visit_id
+       WHERE v.visitor_id = ? AND sg.agreement_id = ? AND sg.agreement_version = ?
+       ORDER BY sg.signed_at DESC LIMIT 1`,
+      visitor.id, a.id, a.version);
+    if (!signed) return true;
+    if (Number(days) === 0) return false; // once per version
+    return (Date.now() - new Date(signed.signed_at).getTime()) / 864e5 >= Number(days);
+  });
+}
+
 function defaultSite() {
   return get('SELECT * FROM sites WHERE active = 1 ORDER BY id LIMIT 1');
 }
@@ -99,7 +125,7 @@ router.get('/config', (req, res) => {
   const site = defaultSite();
   const pub = settings.publicSettings();
   const agreements = all(`SELECT id, name, name_es, body, body_es, pages, pages_es, render_mode, render_mode_es,
-                                 version, required_for, questions, require_signature
+                                 version, required_for, questions, require_signature, repeat_after_days
                           FROM agreements WHERE active = 1`);
   const inductions = all('SELECT id, name, version, required_for FROM slideshows WHERE active = 1');
   res.json({
@@ -224,7 +250,10 @@ router.get('/agreement/:visitType', (req, res) => {
 });
 
 router.get('/agreements/:visitType', (req, res) => {
-  res.json(agreementsFor(req.params.visitType));
+  // With a visitor_id, only what that person is actually due to sign comes
+  // back; without one (a new face, or before lookup) it is the full set.
+  const visitor = req.query.visitor_id ? get('SELECT * FROM visitors WHERE id = ?', Number(req.query.visitor_id)) : null;
+  res.json(agreementsDueFor(visitor, req.params.visitType));
 });
 
 /* --------------------------------------------------------------- sign in */
