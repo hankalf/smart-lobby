@@ -2628,6 +2628,9 @@
 
         <div id="email-api-fields" ${(s.notify.email_provider === 'brevo' || s.notify.email_provider === 'sendgrid') ? '' : 'hidden'}>
           ${txt('notify.email_api_key', 'API key', 'password')}
+          <p class="muted">A free-mail From address (…@icloud.com, …@gmail.com) often lands in <b>spam</b> when relayed
+            this way — those domains tell receivers nobody else may send for them. Fine for testing; for the real thing,
+            a company address is the reliable choice, ideally with the company domain authenticated inside the service.</p>
           <details class="howto">
             <summary><b>Setting up Brevo (free, 300 emails a day)</b></summary>
             <ol>
@@ -3037,6 +3040,33 @@
     });
 
     /**
+     * Ask Brevo what became of the message, a few times over half a minute —
+     * events take a moment to appear. Ends with delivered, a named blocker, or
+     * where to look next.
+     */
+    async function followDelivery(box, messageId) {
+      box.insertAdjacentHTML('beforeend', '<p class="muted" id="dlv-wait">Brevo accepted it — following the delivery…</p>');
+      const waits = [4000, 8000, 12000, 8000];
+      for (const ms of waits) {
+        await new Promise((r) => setTimeout(r, ms));
+        let s;
+        try { s = await api('/settings/email-status', { method: 'POST', body: { message_id: messageId } }); }
+        catch { break; }
+        if (s.known) {
+          const good = s.state === 'delivered';
+          $('#dlv-wait').outerHTML = `<div class="notice ${good ? '' : 'error'}"><b>${
+            good ? 'Delivered.' : s.state === 'pending' ? 'Still delivering…' : 'Not delivered.'}</b> ${esc(s.detail || '')}</div>`;
+          if (s.state !== 'pending') return;
+          box.insertAdjacentHTML('beforeend', '<p class="muted" id="dlv-wait"></p>');
+        }
+      }
+      const wait = $('#dlv-wait');
+      if (wait) wait.outerHTML = '<div class="notice"><b>No verdict yet.</b> Brevo has the message but has not logged '
+        + 'the outcome. Check the recipient&rsquo;s spam folder, and <b>Transactional → Logs</b> inside Brevo — if that '
+        + 'page shows it blocked, the account is still under review and needs the validation steps finished.</div>';
+    }
+
+    /**
      * "Could not reach the server" has two very different fixes, so run the
      * connection check and show which one this is.
      */
@@ -3076,6 +3106,14 @@
         // A reach failure gets the connection check straight away — it answers
         // whether the settings are wrong or the ports are blocked.
         if (!r.ok && /could not reach|never answered/i.test(r.error || '')) await diagnoseEmail(box);
+        // "Sent" only means the service accepted it. With Brevo the delivery
+        // can be looked up, so follow the message and say what became of it.
+        if (r.ok && r.provider === 'brevo' && r.message_id) await followDelivery(box, r.message_id);
+        if (r.ok && r.provider === 'sendgrid') {
+          box.insertAdjacentHTML('beforeend', '<p class="muted">SendGrid accepted it. If nothing arrives, check the '
+            + 'spam folder first, then the <b>Activity</b> page inside SendGrid — its free plan does not let this '
+            + 'dashboard look the delivery up.</p>');
+        }
       } catch (err) {
         box.innerHTML = `<div class="notice error"><b>Could not send.</b> ${esc(err.message || 'The server did not answer.')}</div>`;
       } finally {

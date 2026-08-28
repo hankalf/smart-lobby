@@ -1110,6 +1110,11 @@ router.post('/settings/test-email', async (req, res) => {
   res.json({ ...result, to });
 });
 
+// "Sent" only means accepted — this asks Brevo what became of the message.
+router.post('/settings/email-status', async (req, res) => {
+  res.json(await notify.deliveryStatus(clean(req.body.message_id)));
+});
+
 router.post('/settings/test-sms', async (req, res) => {
   if (!req.body.to) return res.status(400).json({ error: 'number_required' });
   const ok = await notify.sendTestSms(req.body.to);

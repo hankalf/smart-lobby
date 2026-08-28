@@ -74,7 +74,16 @@ async function sendViaApi({ provider, apiKey, fromName, fromEmail, to, subject, 
       ? { 'Content-Type': 'application/json', 'api-key': apiKey }
       : { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` };
     const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: controller.signal });
-    if (res.ok || res.status === 202) return { ok: true };
+    if (res.ok || res.status === 202) {
+      // The id the service filed the message under, so what happened to it
+      // after acceptance can be looked up rather than guessed at.
+      let messageId = res.headers.get('x-message-id') || null; // SendGrid
+      if (provider === 'brevo') {
+        const parsed = await res.json().catch(() => null);
+        if (parsed && parsed.messageId) messageId = parsed.messageId;
+      }
+      return { ok: true, message_id: messageId, provider };
+    }
     const detail = await res.text().catch(() => '');
     return { ok: false, error: explainApiError(provider, res.status, detail) };
   } catch (err) {
@@ -100,6 +109,64 @@ function explainApiError(provider, status, body) {
       + `(${name} emails that address a confirmation link).`;
   }
   return `${name} answered ${status}: ${String(body).slice(0, 300)}`;
+}
+
+/**
+ * What actually happened to a message Brevo accepted. "Sent" only means the
+ * service took it; whether it was delivered, spammed or quietly blocked — a
+ * brand-new Brevo account under review does exactly that — is in its event
+ * log, which this reads so nobody has to guess from an empty inbox.
+ * (SendGrid keeps this behind a paid add-on, so only Brevo is asked.)
+ */
+async function deliveryStatus(messageId) {
+  const n = settings.getSection('notify');
+  if (n.email_provider !== 'brevo') return { known: false, note: 'Delivery lookup is only available with Brevo.' };
+  if (!messageId) return { known: false, note: 'No message id to look up.' };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  try {
+    const res = await fetch(
+      `${API_BASES.brevo()}/v3/smtp/statistics/events?messageId=${encodeURIComponent(messageId)}&limit=20`,
+      { headers: { 'api-key': n.email_api_key }, signal: controller.signal });
+    if (!res.ok) return { known: false, note: `Brevo answered ${res.status} to the lookup.` };
+    const data = await res.json().catch(() => ({}));
+    const events = Array.isArray(data.events) ? data.events : [];
+    const has = (...names) => events.find((e) => names.includes(String(e.event)));
+
+    const delivered = has('delivered');
+    if (delivered) {
+      return { known: true, state: 'delivered',
+        detail: 'Brevo delivered it to the receiving mail server. If it is not in the inbox, it is in spam or junk — mark it "not spam" there and the next ones arrive normally.' };
+    }
+    const blocked = has('blocked', 'invalid', 'error');
+    if (blocked) {
+      return { known: true, state: 'blocked',
+        detail: `Brevo did not send it: ${blocked.reason || blocked.event}. A brand-new Brevo account is often still under review — `
+          + 'open Brevo and look for a validation banner, and check Transactional → Logs there for this message.' };
+    }
+    const bounced = has('hardBounces', 'softBounces');
+    if (bounced) {
+      const reason = String(bounced.reason || '');
+      const dmarc = /dmarc|spf|dkim|polic|authenticat|unauthenticated/i.test(reason);
+      return { known: true, state: 'bounced',
+        detail: `The receiving server refused it${reason ? `: ${reason.slice(0, 200)}` : ''}. `
+          + (dmarc
+            ? 'That is the From domain rejecting relayed mail — free-mail addresses (@icloud.com, @gmail.com) often forbid it. Use a corporate From address, ideally with its domain authenticated inside Brevo.'
+            : 'Check the recipient address is right.') };
+    }
+    const spammed = has('spam');
+    if (spammed) {
+      return { known: true, state: 'spam', detail: 'The receiver filed it as spam — check the junk folder and mark it "not spam".' };
+    }
+    if (has('requests', 'deferred')) {
+      return { known: true, state: 'pending', detail: 'Brevo has it and is still delivering — give it a minute.' };
+    }
+    return { known: false, note: 'No events recorded yet — Brevo can take a minute to log them.' };
+  } catch {
+    return { known: false, note: 'Could not reach Brevo for the lookup.' };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** One email, over whichever way out is configured. Returns {ok, error}. */
@@ -435,5 +502,5 @@ async function sendTestSms(to) {
   return sendSms({ to, message: 'Smart Lobby test message. If you can read this, SMS notifications are working.' });
 }
 
-module.exports = { notifyArrival, notifyDeparture, notifyDelivery, sendTest, sendTestSms, sendWebhook, sendWebhooks,
+module.exports = { notifyArrival, notifyDeparture, notifyDelivery, sendTest, sendTestSms, sendWebhook, sendWebhooks, deliveryStatus,
   webhookTargets, sendEmail, sendSms, toE164, baseUrl };
