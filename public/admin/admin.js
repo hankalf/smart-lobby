@@ -188,21 +188,36 @@
 
   let CURRENT = '';
 
-  /** Highlight one top-level tab, and show the Settings sub-list only under it. */
-  function markNav(view, section) {
-    $$('#nav button[data-view]').forEach((x) => x.classList.toggle('active', x.dataset.view === view));
-    $('#subnav').hidden = view !== 'settings';
-    $$('#subnav button').forEach((x) => x.classList.toggle('active', view === 'settings' && x.dataset.section === section));
+  /** The tab a page sits under: itself, or the parent whose list names it. */
+  function parentOf(view) {
+    const child = $(`#nav .subnav button[data-view="${view}"]`);
+    return child ? child.closest('.subnav').dataset.for : view;
   }
 
-  $$('#nav button[data-view]').forEach((b) => b.addEventListener('click', () => {
-    markNav(b.dataset.view);
-    render(b.dataset.view);
-    location.hash = b.dataset.view;
+  /** Highlight the tab, open only its sub-list, and mark the entry within it. */
+  function markNav(view, section) {
+    const parent = parentOf(view);
+    $$('#nav > button').forEach((x) => x.classList.toggle('active', x.dataset.view === parent));
+    $$('#nav .subnav').forEach((sub) => { sub.hidden = sub.dataset.for !== parent; });
+    $$('#nav .subnav button').forEach((x) => x.classList.toggle('active',
+      (x.dataset.view && x.dataset.view === view)
+      || (!!section && view === 'settings' && x.dataset.section === section)));
+  }
+
+  const goView = (view) => { markNav(view); location.hash = view; render(view); };
+
+  $$('#nav > button').forEach((b) => b.addEventListener('click', () => {
+    // A heading with no page of its own — Sign-in setup — opens its first entry.
+    if (b.dataset.group && !VIEWS[b.dataset.view]) {
+      const first = $(`#nav .subnav[data-for="${b.dataset.group}"] button[data-view]`);
+      if (first) return first.click();
+    }
+    goView(b.dataset.view);
   }));
 
-  // A sub-section: show Settings if it is not already up, then open that panel.
-  $$('#subnav button').forEach((b) => b.addEventListener('click', async () => {
+  $$('#nav .subnav button').forEach((b) => b.addEventListener('click', async () => {
+    if (b.dataset.view) return goView(b.dataset.view);
+    // A panel on the settings page: show that page if it is not up, then open it.
     const section = b.dataset.section;
     markNav('settings', section);
     location.hash = `settings/${section}`;
@@ -2602,7 +2617,7 @@
         ` : ''}
       </div>
 
-      <div class="card section" id="set-details"><h2>The “Your details” form</h2>
+      <div class="card section" id="set-details"><h2>Visitor form</h2>
         <p class="muted" style="margin-top:0">What each type of visitor is asked. An interview does not need a reason for
           visit — the card already says why they are here — so switch it off in that column alone.</p>
         <div class="table-wrap"><table class="fields-table">
@@ -2620,30 +2635,42 @@
         </table></div>
         <p class="muted">Full name is always asked. Deliveries have their own short form, set further down.</p>
 
-        <h3>Wording</h3>
-        <p class="muted" style="margin-top:0">Change what a field is called and add a line of help underneath it —
-          a driver is asked for a haulier, not a company. Leave a box empty to keep the standard wording.</p>
-        <label class="field" style="max-width:16rem"><span>Wording for</span>
-          <select class="input" id="wording-type">
-            ${detailTypes().map(([t, l]) => `<option value="${t}">${l}</option>`).join('')}
-          </select></label>
-        <div id="wording-fields"></div>
-      </div>
-
-      <div class="card section" id="set-order"><h2>The order things are asked</h2>
-        <p class="muted" style="margin-top:0">Finding the visitor always comes first — it decides whether they need the
-          induction at all. Everything after that is yours to arrange, per type. A step that does not apply is skipped
-          wherever it sits: no photo asked for, no documents for that type, an induction already watched.</p>
-        <div class="grid two" id="flow-editor">
-          ${detailTypes().map(([type, label]) => `
-            <div class="flow-col" data-flowtype="${type}">
-              <h3 style="margin-top:0">${label}</h3>
-              <ol class="flow-list"></ol>
-            </div>`).join('')}
-        </div>
+        <details class="sub-fold">
+          <summary><h3>Wording</h3><span class="muted">What each field is called, per visitor type</span></summary>
+          <p class="muted" style="margin-top:0">Change what a field is called and add a line of help underneath it —
+            a driver is asked for a haulier, not a company. Leave a box empty to keep the standard wording.</p>
+          <label class="field" style="max-width:16rem"><span>Wording for</span>
+            <select class="input" id="wording-type">
+              ${detailTypes().map(([t, l]) => `<option value="${t}">${l}</option>`).join('')}
+            </select></label>
+          <div id="wording-fields"></div>
+        </details>
       </div>
 
       <div class="card section" id="set-flow"><h2>Kiosk sign-in flow</h2>
+        <h3 style="margin-top:0">How check-in works</h3>
+        <p class="muted" style="margin-top:0">Finding the visitor always comes first — it decides whether they need
+          the induction at all. Everything after that is yours to arrange, and it can differ per type. A step that
+          does not apply is skipped wherever it sits: no photo asked for, no documents for that type, an induction
+          already watched.</p>
+        <label class="field" style="max-width:16rem"><span>Flow for</span>
+          <select class="input" id="flow-type">
+            ${detailTypes().map(([t, l]) => `<option value="${t}">${l}</option>`).join('')}
+          </select></label>
+        <div class="flow-strip" id="flow-strip"></div>
+        <p class="muted">Drag a step to move it, or use the arrows on it.</p>
+        <details class="sub-fold">
+          <summary><h3>Every type side by side</h3><span class="muted">The same order, all four at once</span></summary>
+          <div class="grid two" id="flow-editor">
+            ${detailTypes().map(([type, label]) => `
+              <div class="flow-col" data-flowtype="${type}">
+                <h3 style="margin-top:0">${label}</h3>
+                <ol class="flow-list"></ol>
+              </div>`).join('')}
+          </div>
+        </details>
+
+        <h3>Behaviour</h3>
         <div class="check-list">
           ${chk('kiosk.welcome_shows_menu', 'Skip “Touch to start”',
             'Put the sections straight on the home screen')}
@@ -2735,8 +2762,8 @@
           <summary><b>Getting the Teams link for a channel</b></summary>
           <ol>
             <li>In Teams, hover the channel &rarr; <b>&ctdot;</b> &rarr; <b>Workflows</b>.</li>
-            <li>Choose the template <b>“Post to a channel when a webhook request is received”</b>.</li>
-            <li>Name it “Smart Lobby”, confirm the team and channel, then <b>Add workflow</b>.</li>
+            <li>Choose the template <b>&ldquo;Post to a channel when a webhook request is received&rdquo;</b>.</li>
+            <li>Name it &ldquo;Smart Lobby&rdquo;, confirm the team and channel, then <b>Add workflow</b>.</li>
             <li>Copy the HTTPS URL it shows — you only get it once — and paste it above.</li>
             <li>Save, then press <b>Send test to Teams</b> below.</li>
           </ol>
@@ -2745,18 +2772,75 @@
             the chat template, are on that tab under <b>Setting up a chat webhook</b>.</p>
         </details>
 
-        <h3>Chat</h3>
-        <p class="muted" style="margin-top:0">A company channel that sees everything, and each person's own webhook
-          for their own visitors. Set either, or both.</p>
-        ${chk('notify.webhook_channel_always', 'Post every arrival to the company channel',
-          'With this off, the channel is only used for people who have no webhook of their own')}
-        <div class="form-grid">
-          ${txt('notify.global_webhook_url', 'Company channel webhook')}
-          <label class="field"><span>Format for unrecognised URLs</span><select class="input" data-set="notify.webhook_format">
-            ${[['slack', 'Slack'], ['teams', 'Microsoft Teams'], ['google_chat', 'Google Chat'], ['generic', 'Generic JSON']]
-              .map(([v, l]) => `<option value="${v}" ${s.notify.webhook_format === v ? 'selected' : ''}>${l}</option>`).join('')}
-          </select></label>
+        <h3>What the message looks like</h3>
+        <p class="muted" style="margin-top:0">The preview is built by the same code that sends the real thing, so what
+          you see here is what lands in the channel.</p>
+        <div class="card-design">
+          <div>
+            <div class="form-grid">
+              <label class="field"><span>Heading colour</span>
+                <select class="input" id="cd-header">
+                  ${[['accent', 'Blue'], ['good', 'Green'], ['warning', 'Amber'], ['attention', 'Red'],
+                     ['emphasis', 'Grey'], ['none', 'Plain — no tinted band']]
+                    .map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}
+                </select>
+                <span class="muted">Teams only offers its own palette, so this is a choice rather than a colour picker</span></label>
+              <label class="field"><span>Details layout</span>
+                <select class="input" id="cd-details">
+                  <option value="facts">Two columns — label beside value</option>
+                  <option value="lines">One line each</option>
+                </select></label>
+            </div>
+            <div class="field-list">
+              <label class="field"><span>Heading</span><input class="input" id="cd-title"></label>
+              <label class="field"><span>Under the heading</span><input class="input" id="cd-subtitle"></label>
+              <label class="field"><span>Footer</span><input class="input" id="cd-footer"></label>
+            </div>
+            <p class="muted" style="margin:.35rem 0 0">You can use
+              <code>{name}</code> <code>{company}</code> <code>{host}</code> <code>{type}</code>
+              <code>{project}</code> <code>{site}</code> <code>{org}</code>. Anything empty disappears
+              along with the spacing around it.</p>
+
+            <h4>Photo</h4>
+            <label class="check"><input type="checkbox" id="cd-photo"> <span>Show the visitor's photo</span></label>
+            <div class="form-grid">
+              <label class="field"><span>Where</span>
+                <select class="input" id="cd-photo-place">
+                  <option value="left">Beside the details</option>
+                  <option value="top">Above the details</option>
+                </select></label>
+              <label class="field"><span>Shape</span>
+                <select class="input" id="cd-photo-shape">
+                  <option value="person">Circle</option>
+                  <option value="square">Square</option>
+                </select></label>
+            </div>
+            <div id="cd-photo-warning"></div>
+
+            <h4>What the message shows</h4>
+            <p class="muted" style="margin-top:0">The arrows set the order. A field with nothing in it for that
+              visitor is left out rather than shown empty.</p>
+            <div class="section-order" id="cd-chosen"></div>
+            <p class="muted" style="margin:.6rem 0 .3rem">Not shown</p>
+            <div class="section-order" id="cd-rest"></div>
+
+            <h4>Button</h4>
+            <label class="check"><input type="checkbox" id="cd-button"> <span>Add a button that opens the dashboard</span></label>
+            <label class="field"><span>Button wording</span><input class="input" id="cd-button-label"></label>
+          </div>
+
+          <div class="card-preview-col">
+            <div class="muted" style="margin-bottom:.4rem">Preview</div>
+            <div id="cd-preview" class="teams-preview"><p class="empty">Loading…</p></div>
+            <p class="muted" id="cd-sample"></p>
+            <label class="field" style="margin-top:.75rem"><span>Public address of this server</span>
+              <input class="input" data-set="notify.public_url" placeholder="https://your-app.up.railway.app"
+                value="${esc(s.notify.public_url || '')}">
+              <span class="muted">Teams fetches the photo itself, so it needs an address reachable from outside.
+                Leave blank to use the PUBLIC_URL the server was started with.</span></label>
+          </div>
         </div>
+
         <h3>SMS (Twilio)</h3>
         ${chk('notify.sms_enabled', 'Send text messages to hosts', 'Uses the mobile number on each staff record')}
         <div class="form-grid">
@@ -2777,6 +2861,24 @@
         <div class="row" style="margin:.4rem 0"><span id="notify-summary"></span>
           <button class="btn ghost" id="notify-refresh" type="button">Refresh</button></div>
         <div class="table-wrap" id="notify-log"><p class="muted">Loading…</p></div>
+      </div>
+
+      <div class="card section" id="set-board"><h2>Live on-site board</h2>
+        <p class="muted" style="margin-top:0">A page showing who is on site, who has just arrived and who has just
+          signed out, updating itself every few seconds. Leave it open on a laptop or a screen in the office.</p>
+        <p class="muted">It shows the whole roster, so it is not simply open to anyone — it lives behind an
+          unguessable link. Anybody holding that link can see the board, so treat it like a key: <b>New link</b>
+          replaces it, and <b>Turn off</b> stops every copy of it working at once.</p>
+        <div id="board-state"><p class="muted">Loading…</p></div>
+        <div class="form-grid" style="margin-top:1rem">
+          ${txt('board.title', 'Heading on the board', 'text', s.org.name || 'Smart Lobby')}
+          ${txt('board.recent_minutes', '“Just arrived” means the last (minutes)', 'number')}
+        </div>
+        <div class="check-list">
+          ${chk('board.show_photos', 'Show visitor photos')}
+          ${chk('board.show_company', 'Show company')}
+          ${chk('board.show_host', 'Show who they are visiting')}
+        </div>
       </div>
 
       <div class="card section" id="set-retention"><h2>Data retention</h2>
@@ -2815,6 +2917,146 @@
     collapseSections(root);
     $('#sec-expand').addEventListener('click', () => setAllSections(root, true));
     $('#sec-collapse').addEventListener('click', () => setAllSections(root, false));
+
+    /* --------------------------------------------- the notification card */
+
+    /*
+     * Held here and sent whole on save, like the wording and the step order,
+     * so switching between the controls never loses an edit. The preview is
+     * drawn by the server from this same object — there is no second copy of
+     * the layout rules in the browser to drift out of step with what sends.
+     */
+    const card = { ...(s.notify && s.notify.card) };
+    let CARD_FIELDS = [];
+
+    const cdSet = (id, value) => { const el = $(id); if (el) el.value = value ?? ''; };
+    cdSet('#cd-header', card.header_style || 'accent');
+    cdSet('#cd-details', card.details_style || 'facts');
+    cdSet('#cd-title', card.title_template);
+    cdSet('#cd-subtitle', card.subtitle_template);
+    cdSet('#cd-footer', card.footer_template);
+    cdSet('#cd-photo-place', card.photo_placement || 'left');
+    cdSet('#cd-photo-shape', card.photo_shape || 'person');
+    cdSet('#cd-button-label', card.button_label);
+    $('#cd-photo').checked = card.show_photo !== false;
+    $('#cd-button').checked = !!card.show_button;
+
+    function readCard() {
+      card.header_style = $('#cd-header').value;
+      card.details_style = $('#cd-details').value;
+      card.title_template = $('#cd-title').value;
+      card.subtitle_template = $('#cd-subtitle').value;
+      card.footer_template = $('#cd-footer').value;
+      card.show_photo = $('#cd-photo').checked;
+      card.photo_placement = $('#cd-photo-place').value;
+      card.photo_shape = $('#cd-photo-shape').value;
+      card.show_button = $('#cd-button').checked;
+      card.button_label = $('#cd-button-label').value;
+      return card;
+    }
+    VIEWS.settings.collectCard = () => readCard();
+
+    const FIELD_LABEL = (id) => (CARD_FIELDS.find((f) => f.id === id) || {}).label || id;
+    const FIELD_SENSITIVE = (id) => !!(CARD_FIELDS.find((f) => f.id === id) || {}).sensitive;
+
+    function drawCardFields() {
+      const chosen = card.fields || [];
+      const rest = CARD_FIELDS.filter((f) => !chosen.includes(f.id));
+      $('#cd-chosen').innerHTML = chosen.length ? chosen.map((id, i) => `<div class="section-row">
+        <span>${esc(FIELD_LABEL(id))}${FIELD_SENSITIVE(id)
+          ? ' <span class="muted">— everyone in the channel can read this</span>' : ''}</span>
+        <span class="flow-moves">
+          <button class="btn ghost" data-cdup="${i}" ${i === 0 ? 'disabled' : ''} title="Move up">↑</button>
+          <button class="btn ghost" data-cddown="${i}" ${i === chosen.length - 1 ? 'disabled' : ''} title="Move down">↓</button>
+          <button class="btn ghost" data-cdout="${id}" title="Leave this out">Remove</button>
+        </span></div>`).join('')
+        : '<div class="section-row off"><span>Nothing but the heading.</span></div>';
+
+      $('#cd-rest').innerHTML = rest.length ? rest.map((f) => `<div class="section-row off">
+        <span>${esc(f.label)}${f.sensitive ? ' <span class="muted">— everyone in the channel can read this</span>' : ''}</span>
+        <span class="flow-moves"><button class="btn ghost" data-cdin="${f.id}">Add</button></span></div>`).join('')
+        : '<div class="section-row off"><span>Everything is shown.</span></div>';
+
+      const move = (from, to) => {
+        if (to < 0 || to >= card.fields.length) return;
+        const [item] = card.fields.splice(from, 1);
+        card.fields.splice(to, 0, item);
+        drawCardFields();
+        drawCardPreview();
+      };
+      $$('[data-cdup]').forEach((b) => b.addEventListener('click', () => move(Number(b.dataset.cdup), Number(b.dataset.cdup) - 1)));
+      $$('[data-cddown]').forEach((b) => b.addEventListener('click', () => move(Number(b.dataset.cddown), Number(b.dataset.cddown) + 1)));
+      $$('[data-cdout]').forEach((b) => b.addEventListener('click', () => {
+        card.fields = card.fields.filter((id) => id !== b.dataset.cdout);
+        drawCardFields(); drawCardPreview();
+      }));
+      $$('[data-cdin]').forEach((b) => b.addEventListener('click', () => {
+        card.fields = [...(card.fields || []), b.dataset.cdin];
+        drawCardFields(); drawCardPreview();
+      }));
+    }
+
+    // One request per pause in typing, not one per keystroke.
+    let previewTimer = null;
+    const drawCardPreview = () => {
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(loadCardPreview, 250);
+    };
+
+    async function loadCardPreview() {
+      let data;
+      try { data = await api('/notify/preview', { method: 'POST', body: { card: readCard() } }); }
+      catch (err) {
+        if (err.message === 'unauthenticated') return;
+        $('#cd-preview').innerHTML = `<p class="empty">Could not draw the preview: ${esc(err.message)}</p>`;
+        return;
+      }
+      if (!CARD_FIELDS.length) { CARD_FIELDS = data.fields; drawCardFields(); }
+      $('#cd-preview').innerHTML = teamsPreviewHtml(data.model);
+      $('#cd-sample').textContent = data.sample
+        ? 'Nobody has signed in yet, so this shows made-up details.'
+        : 'Shown with your most recent arrival.';
+
+      // A photo Teams cannot reach is the one failure that looks like nothing.
+      const warn = $('#cd-photo-warning');
+      warn.innerHTML = (card.show_photo && !data.public_url_reachable)
+        ? `<div class="notice error">Teams fetches the photo from
+             <b>${esc(data.public_url)}</b>, which it cannot reach from outside. Set the public address below —
+             or the PUBLIC_URL variable on the server — or the card will arrive with a blank space where the face
+             should be.</div>`
+        : '';
+    }
+
+    /** The Adaptive Card as Teams draws it, near enough to design against. */
+    function teamsPreviewHtml(m) {
+      const photo = m.photoUrl
+        ? `<img class="tp-photo ${m.photoShape === 'person' ? 'round' : ''}" src="${esc(m.photoUrl)}" alt="">`
+        : '';
+      const heading = `<div class="tp-title tp-${esc(m.headerStyle)}">${esc(m.title)}</div>
+        ${m.subtitle ? `<div class="tp-sub">${esc(m.subtitle)}</div>` : ''}`;
+      const details = m.fields.length
+        ? (m.detailsStyle === 'facts'
+          ? `<div class="tp-facts">${m.fields.map((f) => `<div class="tp-fact-l">${esc(f.label)}</div>
+              <div class="tp-fact-v">${esc(f.value)}</div>`).join('')}</div>`
+          : `<div class="tp-lines">${m.fields.map((f) =>
+              `<div>${f.label ? `<b>${esc(f.label)}:</b> ` : ''}${esc(f.value)}</div>`).join('')}</div>`)
+        : '';
+      const main = (photo && m.photoPlacement === 'left')
+        ? `<div class="tp-row">${photo}<div class="tp-main">${heading}${details}</div></div>`
+        : `${photo}${heading}${details}`;
+      return `<div class="tp-card">
+        <div class="tp-band tp-band-${esc(m.headerStyle)}">${main}</div>
+        ${m.footer ? `<div class="tp-footer">${esc(m.footer)}</div>` : ''}
+        ${m.action ? `<div class="tp-actions"><span class="tp-btn">${esc(m.action.label)}</span></div>` : ''}
+      </div>`;
+    }
+
+    ['#cd-header', '#cd-details', '#cd-title', '#cd-subtitle', '#cd-footer', '#cd-photo',
+      '#cd-photo-place', '#cd-photo-shape', '#cd-button', '#cd-button-label']
+      .forEach((sel) => { const el = $(sel); if (el) el.addEventListener('input', drawCardPreview); });
+
+    // Drawn as soon as the panel is opened, not on a settings page nobody expanded.
+    onSectionOpen('set-notifications', loadCardPreview);
 
     /* ------------------------------------------- deleted records & the log */
 
@@ -2907,10 +3149,56 @@
         </tr>`).join('')}</tbody></table></div>`;
     }
 
+    /* ------------------------------------------------------- the wall board */
+
+    async function drawBoard() {
+      const wrap = $('#board-state');
+      if (!wrap) return;
+      let b;
+      try { b = await api('/board'); } catch (err) {
+        if (err.message === 'unauthenticated') return;
+        wrap.innerHTML = `<p class="empty">Could not load: ${esc(err.message)}</p>`; return;
+      }
+      wrap.innerHTML = b.url
+        ? `<label class="field"><span>Board link</span>
+             <div class="row" style="margin:0">
+               <input class="input" id="board-url" readonly value="${esc(b.url)}" style="flex:1;min-width:14rem">
+               <button class="btn subtle" id="board-copy" type="button">Copy</button>
+               <a class="btn ghost" href="${esc(b.url)}" target="_blank" rel="noopener">Open ↗</a>
+             </div></label>
+           <div class="row"><button class="btn ghost" id="board-new" type="button">New link</button>
+             <button class="btn ghost" id="board-off" type="button">Turn off</button></div>`
+        : `<div class="row"><button class="btn" id="board-on" type="button">Turn the board on</button>
+             <span class="muted">This creates the link.</span></div>`;
+
+      const on = $('#board-on'); const fresh = $('#board-new'); const off = $('#board-off');
+      const set = async (enabled, btn, note) => {
+        btn.disabled = true;
+        try { await api('/board/key', { method: 'POST', body: { enabled } }); toast(note); await drawBoard(); }
+        catch { btn.disabled = false; toast('Could not change the board'); }
+      };
+      if (on) on.addEventListener('click', () => set(true, on, 'Board is on'));
+      if (fresh) fresh.addEventListener('click', () => {
+        if (confirm('Replace the link? Anyone using the old one will stop seeing the board.')) set(true, fresh, 'New link created');
+      });
+      if (off) off.addEventListener('click', () => {
+        if (confirm('Turn the board off? Every copy of the link stops working.')) set(false, off, 'Board turned off');
+      });
+      const copy = $('#board-copy');
+      if (copy) copy.addEventListener('click', async () => {
+        const text = $('#board-url').value;
+        try { await navigator.clipboard.writeText(text); }
+        catch { $('#board-url').select(); document.execCommand('copy'); }
+        copy.textContent = 'Copied';
+        setTimeout(() => { copy.textContent = 'Copy'; }, 1500);
+      });
+    }
+
     // Both lists are fetched the first time their panel is opened, so the
     // settings page still loads in one request for everyone who never looks.
     onSectionOpen('set-deleted', drawArchive);
     onSectionOpen('set-activity', drawAudit);
+    onSectionOpen('set-board', drawBoard);
 
     /*
      * Custom wording, one visitor type at a time. Held here and sent whole on
@@ -2966,9 +3254,81 @@
       flowState[type] = [...new Set([...configured.filter((k) => FLOW_LABELS[k]), ...Object.keys(FLOW_LABELS)])];
     });
 
+    /**
+     * The flow as a strip you can rearrange by hand.
+     *
+     * Dragging is the quick way; the arrows on each step are the one that
+     * works on the iPad this is often opened on, where HTML drag-and-drop
+     * does nothing at all.
+     */
+    function drawStrip() {
+      const strip = $('#flow-strip');
+      if (!strip) return;
+      const type = $('#flow-type').value;
+      const steps = flowState[type];
+      strip.innerHTML = `<div class="flow-end">Start</div>
+        ${steps.map((step, i) => `<div class="flow-arrow">→</div>
+          <div class="flow-chip" draggable="true" data-i="${i}">
+            <span class="flow-n">${i + 1}</span>
+            <span class="flow-label">${FLOW_LABELS[step]}</span>
+            <span class="flow-moves">
+              <button class="btn ghost" type="button" data-sleft="${i}" ${i === 0 ? 'disabled' : ''}
+                title="Move earlier">◀</button>
+              <button class="btn ghost" type="button" data-sright="${i}" ${i === steps.length - 1 ? 'disabled' : ''}
+                title="Move later">▶</button>
+            </span>
+          </div>`).join('')}
+        <div class="flow-arrow">→</div><div class="flow-end">Done</div>`;
+
+      const swap = (from, to) => {
+        if (to < 0 || to >= steps.length) return;
+        [steps[from], steps[to]] = [steps[to], steps[from]];
+        drawFlow();
+      };
+      $$('[data-sleft]', strip).forEach((b) => b.addEventListener('click', () => swap(Number(b.dataset.sleft), Number(b.dataset.sleft) - 1)));
+      $$('[data-sright]', strip).forEach((b) => b.addEventListener('click', () => swap(Number(b.dataset.sright), Number(b.dataset.sright) + 1)));
+
+      /*
+       * The dragged chip is moved in the DOM as the pointer passes each other
+       * chip, and the new order is read back only when the drag ends. Redrawing
+       * mid-drag would destroy the element being dragged and cancel it.
+       */
+      let dragging = null;
+      $$('.flow-chip', strip).forEach((chip) => {
+        chip.addEventListener('dragstart', () => { dragging = chip; chip.classList.add('dragging'); });
+        chip.addEventListener('dragend', () => {
+          chip.classList.remove('dragging');
+          dragging = null;
+          const order = $$('.flow-chip', strip).map((c) => steps[Number(c.dataset.i)]);
+          flowState[type] = order;
+          drawFlow();
+        });
+      });
+      // The chips are replaced on every redraw but the strip is not, so this
+      // goes on once — otherwise a listener is added for every redraw.
+      strip.ondragover = (e) => {
+        if (!dragging) return;
+        e.preventDefault();
+        /*
+         * The first step that reads as coming after the pointer. Comparing x
+         * alone was wrong the moment the strip wrapped onto a second row —
+         * every chip on the row below counted as being to the left.
+         */
+        const after = $$('.flow-chip:not(.dragging)', strip).find((el) => {
+          const box = el.getBoundingClientRect();
+          return e.clientY < box.top
+            || (e.clientY <= box.bottom && e.clientX < box.left + box.width / 2);
+        });
+        if (after) strip.insertBefore(dragging, after);
+        else strip.append(dragging);
+      };
+    }
+
     function drawFlow() {
+      drawStrip();
       detailTypes().forEach(([type]) => {
         const list = $(`[data-flowtype="${type}"] .flow-list`);
+        if (!list) return;
         list.innerHTML = flowState[type].map((step, i) => `<li>
           <span>${FLOW_LABELS[step]}</span>
           <span class="flow-moves">
@@ -2990,6 +3350,7 @@
       }));
     }
     drawFlow();
+    $('#flow-type').addEventListener('change', drawStrip);
     root.dataset.flowReady = '1';
     VIEWS.settings.collectFlow = () => flowState;
 
@@ -3022,6 +3383,7 @@
       patch.kiosk = patch.kiosk || {};
       if (VIEWS.settings.collectFlow) patch.flow = VIEWS.settings.collectFlow();
       if (VIEWS.settings.collectWording) patch.wording = VIEWS.settings.collectWording();
+      if (VIEWS.settings.collectCard) setPath(patch, 'notify.card', VIEWS.settings.collectCard());
       SETTINGS = await api('/settings', { method: 'PUT', body: patch });
       if (SETTINGS.warnings && SETTINGS.warnings.length) toast(SETTINGS.warnings.join(' '), 7000);
       else toast('Settings saved');
@@ -3158,6 +3520,7 @@
           : input.value;
         setPath(patch, input.dataset.set, value);
       });
+      if (VIEWS.settings.collectCard) setPath(patch, 'notify.card', VIEWS.settings.collectCard());
       SETTINGS = await api('/settings', { method: 'PUT', body: patch });
     }
 
@@ -3179,9 +3542,16 @@
       try {
         // Test what is on screen, not whatever was saved last.
         await saveNotifySettings();
-        const r = await api('/settings/test-webhook', { method: 'POST', body: { url } });
+        const r = await api('/settings/test-webhook', {
+          method: 'POST', body: { url, card: VIEWS.settings.collectCard ? VIEWS.settings.collectCard() : undefined } });
+        const photoNote = !r.photo_included
+          ? ' No photo went with it — either the photo is switched off, or nobody on file has one yet.'
+          : !r.public_url_reachable
+            ? ' The photo will not load: Teams cannot reach the address it was told to fetch it from.'
+            : ' The photo went with it — check it rendered.';
         box.innerHTML = r.ok
-          ? '<div class="notice"><b>Posted.</b> It should be in the Teams channel now — from <b>Flow bot</b>, which is normal.</div>'
+          ? `<div class="notice"><b>Posted.</b> It should be in the Teams channel now — from <b>Flow bot</b>, which is
+             normal.${esc(photoNote)}</div>`
           : `<div class="notice error"><b>Teams refused it.</b> ${esc(r.detail || '')}</div>`;
       } catch (err) {
         box.innerHTML = `<div class="notice error"><b>Could not post.</b> ${esc(err.message || 'The server did not answer.')}</div>`;

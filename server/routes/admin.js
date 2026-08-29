@@ -13,6 +13,7 @@ const localtime = require('../localtime');
 const deviceSlugs = require('../devices');
 const ratelimit = require('../ratelimit');
 const archive = require('../archive');
+const cards = require('../notify-card');
 
 const router = express.Router();
 const clean = (v) => (typeof v === 'string' ? v.trim() : v);
@@ -1109,14 +1110,100 @@ router.post('/settings/test-sms', async (req, res) => {
   res.json({ ok, to: notify.toE164(req.body.to) });
 });
 
+/**
+ * The card as it would arrive, built by the very same code that sends one.
+ *
+ * The dashboard posts the settings currently on screen — saved or not — so the
+ * preview follows an edit as it is made, and there is no second copy of the
+ * layout rules in the browser to drift out of step with these.
+ */
+router.get('/notify/preview', (req, res) => {
+  const n = settings.getSection('notify');
+  const card = req.query.card ? safeJson(req.query.card, n.card) : n.card;
+  res.json(buildPreview(card));
+});
+
+router.post('/notify/preview', (req, res) => {
+  const n = settings.getSection('notify');
+  res.json(buildPreview((req.body && req.body.card) || n.card));
+});
+
+function safeJson(text, fallback) {
+  try { return JSON.parse(text); } catch { return fallback; }
+}
+
+/**
+ * A real visit if there is one, so the preview shows real wording and a real
+ * face; an invented one on a site that has not opened yet.
+ */
+function sampleVisit() {
+  const real = get(`SELECT v.id FROM visits v WHERE v.photo_path IS NOT NULL ORDER BY v.signed_in_at DESC LIMIT 1`)
+    || get('SELECT id FROM visits ORDER BY signed_in_at DESC LIMIT 1');
+  if (real) return { visit: notify.visitDetail(real.id), real: true };
+  return {
+    real: false,
+    visit: {
+      id: 0, full_name: 'Ivan Ruiz', company: 'Ruiz Groundworks', phone: '(415) 268-0142',
+      email: 'ivan@example.com', visit_type: 'contractor', purpose: 'Foundation pour',
+      vehicle_reg: 'TX 8842B', badge_no: 'V260829-014', host_name: 'Hank Alfaro',
+      site_name: 'Main site', project_name: 'Lakeview Phase 2', location_name: 'North gate',
+      device_name: 'Front gate iPad', signed_in_at: new Date().toISOString(), signed_out_at: null,
+      id_name: 'IVAN R RUIZ', id_number: 'D1234567', id_state: 'TX', photo_path: null
+    }
+  };
+}
+
+function buildPreview(card) {
+  const { visit, real } = sampleVisit();
+  const model = cards.buildModel(visit, card, {
+    org: settings.getSection('org'),
+    fmtTime: notify.fmtTime,
+    baseUrl: notify.baseUrl(),
+    photoUrl: notify.cardPhotoUrl(visit),
+    fallbackTitle: `${visit.full_name} has arrived`
+  });
+  return {
+    model,
+    teams: cards.teamsCard(model),
+    sample: !real,
+    fields: cards.FIELDS.map(({ id, label, sensitive }) => ({ id, label, sensitive: !!sensitive })),
+    // A photo cannot reach Teams from an address only this machine can resolve.
+    public_url: notify.baseUrl(),
+    public_url_reachable: /^https?:\/\/(?!localhost|127\.|0\.0\.0\.0)/i.test(notify.baseUrl())
+  };
+}
+
 router.post('/settings/test-webhook', async (req, res) => {
   if (!clean(req.body.url)) return res.json({ ok: false, detail: 'Enter a webhook URL first.' });
-  const result = await notify.sendWebhook({
-    url: req.body.url,
-    title: 'Smart Lobby test notification',
-    lines: ['If you can see this, your webhook is configured correctly.']
-  });
-  res.json(result);
+  // The test sends the designed card, not a plain line, so what comes back is
+  // proof the layout and the photo link both survive the trip.
+  const preview = buildPreview((req.body && req.body.card) || settings.getSection('notify').card);
+  const model = { ...preview.model, title: `${preview.model.title} — test` };
+  const result = await notify.sendWebhook({ url: req.body.url, model });
+  res.json({ ...result, photo_included: !!model.photoUrl, public_url_reachable: preview.public_url_reachable });
+});
+
+/* ----------------------------------------------------------- wall board */
+
+const boardRoutes = require('./board');
+
+router.get('/board', (req, res) => {
+  const b = settings.getSection('board');
+  res.json({ ...b, url: b.enabled && b.key ? `${notify.baseUrl()}/board/${b.key}` : null });
+});
+
+/**
+ * Switching the board on mints a key; switching it off clears it, which is what
+ * makes the old link stop working rather than merely stop being advertised.
+ * "New link" does both at once for a link that has been shared too widely.
+ */
+router.post('/board/key', (req, res) => {
+  const enabled = req.body && req.body.enabled !== false;
+  const key = enabled ? boardRoutes.newKey() : '';
+  settings.setSection('board', { ...settings.getSection('board'), enabled, key });
+  audit(req, enabled ? 'board_key_issued' : 'board_disabled', 'board', null);
+  const b = settings.getSection('board');
+  res.json({ ...b, url: b.enabled && b.key ? `${notify.baseUrl()}/board/${b.key}` : null });
 });
 
 /* ----------------------------------------------------------------- users */

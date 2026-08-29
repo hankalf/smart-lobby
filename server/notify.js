@@ -1,8 +1,25 @@
 'use strict';
 const { run, get, nowISO } = require('./db');
 const settings = require('./settings');
+const cards = require('./notify-card');
+const photolink = require('./photolink');
 
-const baseUrl = () => (process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
+/*
+ * The address Teams will use to fetch a photo. PUBLIC_URL is the deployment's
+ * own answer; the settings field exists so a site can fix this without a
+ * redeploy, which matters because a wrong value here shows up only as a card
+ * with a missing picture.
+ */
+const baseUrl = () => {
+  const configured = settings.getSection('notify').public_url || process.env.PUBLIC_URL || '';
+  return (configured || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
+};
+
+/** A photo link Microsoft can actually follow — see server/photolink.js. */
+const cardPhotoUrl = (visit) =>
+  (visit && visit.photo_path && visit.id)
+    ? `${baseUrl()}/notify/photo/${visit.id}?t=${photolink.sign(visit.id)}`
+    : null;
 
 function log(entry) {
   const r = run('INSERT INTO notifications (visit_id, delivery_id, channel, target, subject, status, error, created_at) VALUES (?,?,?,?,?,?,?,?)',
@@ -45,47 +62,19 @@ function webhookTargets(ownUrl) {
 }
 
 /** Post to every destination for this recipient, and report on each. */
-function sendWebhooks({ ownUrl, title, lines, photoUrl, visit_id, delivery_id }) {
+function sendWebhooks({ ownUrl, model, visit_id, delivery_id }) {
   return Promise.all(webhookTargets(ownUrl).map((url) =>
-    sendWebhook({ url, title, lines, photoUrl, visit_id, delivery_id })));
+    sendWebhook({ url, model, visit_id, delivery_id })));
 }
 
-async function sendWebhook({ url, title, lines, photoUrl, visit_id, delivery_id }) {
+async function sendWebhook({ url, model, visit_id, delivery_id }) {
   const n = settings.getSection('notify');
   const target = url;
   if (!target) return { ok: false, status: 0, detail: 'No webhook URL.' };
   const format = detectWebhookFormat(target) || n.webhook_format;
-  const body = format === 'teams'
-    // Teams Workflows (which replaced Office 365 connectors) rejects a bare
-    // MessageCard with 400. An Adaptive Card in this envelope works on both.
-    ? {
-        type: 'message',
-        attachments: [{
-          contentType: 'application/vnd.microsoft.card.adaptive',
-          contentUrl: null,
-          content: {
-            $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
-            type: 'AdaptiveCard',
-            version: '1.4',
-            body: [
-              { type: 'TextBlock', text: title, weight: 'Bolder', size: 'Medium', wrap: true },
-              ...(photoUrl ? [{ type: 'Image', url: photoUrl, size: 'Medium', style: 'Person' }] : []),
-              { type: 'TextBlock', text: lines.join('\n\n'), wrap: true, spacing: 'Small' }
-            ]
-          }
-        }]
-      }
-    : format === 'google_chat'
-    ? { text: `*${title}*\n${lines.join('\n')}` }
-    : format === 'generic'
-    ? { event: title, details: lines, photo_url: photoUrl || null, timestamp: new Date().toISOString() }
-    : {
-        text: `*${title}*\n${lines.join('\n')}`,
-        blocks: [
-          { type: 'section', text: { type: 'mrkdwn', text: `*${title}*\n${lines.join('\n')}` },
-            ...(photoUrl ? { accessory: { type: 'image', image_url: photoUrl, alt_text: 'visitor' } } : {}) }
-        ]
-      };
+  const title = model.title;
+  const body = cards.render(format, model);
+
   // Recorded before the attempt and settled after, so the dashboard shows a
   // post that is in flight rather than nothing until it is over.
   const logId = logStart({ visit_id, delivery_id, channel: 'webhook', target, subject: title });
@@ -189,44 +178,42 @@ const fmtTime = (iso) => {
 
 function visitDetail(visitId) {
   return get(`SELECT v.*, p.full_name, p.company, p.phone, p.email, h.name AS host_name, h.email AS host_email,
-                     h.phone AS host_phone, h.webhook_url AS host_webhook, s.name AS site_name
+                     h.phone AS host_phone, h.webhook_url AS host_webhook, s.name AS site_name,
+                     j.name AS project_name, l.name AS location_name, d.name AS device_name
               FROM visits v
               JOIN visitors p ON p.id = v.visitor_id
               LEFT JOIN hosts h ON h.id = v.host_id
               LEFT JOIN sites s ON s.id = v.site_id
+              LEFT JOIN projects j ON j.id = v.project_id
+              LEFT JOIN locations l ON l.id = v.location_id
+              LEFT JOIN devices d ON d.id = v.device_id
               WHERE v.id = ?`, visitId);
 }
+
+/** Everything the card builder needs that is not on the visit row itself. */
+const cardContext = (extra) => ({
+  org: settings.getSection('org'),
+  fmtTime,
+  baseUrl: baseUrl(),
+  ...extra
+});
 
 async function notifyArrival(visitId) {
   const n = settings.getSection('notify');
   if (!n.on_signin) return;
   const v = visitDetail(visitId);
   if (!v) return;
-  const org = settings.getSection('org');
-  const photoUrl = v.photo_path ? `${baseUrl()}${v.photo_path}` : null;
-  const lines = [
-    `Visitor: ${v.full_name}${v.company ? ` (${v.company})` : ''}`,
-    `Type: ${v.visit_type}`,
-    v.purpose ? `Purpose: ${v.purpose}` : null,
-    v.vehicle_reg ? `Vehicle: ${v.vehicle_reg}` : null,
-    `Signed in: ${fmtTime(v.signed_in_at)}`,
-    v.badge_no ? `Badge: ${v.badge_no}` : null,
-    v.site_name ? `Site: ${v.site_name}` : null
-  ].filter(Boolean);
 
-  const title = `${v.full_name} has arrived to see ${v.host_name || 'reception'}`;
-  const html = `
-    <div style="font-family:system-ui,Segoe UI,Arial,sans-serif">
-      <h2 style="color:${org.primary_color}">${title}</h2>
-      ${photoUrl ? `<img src="${photoUrl}" alt="" style="max-width:220px;border-radius:12px">` : ''}
-      <ul>${lines.map((l) => `<li>${l}</li>`).join('')}</ul>
-      <p style="color:#666">Sent by ${org.name} Smart Lobby</p>
-    </div>`;
+  const model = cards.buildModel(v, n.card, cardContext({
+    photoUrl: cardPhotoUrl(v),
+    fallbackTitle: `${v.full_name} has arrived`
+  }));
 
   await Promise.all([
-    sendWebhooks({ ownUrl: v.host_webhook, title, lines, photoUrl, visit_id: visitId }),
+    sendWebhooks({ ownUrl: v.host_webhook, model, visit_id: visitId }),
     n.sms_on_signin
-      ? sendSms({ to: v.host_phone, message: `${title}. ${v.company ? v.company + '. ' : ''}Reception.`, visit_id: visitId })
+      ? sendSms({ to: v.host_phone,
+        message: `${model.title}. ${v.company ? v.company + '. ' : ''}Reception.`, visit_id: visitId })
       : Promise.resolve(false)
   ]);
 }
@@ -236,11 +223,14 @@ async function notifyDeparture(visitId) {
   if (!n.on_signout) return;
   const v = visitDetail(visitId);
   if (!v) return;
-  const title = `${v.full_name} has signed out`;
-  const lines = [`Signed out: ${fmtTime(v.signed_out_at)}`, v.host_name ? `Staff member: ${v.host_name}` : null].filter(Boolean);
-  await Promise.all([
-    sendWebhooks({ ownUrl: v.host_webhook, title, lines, visit_id: visitId })
-  ]);
+  const model = cards.plainModel({
+    title: `${v.full_name} has signed out`,
+    lines: [`Signed out: ${fmtTime(v.signed_out_at)}`, v.host_name ? `Staff member: ${v.host_name}` : null].filter(Boolean),
+    photoUrl: cardPhotoUrl(v),
+    org: settings.getSection('org'),
+    card: n.card
+  });
+  await sendWebhooks({ ownUrl: v.host_webhook, model, visit_id: visitId });
 }
 
 async function notifyDelivery(deliveryId) {
@@ -250,22 +240,24 @@ async function notifyDelivery(deliveryId) {
                  FROM deliveries d LEFT JOIN hosts h ON h.id = d.recipient_host_id WHERE d.id = ?`, deliveryId);
   if (!d) return;
   const who = d.host_name || d.recipient_text || 'reception';
-  const title = `Delivery waiting for ${who}`;
-  const photoUrl = d.photo_path ? `${baseUrl()}${d.photo_path}` : null;
-  const lines = [
-    `Courier: ${d.courier_name || 'unknown'}${d.courier_company ? ` (${d.courier_company})` : ''}`,
-    `Parcels: ${d.parcel_count}`,
-    d.tracking ? `Tracking: ${d.tracking}` : null,
-    `Received: ${fmtTime(d.received_at)}`,
-    'Collect from reception.'
-  ].filter(Boolean);
-  const html = `<div style="font-family:system-ui,Arial,sans-serif"><h2>${title}</h2>
-    ${photoUrl ? `<img src="${photoUrl}" style="max-width:260px;border-radius:12px">` : ''}
-    <ul>${lines.map((l) => `<li>${l}</li>`).join('')}</ul></div>`;
+  const model = cards.plainModel({
+    title: `Delivery waiting for ${who}`,
+    lines: [
+      `Courier: ${d.courier_name || 'unknown'}${d.courier_company ? ` (${d.courier_company})` : ''}`,
+      `Parcels: ${d.parcel_count}`,
+      d.tracking ? `Tracking: ${d.tracking}` : null,
+      `Received: ${fmtTime(d.received_at)}`,
+      'Collect from reception.'
+    ].filter(Boolean),
+    // A parcel photo is a box, not a person, so it is never behind the toggle.
+    photoUrl: null,
+    org: settings.getSection('org'),
+    card: n.card
+  });
   await Promise.all([
-    sendWebhooks({ ownUrl: d.host_webhook, title, lines, photoUrl, delivery_id: deliveryId }),
+    sendWebhooks({ ownUrl: d.host_webhook, model, delivery_id: deliveryId }),
     n.sms_on_delivery
-      ? sendSms({ to: d.host_phone, message: `${title}. ${d.parcel_count} parcel(s) at reception.`, delivery_id: deliveryId })
+      ? sendSms({ to: d.host_phone, message: `${model.title}. ${d.parcel_count} parcel(s) at reception.`, delivery_id: deliveryId })
       : Promise.resolve(false)
   ]);
 }
@@ -276,4 +268,4 @@ async function sendTestSms(to) {
 }
 
 module.exports = { notifyArrival, notifyDeparture, notifyDelivery, sendTestSms, sendWebhook, sendWebhooks,
-  webhookTargets, sendSms, toE164, baseUrl };
+  webhookTargets, sendSms, toE164, baseUrl, cardPhotoUrl, cardContext, visitDetail, fmtTime };

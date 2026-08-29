@@ -146,6 +146,14 @@ const DEFAULTS = {
     global_webhook_url: '',
     webhook_channel_always: true,
     webhook_format: 'teams',
+    /*
+     * The address Teams uses to fetch a visitor's photo. Normally PUBLIC_URL
+     * covers it; this is here so the address can be corrected from the
+     * dashboard, since getting it wrong shows up only as a missing picture.
+     */
+    public_url: '',
+    // What an arrival looks like when it lands — see server/notify-card.js.
+    card: { ...require('./notify-card').DEFAULT_CARD },
     sms_enabled: false,
     sms_provider: 'twilio',
     twilio_account_sid: '',
@@ -153,6 +161,23 @@ const DEFAULTS = {
     sms_from: '',
     sms_on_signin: true,
     sms_on_delivery: false
+  },
+  /*
+   * The wall board: who is on site, on a page somebody can leave open.
+   *
+   * It shows the whole roster, so it is not simply left open to the internet —
+   * it lives behind an unguessable key in its own URL, the way the photo links
+   * do. Clearing the key turns the board off for everyone holding the old
+   * address, which is what makes it revocable.
+   */
+  board: {
+    enabled: false,
+    key: '',
+    recent_minutes: 20,
+    show_photos: true,
+    show_company: true,
+    show_host: true,
+    title: ''
   },
   privacy: {
     retain_visits_days: 730,

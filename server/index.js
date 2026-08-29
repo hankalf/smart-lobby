@@ -69,6 +69,7 @@ app.use((req, res, next) => {
 
 app.use('/api/kiosk', require('./routes/kiosk'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/board', require('./routes/board').router);
 
 const QRCode = require('qrcode');
 app.get('/api/qr', async (req, res) => {
@@ -94,6 +95,30 @@ app.get('/api/health', (req, res) => {
 });
 
 /* ---------------------------------------------------------------- media */
+
+/*
+ * The one photo path with no session behind it.
+ *
+ * Teams renders a card by having its own servers fetch the image, so the
+ * picture in every arrival card has to be reachable without a login — which is
+ * why it is signed instead. The token covers this visit id and an expiry, and
+ * nothing here trusts the path: a bad or stale signature is refused before any
+ * lookup happens. See server/photolink.js for the reasoning.
+ */
+const photolink = require('./photolink');
+const photoLinkLimit = require('./ratelimit').limit({
+  windowMs: 60_000, max: 600, name: 'notify-photo', message: 'Too many requests.'
+});
+app.get('/notify/photo/:id', photoLinkLimit, (req, res) => {
+  const id = Number(req.params.id);
+  if (!id || !photolink.valid(id, req.query.t)) return res.status(403).end();
+  const visit = get('SELECT photo_path FROM visits WHERE id = ?', id);
+  const abs = visit && visit.photo_path && files.absoluteFor(visit.photo_path);
+  // The photo may have been cleared by retention long before the card scrolls by.
+  if (!abs) return res.status(404).end();
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.sendFile(abs);
+});
 
 app.use('/media/public', express.static(files.PUBLIC_DIR, { maxAge: '7d' }));
 app.use('/media/private', (req, res, next) => {
@@ -162,6 +187,18 @@ app.get('/kiosk/:slug/manifest.webmanifest', (req, res) => {
  */
 app.get('/kiosk/:slug', (req, res) => {
   res.set('Cache-Control', 'no-cache').sendFile(path.join(PUBLIC_WEB, 'kiosk', 'index.html'));
+});
+
+/*
+ * The wall board. The key in the address is what lets the page load at all —
+ * the page itself then reads the roster from /api/board/<key>/data, which
+ * checks it again. Serving the shell to a wrong key would only put an empty
+ * page on screen, so it is refused here as well.
+ */
+app.get('/board/:key', (req, res) => {
+  const board = require('./routes/board');
+  if (!board.keyMatches(req.params.key) && !auth.currentUser(req)) return res.status(404).send('Not found');
+  res.set('Cache-Control', 'no-cache').sendFile(path.join(PUBLIC_WEB, 'board', 'index.html'));
 });
 
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars

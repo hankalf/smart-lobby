@@ -34,33 +34,39 @@
       <button data-view="visitors">Visitor registry</button>
       <button data-view="drivers">Drivers</button>
       <button data-view="deliveries">Deliveries</button>
-      <button data-view="induction">Induction decks</button>
-      <button data-view="documents">Documents</button>
-      <button data-view="vtypes">Visitor types</button>
-      <button data-view="badges">Badges</button>
-      <button data-view="printers">Printers</button>
       <button data-view="staff">Staff</button>
-      <button data-view="access">Access &amp; doors</button>
-      <button data-view="locations">Locations</button>
       <button data-view="projects">Projects</button>
-      <button data-view="devices">Devices</button>
-      <button data-view="reports">Reports</button>
-      <button data-view="settings">Settings</button>
+
       <!--
-        Settings is one long page, so its sections are listed here as well.
-        Picking one opens that section and jumps straight to it, which beats
-        scrolling past ten panels to reach data retention.
+        Two parents with children. A parent that has no page of its own opens
+        its first child; Settings keeps its own page and lists its panels.
+        Children are either a whole view (data-view) or one panel on the
+        settings page to open and jump to (data-section).
       -->
-      <div class="subnav" id="subnav" hidden>
+      <button data-view="signin" data-group="signin">Sign-in setup</button>
+      <div class="subnav" data-for="signin" hidden>
+        <button data-view="induction">Induction decks</button>
+        <button data-view="documents">Documents</button>
+        <button data-view="vtypes">Visitor types</button>
+        <button data-view="badges">Badges</button>
+      </div>
+
+      <button data-view="reports">Reports</button>
+      <button data-view="settings" data-group="settings">Settings</button>
+      <div class="subnav" data-for="settings" hidden>
         <button data-section="branding">Branding</button>
-        <button data-section="details">Your details form</button>
-        <button data-section="order">The order things are asked</button>
+        <button data-section="details">Visitor form</button>
         <button data-section="flow">Kiosk sign-in flow</button>
         <button data-section="badges">ID badge printing</button>
         <button data-section="induction">Induction</button>
         <button data-section="deliveries">Deliveries</button>
         <button data-section="access">Access control</button>
         <button data-section="notifications">Notifications</button>
+        <button data-view="devices">Devices</button>
+        <button data-view="printers">Printers</button>
+        <button data-view="access">Access &amp; doors</button>
+        <button data-view="locations">Locations</button>
+        <button data-section="board">Live on-site board</button>
         <button data-section="retention">Data retention</button>
         <button data-section="deleted">Deleted records</button>
         <button data-section="users">Admin users</button>

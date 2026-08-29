@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>On site now</title>
+<link rel="stylesheet" href="/shared/theme.css">
+<link rel="stylesheet" href="board.css">
+</head>
+<body>
+
+<header class="bar">
+  <div class="bar-left">
+    <img id="logo" class="logo" alt="" hidden>
+    <div>
+      <h1 id="title">On site now</h1>
+      <div class="muted" id="subtitle">Loading…</div>
+    </div>
+  </div>
+  <div class="bar-right">
+    <div class="count"><span id="count">–</span><small>on site</small></div>
+    <div class="clock" id="clock"></div>
+  </div>
+</header>
+
+<main>
+  <section id="arrivals-wrap" hidden>
+    <h2 class="group">Just arrived</h2>
+    <div class="grid" id="arrivals"></div>
+  </section>
+
+  <section>
+    <h2 class="group" id="onsite-heading">On site</h2>
+    <div class="grid" id="onsite"></div>
+  </section>
+
+  <section id="left-wrap" hidden>
+    <h2 class="group">Just signed out</h2>
+    <div class="grid dim" id="left"></div>
+  </section>
+</main>
+
+<div id="offline" class="offline hidden">Not connected — showing the last update</div>
+
+<script src="board.js"></script>
+</body>
+</html>

@@ -69,12 +69,54 @@ h1.page { font-size: 1.6rem; margin: 0 0 .25rem; color: var(--brand-dark); }
 /* Whatever somebody typed in "company", the Restore button stays on the row. */
 .arch-what { max-width: 30rem; overflow-wrap: anywhere; }
 
-/* The sub-sections of Settings, listed under it in the side menu. */
+/* ------------------------------------------- the Teams card, as designed */
+.card-design { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 22rem); gap: 1.5rem; align-items: start; }
+.card-design h4 { margin: 1.4rem 0 .5rem; font-size: .9rem; color: var(--ink-soft);
+  text-transform: uppercase; letter-spacing: .05em; }
+.card-design code { background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 0 .25rem; font-size: .85em; }
+.card-preview-col { position: sticky; top: 1rem; }
+@media (max-width: 1100px) { .card-design { grid-template-columns: 1fr; } .card-preview-col { position: static; } }
+
+/* Close enough to how Teams draws an Adaptive Card to design against. */
+.teams-preview { background: #f0f0f0; padding: .9rem; border-radius: 10px; }
+.tp-card { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.18);
+  font-family: "Segoe UI", system-ui, sans-serif; font-size: .82rem; color: #242424; }
+.tp-band { padding: .85rem .9rem; }
+.tp-band-accent { background: #eff6fc; }
+.tp-band-emphasis { background: #f5f5f5; }
+.tp-band-good { background: #f1faf1; }
+.tp-band-warning { background: #fff9f5; }
+.tp-band-attention { background: #fdf3f4; }
+.tp-band-none { background: #fff; }
+.tp-row { display: flex; gap: .75rem; align-items: flex-start; }
+.tp-main { min-width: 0; flex: 1; }
+.tp-photo { width: 58px; height: 58px; object-fit: cover; border-radius: 4px; flex: 0 0 auto; }
+.tp-photo.round { border-radius: 50%; }
+.tp-band > .tp-photo { margin-bottom: .6rem; }
+.tp-title { font-weight: 600; font-size: .95rem; line-height: 1.3; overflow-wrap: anywhere; }
+.tp-title.tp-accent { color: #0f6cbd; }
+.tp-title.tp-good { color: #0e700e; }
+.tp-title.tp-warning { color: #bc4b09; }
+.tp-title.tp-attention { color: #c4314b; }
+.tp-sub { color: #616161; margin-top: .1rem; overflow-wrap: anywhere; }
+.tp-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .2rem .6rem; margin-top: .6rem; }
+.tp-fact-l { font-weight: 600; white-space: nowrap; }
+.tp-fact-v { overflow-wrap: anywhere; }
+.tp-lines { margin-top: .6rem; display: grid; gap: .25rem; overflow-wrap: anywhere; }
+.tp-footer { padding: .5rem .9rem; color: #616161; font-size: .76rem; }
+.tp-actions { padding: 0 .9rem .8rem; }
+.tp-btn { display: inline-block; background: #5b5fc7; color: #fff; border-radius: 4px; padding: .35rem .8rem; font-size: .8rem; }
+
+/* What sits under a heading in the side menu, shown while that tab is open. */
 .subnav { display: flex; flex-direction: column; gap: .05rem; margin: .15rem 0 .35rem .55rem;
   padding-left: .5rem; border-left: 1px solid rgba(255,255,255,.15); }
 #nav .subnav button { font-size: .84rem; padding: .35rem .6rem; color: #a8c2b7; }
 #nav .subnav button.active { background: rgba(255,255,255,.12); color: #fff; font-weight: 600; }
-@media (max-width: 860px) { .subnav { display: none; } }
+/* Narrow screens lay the menu out in rows; the children still have to be reachable. */
+@media (max-width: 860px) {
+  .subnav { flex-direction: row; flex-wrap: wrap; width: 100%; margin: 0; padding: .25rem 0 0;
+    border-left: 0; border-top: 1px solid rgba(255,255,255,.15); }
+}
 
 /* ---------------------------------------------------------------- tables */
 .table-wrap { overflow-x: auto; }
@@ -185,6 +227,40 @@ td .btn { padding: .35rem .7rem; font-size: .82rem; }
 .section-row.off { background: var(--bg); }
 .section-row.off span { color: var(--ink-soft); }
 .section-row .check { padding: 0; }
+
+/* The check-in flow, laid out the way it actually runs. */
+/* One line, scrolled if it has to be: a flow that wraps stops reading as one. */
+.flow-strip {
+  display: flex; align-items: stretch; flex-wrap: nowrap; gap: .4rem; overflow-x: auto;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--bg);
+  padding: .85rem; margin: .5rem 0 .4rem;
+}
+.flow-strip > * { flex: 0 0 auto; }
+.flow-end {
+  display: flex; align-items: center; padding: .4rem .7rem; font-size: .8rem;
+  text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft);
+}
+.flow-arrow { display: flex; align-items: center; color: var(--ink-soft); }
+.flow-chip {
+  display: flex; align-items: center; gap: .5rem; cursor: grab;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: .45rem .5rem .45rem .55rem;
+}
+.flow-chip:active { cursor: grabbing; }
+.flow-chip.dragging { opacity: .45; border-style: dashed; }
+.flow-n {
+  width: 20px; height: 20px; border-radius: 50%; background: var(--brand); color: #fff;
+  display: grid; place-items: center; font-size: .72rem; font-weight: 700; flex: 0 0 auto;
+}
+.flow-label { font-size: .92rem; }
+.flow-chip .flow-moves .btn { padding: .1rem .35rem; line-height: 1; font-size: .75rem; }
+
+/* A block inside a panel that folds on its own — wording, all-types view. */
+.sub-fold { margin-top: 1.25rem; }
+.sub-fold > summary { cursor: pointer; list-style: none; display: flex; align-items: baseline; gap: .6rem; }
+.sub-fold > summary::-webkit-details-marker { display: none; }
+.sub-fold > summary::before { content: '▶'; font-size: .7rem; color: var(--ink-soft); }
+.sub-fold[open] > summary::before { content: '▼'; }
+.sub-fold > summary h3 { display: inline; margin: 0; }
 
 .flow-col { border: 1px solid var(--line); border-radius: 12px; padding: 1rem; background: var(--bg); }
 .flow-list { margin: 0; padding-left: 1.3rem; }
