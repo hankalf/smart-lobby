@@ -49,6 +49,7 @@ const SUITES = [
   { name: 'archive', file: 'archive-test.js' },
   { name: 'card', file: 'card-test.js' },
   { name: 'badgeno', file: 'badgeno-test.js' },
+  { name: 'delivery', file: 'delivery-test.js' },
   { name: 'notifycards', file: 'notifycards-test.js', browser: true },
   { name: 'board', file: 'board-test.js' },
   { name: 'account', file: 'account-test.js' },

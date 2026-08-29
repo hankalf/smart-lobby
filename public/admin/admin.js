@@ -4819,11 +4819,6 @@
     }));
 
     fillTimezones(s.org.timezone);
-    drawBadgePreview();
-    $$('[data-set]').forEach((input) => input.addEventListener('input', () => {
-      if (input.dataset.set === 'badge.enabled') $('#badge-setup').classList.toggle('hidden', !input.checked);
-      if (input.dataset.set.startsWith('badge.')) drawBadgePreview();
-    }));
 
 
     $('#logo-file').addEventListener('change', async (e) => {

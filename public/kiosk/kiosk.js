@@ -209,6 +209,7 @@
     'The scanner could not load. Please type your name instead.': 'El escáner no pudo cargarse. Escriba su nombre, por favor.',
     'Hold your badge up to the camera, or type your name below.': 'Acerque su credencial a la cámara, o escriba su nombre abajo.',
     'That is not a badge from this building.': 'Esa no es una credencial de este edificio.',
+    'Please take a photo of the parcel.': 'Por favor, tome una foto del paquete.',
     'Please tell us who the delivery is for.': 'Indique para quién es la entrega, por favor.',
     'Could not log the delivery. Please see reception.': 'No se pudo registrar la entrega. Pase por recepción, por favor.',
     'Could not sign out — please see reception.': 'No se pudo registrar la salida — pase por recepción.',
@@ -2499,6 +2500,12 @@
     const cfg = state.cfg.deliveries;
     if (cfg.require_recipient && !$('#d-host-id').value && !$('#d-host-search').value.trim()) {
       err.textContent = t('Please tell us who the delivery is for.');
+      return show(err, true);
+    }
+    // Caught here so the courier is told before the request, and again on the
+    // server, which is what actually enforces it.
+    if (cfg.require_photo && !state.deliveryPhoto) {
+      err.textContent = t('Please take a photo of the parcel.');
       return show(err, true);
     }
     show(err, false);

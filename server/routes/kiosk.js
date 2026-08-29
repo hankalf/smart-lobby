@@ -657,12 +657,34 @@ router.post('/signout', writeLimit, async (req, res) => {
 
 /* ------------------------------------------------------------ deliveries */
 
+/**
+ * How many parcels, as a number that can be printed on a card.
+ *
+ * `Number(x) || 1` let a negative through, because -5 is truthy — so a
+ * delivery could be booked in as minus five parcels and say so on the Teams
+ * card and the deliveries page.
+ */
+function parcelCount(raw) {
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(n, 999);
+}
+
 router.post('/delivery', async (req, res) => {
   const cfg = settings.getSection('deliveries');
   if (!cfg.enabled) return res.status(403).json({ error: 'deliveries_disabled' });
   const b = req.body || {};
   if (cfg.require_recipient && !b.recipient_host_id && !clean(b.recipient_text)) {
     return res.status(400).json({ error: 'recipient_required' });
+  }
+  /*
+   * A photo of the parcel is the evidence when somebody says theirs never
+   * arrived. The setting has always defaulted to on and was never checked
+   * anywhere, so a delivery could be booked in without one and the site would
+   * only find out when it mattered.
+   */
+  if (cfg.require_photo && !String(b.photo || '').startsWith('data:image/')) {
+    return res.status(400).json({ error: 'photo_required', message: 'Please take a photo of the parcel.' });
   }
   const site = defaultSite();
   const photo = files.saveDataUrl(b.photo, 'private', 'parcels');
@@ -671,7 +693,7 @@ router.post('/delivery', async (req, res) => {
                  VALUES (?,?,?,?,?,?,?,?,?, 'awaiting', ?)`,
     site ? site.id : null, clean(b.courier_name) || null, clean(b.courier_company) || null,
     b.recipient_host_id ? Number(b.recipient_host_id) : null, clean(b.recipient_text) || null,
-    clean(b.tracking) || null, Number(b.parcel_count) || 1, photo, clean(b.notes) || null, nowISO());
+    clean(b.tracking) || null, parcelCount(b.parcel_count), photo, clean(b.notes) || null, nowISO());
   const id = Number(r.lastInsertRowid);
   if (cfg.notify_recipient) notify.notifyDelivery(id).catch(() => {});
   res.json({ ok: true, id });
