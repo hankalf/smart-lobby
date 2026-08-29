@@ -105,6 +105,42 @@ const signIn = async (email, password) =>
     ok(`a ${level} is refused everything outside it`, leaked.length === 0, leaked.join(', '));
   }
 
+  /* ---- every route the API declares, against every level ---- */
+
+  /*
+   * The hand-written lists above say what each level should reach. This sweeps
+   * everything the server actually declares, so a route nobody classified
+   * cannot quietly sit open — and so the enforcement and the policy are
+   * checked against each other rather than only against my memory.
+   */
+  const fs = require('fs');
+  const path = require('path');
+  const roleMap = require('../server/roles');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'server', 'routes', 'admin.js'), 'utf8');
+  const declared = [...new Set((source.match(/router\.get\('\/[^']*'/g) || [])
+    .map((m) => m.slice("router.get('".length, -1))
+    .filter((r) => !r.includes(':')))];
+  ok('the sweep found the routes to probe', declared.length > 20, String(declared.length));
+
+  for (const level of ['reception', 'clerk', 'manager']) {
+    const wrong = [];
+    for (const route of declared) {
+      const area = roleMap.areaForRequest('GET', route);
+      const shouldPass = area === null || roleMap.can(level, area);
+      const res = await req('GET', `/api/admin${route}`, null, jars[level]);
+      const didPass = res.status !== 403;
+      if (shouldPass !== didPass) wrong.push(`${route} expected ${shouldPass ? 'allowed' : '403'} got ${res.status}`);
+    }
+    ok(`every declared route behaves as ${level}'s level says`, wrong.length === 0, wrong.join(' | '));
+  }
+
+  // The one that was wrong: reporting analytics reached by a level without reports.
+  ok('reporting figures need the reports area',
+    (await req('GET', '/api/admin/stats', null, jars.clerk)).status === 403,
+    String((await req('GET', '/api/admin/stats', null, jars.clerk)).status));
+  ok('…and reception, who has reports, still gets them',
+    (await req('GET', '/api/admin/stats', null, jars.reception)).status === 200);
+
   /* ---- the menu is not the control ---- */
   const me = (await req('GET', '/api/admin/me', null, jars.reception)).data;
   ok('the dashboard is told what to draw', Array.isArray(me.areas) && me.areas.includes('visits'), JSON.stringify(me.areas));

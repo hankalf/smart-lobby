@@ -67,7 +67,9 @@ const isAdmin = (role) => can(role, 'admin');
  */
 const AREA_BY_PREFIX = {
   dashboard: 'dashboard',
-  stats: 'dashboard',
+  // Thirty days of visits broken down by day, type, host and company: that is
+  // the Reports page, not the dashboard, whatever the name suggests.
+  stats: 'reports',
   rollcall: 'visits',
   visits: 'visits',
   visitors: 'visitors',
