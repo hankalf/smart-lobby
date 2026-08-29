@@ -62,22 +62,29 @@ const ok = (n, c, x) => { if (c) { pass++; console.log(`  ok  ${n}`); } else { f
   for (const slug of items) if (!(await page.$(`#set-${slug}`))) missing.push(slug);
   ok('every entry points at a panel that exists', missing.length === 0, missing.join(','));
 
-  /* ---- panels start folded ---- */
-  const bodies = await page.$$eval('.collapsible', (s) => s.map((x) => x.classList.contains('open')));
-  ok('the sections start collapsed', bodies.every((b) => !b), String(bodies.filter(Boolean).length) + ' open');
-  ok('the headings are still readable', await page.isVisible('#set-retention .sec-head h2'));
-  ok('the contents are hidden', await page.isHidden('#set-retention [data-set="privacy.retain_visits_days"]'));
+  /* ---- one panel is a page, and only one is on screen ---- */
+  const showing = () => page.$$eval('.card.section[id^="set-"]',
+    (secs) => secs.filter((x) => !x.hidden).map((x) => x.id));
+  ok('exactly one panel is shown at a time', (await showing()).length === 1, (await showing()).join(','));
+  ok('the Settings tab lands on the first entry', (await showing())[0] === 'set-branding', (await showing()).join(','));
+  ok('…and says so in the address bar', page.url().endsWith('#settings/branding'), page.url());
+  ok('another panel is not merely folded but off the page',
+    await page.isHidden('#set-retention [data-set="privacy.retain_visits_days"]'));
 
-  /* ---- clicking a heading opens it ---- */
-  await page.click('#set-retention .sec-head');
-  ok('clicking a heading opens the panel', await page.isVisible('#set-retention [data-set="privacy.retain_visits_days"]'));
-  await page.click('#set-retention .sec-head');
-  ok('clicking again closes it', await page.isHidden('#set-retention [data-set="privacy.retain_visits_days"]'));
+  /* ---- the panel's heading becomes the page title ---- */
+  ok('the page is titled for the panel it shows',
+    (await page.textContent('#set-title')).trim() === 'Branding', await page.textContent('#set-title'));
+  ok('…with Settings above it', /Settings/.test(await page.textContent('.page-eyebrow')));
+  ok('the panel does not then repeat its own heading',
+    await page.isHidden('#set-branding > h2'));
 
-  /* ---- the menu jumps to a section ---- */
+  /* ---- the menu switches page ---- */
   await page.click('#nav .subnav button[data-section="notifications"]');
   await page.waitForTimeout(400);
-  ok('a menu entry opens its section', await page.evaluate(() => document.querySelector('#set-notifications').classList.contains('open')));
+  ok('a menu entry shows its page', (await showing()).join(',') === 'set-notifications', (await showing()).join(','));
+  ok('…and hides the one before it', await page.isHidden('#set-branding'));
+  ok('…retitling the page', (await page.textContent('#set-title')).trim() === 'Notifications',
+    await page.textContent('#set-title'));
   ok('…and marks itself in the menu', await page.evaluate(() => document.querySelector('#nav .subnav button[data-section="notifications"]').classList.contains('active')));
   ok('…and puts it in the address bar', page.url().endsWith('#settings/notifications'), page.url());
 
@@ -98,24 +105,28 @@ const ok = (n, c, x) => { if (c) { pass++; console.log(`  ok  ${n}`); } else { f
       (cells) => cells.length > 0 && cells.some((c) => c.textContent.trim().length > 0)),
     auditText.slice(0, 80));
 
-  /* ---- expand / collapse all ---- */
-  await page.click('#sec-expand');
-  ok('expand all opens everything',
-    (await page.$$eval('.collapsible', (s) => s.every((x) => x.classList.contains('open')))));
-  await page.click('#sec-collapse');
-  ok('collapse all shuts everything',
-    (await page.$$eval('.collapsible', (s) => s.every((x) => !x.classList.contains('open')))));
+  /* ---- switching page does not throw away what was just typed ---- */
+  await page.click('#nav .subnav button[data-section="branding"]');
+  await page.waitForSelector('#set-branding [data-set="org.welcome_title"]');
+  await page.waitForFunction(() => document.querySelector('#save-state').hidden, null, { timeout: 10000 });
+  await page.fill('[data-set="org.welcome_title"]', 'Typed Then Switched');
+  // Straight to another page, inside the pause before a save would fire.
+  await page.click('#nav .subnav button[data-section="retention"]');
+  await page.waitForFunction(() => {
+    const el = document.querySelector('#save-state');
+    return !el.hidden && /Saved/.test(el.textContent);
+  }, null, { timeout: 10000 });
+  ok('typing then switching page still saves what was typed',
+    (await page.evaluate(() => fetch('/api/admin/settings').then((r) => r.json())
+      .then((s) => s.org.welcome_title))) === 'Typed Then Switched');
+  ok('…and the panel switched all the same', (await showing()).join(',') === 'set-retention',
+    (await showing()).join(','));
 
-  /* ---- what is left open survives a reload ---- */
-  await page.click('#set-branding .sec-head');
+  /* ---- the page you were on comes back after a reload ---- */
   await page.reload();
-  await page.waitForSelector('#shell:not(.hidden)');
-  await page.click('#nav > button[data-view="settings"]');
-  await page.waitForSelector('#set-branding');
-  ok('an open section is still open after a reload',
-    await page.evaluate(() => document.querySelector('#set-branding').classList.contains('open')));
-  ok('the others are still closed',
-    await page.evaluate(() => !document.querySelector('#set-access').classList.contains('open')));
+  await page.waitForSelector('#set-retention', { timeout: 10000 });
+  ok('a reload comes back to the same page', (await showing()).join(',') === 'set-retention',
+    (await showing()).join(','));
 
   /* ---- a deep link works from cold ---- */
   await page.goto(BASE + '/admin/#settings/access');
@@ -123,7 +134,9 @@ const ok = (n, c, x) => { if (c) { pass++; console.log(`  ok  ${n}`); } else { f
   await page.waitForSelector('#set-access');
   await page.waitForTimeout(500);
   ok('a link straight to a section opens it',
-    await page.evaluate(() => document.querySelector('#set-access').classList.contains('open')));
+    await page.evaluate(() => !document.querySelector('#set-access').hidden));
+  ok('…and nothing else with it',
+    (await page.$$eval('.card.section[id^="set-"]', (secs) => secs.filter((x) => !x.hidden).length)) === 1);
   ok('…with Settings marked in the menu',
     await page.evaluate(() => document.querySelector('#nav > button[data-view="settings"]').classList.contains('active')));
 
@@ -213,8 +226,36 @@ const ok = (n, c, x) => { if (c) { pass++; console.log(`  ok  ${n}`); } else { f
   await page.click('#nav .subnav button[data-section="details"]');
   await page.waitForTimeout(400);
   ok('the panel is called Visitor form',
-    (await page.textContent('#set-details .sec-head h2')).trim() === 'Visitor form',
-    await page.textContent('#set-details .sec-head h2'));
+    (await page.textContent('#set-title')).trim() === 'Visitor form', await page.textContent('#set-title'));
+  /* ---- hovering a dropdown lights its row and its column ---- */
+  const lit = () => page.$$eval('.fields-table .cross-row, .fields-table .cross-col',
+    (cs) => cs.length);
+  ok('nothing is lit before the pointer is anywhere', (await lit()) === 0, String(await lit()));
+
+  const cell = await page.$('.fields-table tbody tr:nth-child(2) td[data-col="2"]');
+  await cell.hover();
+  await page.waitForTimeout(150);
+  ok('hovering a cell lights its whole column',
+    (await page.$$eval('.fields-table [data-col="2"].cross-col', (cs) => cs.length))
+      === (await page.$$eval('.fields-table [data-col="2"]', (cs) => cs.length)),
+    String(await page.$$eval('.fields-table [data-col="2"].cross-col', (cs) => cs.length)));
+  ok('…and its whole row',
+    await page.$$eval('.fields-table tbody tr:nth-child(2) td',
+      (cs) => cs.every((c) => c.classList.contains('cross-row'))));
+  ok('the cell itself is marked as the one about to be clicked',
+    await page.$eval('.fields-table tbody tr:nth-child(2) td[data-col="2"]',
+      (c) => c.classList.contains('cross-row') && c.classList.contains('cross-col')));
+  ok('a cell in another column is not lit as the target',
+    await page.$eval('.fields-table tbody tr:nth-child(2) td[data-col="1"]',
+      (c) => c.classList.contains('cross-row') && !c.classList.contains('cross-col')));
+
+  const other = await page.$('.fields-table tbody tr:nth-child(1) td[data-col="1"]');
+  await other.hover();
+  await page.waitForTimeout(150);
+  ok('moving on lights the new cross and drops the old',
+    await page.$eval('.fields-table tbody tr:nth-child(2) td[data-col="2"]',
+      (c) => !c.classList.contains('cross-row') && !c.classList.contains('cross-col')));
+
   ok('the wording block starts folded', await page.isHidden('#wording-type'));
   await page.click('#set-details .sub-fold > summary');
   await page.waitForTimeout(250);

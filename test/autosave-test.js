@@ -42,7 +42,7 @@ const ok = (n, c, x) => { if (c) { pass++; console.log(`  ok  ${n}`); } else { f
   /* ---- the settings page ---- */
   await page.goto(`${BASE}/admin/#settings/branding`);
   await page.reload();
-  await page.waitForSelector('#set-branding.open [data-set="org.welcome_title"]', { timeout: 10000 });
+  await page.waitForSelector('#set-branding:not([hidden]) [data-set="org.welcome_title"]', { timeout: 10000 });
   ok('the Save button is gone', (await page.$('#save-settings')) === null);
 
   puts.length = 0;

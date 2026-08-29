@@ -196,9 +196,11 @@ const DEFAULT_CARD = cardDefaults('signin');
 function cardFor(eventId, notify) {
   const base = cardDefaults(eventId);
   const own = notify && notify.cards && notify.cards[eventId];
-  if (own && typeof own === 'object') return { ...base, ...own };
-  if (eventId === 'signin' && notify && notify.card) return { ...base, ...notify.card };
-  return base;
+  const merged = (own && typeof own === 'object') ? { ...base, ...own }
+    : (eventId === 'signin' && notify && notify.card) ? { ...base, ...notify.card }
+      : base;
+  // Resolved here, once, so the designer shows the same buttons that send.
+  return { ...merged, links: linkIds(merged) };
 }
 
 /**
@@ -236,23 +238,22 @@ const adminUrl = (ctx, view) => (ctx.baseUrl ? `${ctx.baseUrl}/admin/#${view}` :
 const LINKS_MAX = 4;
 
 /**
- * The chosen buttons, resolved against this deployment.
+ * Which buttons a design asks for.
  *
- * `show_button` and `button_label` were the older single-button setting; a
- * site that had it on keeps its button, pointing where it always did, until
- * somebody picks a different set in the dashboard.
+ * `show_button` was the older single-button setting, which opened the visits
+ * list. A site that had it on keeps that button as a chosen link, so nothing
+ * disappears on upgrade — its custom wording gives way to the standard label,
+ * which is the price of the designer and the sent card agreeing on one list
+ * rather than each working it out its own way.
  */
+const linkIds = (c) => (Array.isArray(c.links) ? c.links : (c.show_button ? ['visits'] : []))
+  .filter((id) => LINK_BY_ID[id])
+  .slice(0, LINKS_MAX);
+
+/** Those buttons resolved against this deployment, dropping any with no address. */
 function buildLinks(c, ctx) {
-  const migrating = !Array.isArray(c.links) && c.show_button;
-  const chosen = Array.isArray(c.links) ? c.links : (migrating ? ['visits'] : []);
-  return chosen
-    .filter((id) => LINK_BY_ID[id])
-    .slice(0, LINKS_MAX)
-    .map((id) => ({
-      id,
-      label: (migrating && id === 'visits' && c.button_label) ? c.button_label : LINK_BY_ID[id].label,
-      url: LINK_BY_ID[id].url(ctx)
-    }))
+  return linkIds(c)
+    .map((id) => ({ id, label: LINK_BY_ID[id].label, url: LINK_BY_ID[id].url(ctx) }))
     .filter((l) => l.url);
 }
 

@@ -107,9 +107,19 @@ function findAll(node, type, out = []) {
   p = await preview({ header_style: 'none' });
   ok('plain leaves the tinted band off', !/"style":"(accent|good|warning|attention|emphasis)"/.test(JSON.stringify(p.teams)));
 
+  /*
+   * show_button was the single-button setting that came before quick links.
+   * It survives as a chosen link so nothing disappears on upgrade, but it
+   * gives up its custom wording — the designer and the sent card now work
+   * from one list of links rather than each deciding for itself.
+   */
   p = await preview({ show_button: true, button_label: 'Open the log' });
-  ok('a button is added when asked for', !!(p.teams.attachments[0].content.actions || [])[0], JSON.stringify(p.teams.attachments[0].content.actions));
-  ok('with the wording given', p.teams.attachments[0].content.actions[0].title === 'Open the log');
+  ok('an older single button still puts a button on the card',
+    !!(p.teams.attachments[0].content.actions || [])[0], JSON.stringify(p.teams.attachments[0].content.actions));
+  ok('…pointing where it always did', /#visits$/.test(p.teams.attachments[0].content.actions[0].url),
+    p.teams.attachments[0].content.actions[0].url);
+  ok('…and the designer is told about it, so it cannot show "no buttons"',
+    (p.card.links || []).join(',') === 'visits', JSON.stringify(p.card.links));
   p = await preview({ show_button: false });
   ok('and left off when not', !p.teams.attachments[0].content.actions);
 

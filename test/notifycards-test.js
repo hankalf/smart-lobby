@@ -81,6 +81,20 @@ function unit() {
   ok('a link with nowhere to go is left off, not left dead',
     noBoard.links.map((l) => l.id).join(',') === 'dashboard,visits', noBoard.links.map((l) => l.id).join(','));
 
+  /*
+   * A site that had the older single button keeps it — and the designer is
+   * shown the same list the sender uses, so the panel cannot say "no buttons"
+   * while a button is going out on every card.
+   */
+  const oldButton = { card: { show_button: true, button_label: 'Open the log' } };
+  ok('an older single button survives as a chosen link',
+    cards.cardFor('signin', oldButton).links.join(',') === 'visits',
+    JSON.stringify(cards.cardFor('signin', oldButton).links));
+  ok('…and is what the card actually carries',
+    cards.buildModel('signin', VISIT, oldButton, CTX).links.map((l) => l.id).join(',') === 'visits');
+  ok('a card that never had one has no buttons',
+    cards.cardFor('signout', oldButton).links.length === 0);
+
   const greedy = { cards: { signin: { links: ['dashboard', 'visits', 'visitors', 'reports', 'drivers', 'kiosk'] } } };
   ok('no more buttons than Teams will lay out',
     cards.buildModel('signin', VISIT, greedy, CTX).links.length === cards.LINKS_MAX);
@@ -349,6 +363,21 @@ function unit() {
     body: JSON.stringify({ event: 'signin' })
   }).then((r) => r.json()));
   ok('the preview still builds with routing on', !!previewed.model, JSON.stringify(previewed).slice(0, 80));
+
+  /* ---- a missing photo says which of the three reasons it is ---- */
+  await page.click('#cd-events .tab:nth-child(2)');
+  await page.waitForFunction(() => /signed out/i.test(document.querySelector('#cd-preview').textContent),
+    null, { timeout: 10000 });
+  ok('a card with the photo switched off says so rather than showing nothing',
+    /switched off/.test(await page.textContent('#cd-photo-warning')),
+    await page.textContent('#cd-photo-warning'));
+
+  await page.click('#cd-events .tab:nth-child(1)');
+  await page.waitForFunction(() => /arrived|gate/i.test(document.querySelector('#cd-preview').textContent),
+    null, { timeout: 10000 });
+  const note = await page.textContent('#cd-photo-warning');
+  ok('an arrival with nobody photographed says that instead',
+    /nobody in the example has one|cannot reach|^\s*$/.test(note), note);
 
   ok('no javascript errors anywhere', errors.length === 0, errors.slice(0, 3).join(' | '));
 

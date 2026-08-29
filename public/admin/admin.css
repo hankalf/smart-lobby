@@ -65,19 +65,16 @@ h1.page { font-size: 1.6rem; margin: 0 0 .25rem; color: var(--brand-dark); }
 .section h2 { margin: 0 0 1rem; font-size: 1.1rem; color: var(--brand-dark); }
 .section h3 { margin: 1.5rem 0 .75rem; font-size: .95rem; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .05em; }
 
-/* ---------------------------------------------------- collapsible panels */
-.collapsible { padding: 0; }
-.collapsible .sec-head {
-  display: flex; align-items: center; gap: .6rem; width: 100%; text-align: left;
-  background: none; border: 0; padding: 1rem 1.25rem; cursor: pointer; border-radius: 12px;
+/* ------------------------------------------------------- settings panels */
+/*
+ * Each entry under Settings is its own page, so the panel's heading is
+ * promoted to the page title and this is the small word above it saying
+ * where you are.
+ */
+.page-eyebrow {
+  font-size: .75rem; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--ink-soft); font-weight: 700; margin-bottom: .15rem;
 }
-.collapsible .sec-head:hover { background: #f4f8f6; }
-.collapsible .sec-head h2 { margin: 0; }
-.collapsible .chev { color: var(--ink-soft); font-size: .8rem; transition: transform .15s ease; flex: 0 0 auto; }
-.collapsible.open .chev { transform: rotate(90deg); }
-.collapsible .sec-body { padding: 0 1.25rem 1.25rem; }
-.collapsible:not(.open) .sec-body { display: none; }
-.collapsible.flash { box-shadow: 0 0 0 2px var(--brand); }
 /* Whatever somebody typed in "company", the Restore button stays on the row. */
 .arch-what { max-width: 30rem; overflow-wrap: anywhere; }
 
@@ -297,6 +294,23 @@ td .btn { padding: .35rem .7rem; font-size: .82rem; }
 .fields-table td:first-child { min-width: 12rem; }
 .fields-table select { min-width: 8.5rem; }
 .fields-table .muted { font-size: .78rem; }
+/*
+ * Row and column both lit, so the cell about to be clicked is where the two
+ * bands cross. A grid of identical dropdowns is otherwise easy to slip a row
+ * on — and setting Photo for the wrong visitor type says nothing on screen.
+ */
+/*
+ * Written past `tr:hover td`, which is more specific than a bare class and
+ * would otherwise paint the row band back out again.
+ */
+.cross-hi td, .cross-hi th { transition: background-color .08s ease; }
+.cross-hi tr td.cross-col, .cross-hi tr th.cross-col,
+.cross-hi tr td.cross-row, .cross-hi tr th.cross-row { background: #e7f1ec; }
+/* Where the two bands meet, and so what the click will actually land on. */
+.cross-hi tr td.cross-row.cross-col, .cross-hi tr th.cross-row.cross-col {
+  background: var(--brand-soft); box-shadow: inset 0 0 0 2px var(--brand);
+}
+.cross-hi tr td.cross-row.cross-col select { border-color: var(--brand); }
 
 .q-row { border: 1px solid var(--line); border-radius: 10px; padding: .8rem; margin-bottom: .6rem; background: var(--bg); }
 .q-row-top { display: flex; gap: .5rem; align-items: center; }

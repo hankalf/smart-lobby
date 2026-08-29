@@ -397,7 +397,26 @@
       || (!!section && view === 'settings' && x.dataset.section === section)));
   }
 
-  const goView = (view) => { markNav(view); location.hash = view; render(view); };
+  const goView = (view) => {
+    // Settings has no page of its own any more — every entry under it is one.
+    if (view === 'settings') return goSection(firstSection());
+    markNav(view);
+    location.hash = view;
+    render(view);
+  };
+
+  /**
+   * Open one settings panel as its own page.
+   *
+   * Already on settings, this is a show/hide: no re-fetch, and nothing typed
+   * a moment ago is thrown away mid-save.
+   */
+  function goSection(section) {
+    markNav('settings', section);
+    location.hash = `settings/${section}`;
+    if (CURRENT === 'settings' && $('.card.section[id^="set-"]')) return showSection(section);
+    return render('settings', section);
+  }
 
   $$('#nav > button').forEach((b) => b.addEventListener('click', () => {
     // A heading with no page of its own — Sign-in setup — opens its first entry.
@@ -408,107 +427,124 @@
     goView(b.dataset.view);
   }));
 
-  $$('#nav .subnav button').forEach((b) => b.addEventListener('click', async () => {
+  $$('#nav .subnav button').forEach((b) => b.addEventListener('click', () => {
     if (b.dataset.view) return goView(b.dataset.view);
-    // A panel on the settings page: show that page if it is not up, then open it.
-    const section = b.dataset.section;
-    markNav('settings', section);
-    location.hash = `settings/${section}`;
-    if (CURRENT !== 'settings') await render('settings');
-    openSection(section);
+    goSection(b.dataset.section);
   }));
 
   const VIEWS = {};
 
-  async function render(view) {
+  async function render(view, section) {
     const target = $('#view');
     target.innerHTML = '<p class="empty">Loading…</p>';
     CURRENT = view;
     try {
-      await (VIEWS[view] || VIEWS.dashboard)(target);
+      await (VIEWS[view] || VIEWS.dashboard)(target, section);
     } catch (err) {
       if (err.message !== 'unauthenticated') target.innerHTML = `<p class="empty">Could not load: ${esc(err.message)}</p>`;
     }
   }
 
-  /* --------------------------------------------------- collapsible panels */
+  /* ------------------------------------------------------ settings panels */
 
   /*
-   * Settings had grown to a dozen panels stacked end to end, which meant
-   * scrolling past branding and badge printing every time to reach retention.
-   * Each panel now folds shut, and which ones are left open is remembered per
-   * browser — so whoever lives in one section keeps it open and the rest
-   * stays out of the way.
+   * Settings is a dozen panels, and for a while they were stacked end to end
+   * on one page with each folded shut. That was better than one long scroll
+   * and still not right: the fold state was a second thing to manage, and a
+   * link to a panel dropped you somewhere in the middle of a page that also
+   * held eleven others.
+   *
+   * Each entry under Settings in the menu is now simply its own page. The
+   * whole set is still built in one pass — the panels share a settings
+   * object, one auto-saver and several collectors that read the DOM — but
+   * only the chosen one is on screen, and switching is a show/hide rather
+   * than a re-render, so nothing half-typed is lost on the way.
    */
-  const OPEN_KEY = 'sl.admin.open-sections';
-  const openSet = () => { try { return new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || '[]')); } catch { return new Set(); } };
-  const saveOpen = (s) => { try { localStorage.setItem(OPEN_KEY, JSON.stringify([...s])); } catch { /* private mode */ } };
 
-  function setSection(sec, on) {
-    sec.classList.toggle('open', on);
-    const head = sec.querySelector(':scope > .sec-head');
-    if (head) head.setAttribute('aria-expanded', String(on));
-    if (on) sec.dispatchEvent(new CustomEvent('sec:open'));
+  /** The section a settings page is showing, so a re-render can restore it. */
+  let SECTION = '';
+
+  /** The first entry under Settings — where the tab lands with no section named. */
+  const firstSection = () => {
+    const b = $('#nav .subnav[data-for="settings"] button[data-section]');
+    return b ? b.dataset.section : 'branding';
+  };
+
+  /**
+   * Show one settings panel and hide the rest.
+   *
+   * The panel's own <h2> becomes the page heading rather than sitting under
+   * a near-identical <h1>, and `sec:open` still fires the first time each is
+   * shown — several panels only fetch what they need at that point.
+   */
+  function showSection(slug) {
+    const sections = $$('.card.section[id^="set-"]');
+    if (!sections.length) return;
+    const wanted = document.getElementById(`set-${slug}`) ? slug : firstSection();
+    SECTION = wanted;
+
+    sections.forEach((sec) => {
+      const on = sec.id === `set-${wanted}`;
+      sec.hidden = !on;
+      const h2 = sec.querySelector(':scope > h2');
+      // The heading is promoted to the top of the page, so it would otherwise
+      // appear twice.
+      if (h2) h2.hidden = true;
+      if (on && !sec.dataset.opened) {
+        sec.dataset.opened = '1';
+        sec.dispatchEvent(new CustomEvent('sec:open'));
+      }
+    });
+
+    const shown = document.getElementById(`set-${wanted}`);
+    const title = $('#set-title');
+    const heading = shown && shown.querySelector(':scope > h2');
+    if (title && heading) title.textContent = heading.textContent;
+    // Coming from another panel, the page should start at the top of this one
+    // rather than wherever the last one had been scrolled to.
+    const main = document.querySelector('.main');
+    if (main) main.scrollTop = 0;
   }
 
-  /** Turn every `.card.section` carrying an id into a panel that folds. */
-  function collapseSections(root) {
-    const open = openSet();
-    $$('.card.section[id]', root).forEach((sec) => {
-      const h2 = sec.querySelector(':scope > h2');
-      if (!h2 || sec.classList.contains('collapsible')) return;
-      const body = document.createElement('div');
-      body.className = 'sec-body';
-      while (h2.nextSibling) body.appendChild(h2.nextSibling);
-      const head = document.createElement('button');
-      head.type = 'button';
-      head.className = 'sec-head';
-      h2.replaceWith(head);
-      head.append(el('<span class="chev" aria-hidden="true">▶</span>'), h2);
-      sec.append(body);
-      sec.classList.add('collapsible');
-      setSection(sec, open.has(sec.id));
-      head.addEventListener('click', () => {
-        const on = !sec.classList.contains('open');
-        const s = openSet();
-        if (on) s.add(sec.id); else s.delete(sec.id);
-        saveOpen(s);
-        setSection(sec, on);
-      });
+  /**
+   * Light up the row *and* the column under the pointer.
+   *
+   * A grid of identical dropdowns is easy to slip a row on: you mean to set
+   * Photo for contractors and set it for interviews instead, and nothing on
+   * screen ever tells you. Both bands lit means the cell you are about to
+   * click is the one where they cross.
+   *
+   * Done in script rather than with :has() so it works the same in whatever
+   * browser the site's dashboard happens to be opened in.
+   */
+  function crossHighlight(table) {
+    if (!table) return;
+    const clear = () => $$('.cross-row, .cross-col', table)
+      .forEach((c) => c.classList.remove('cross-row', 'cross-col'));
+
+    table.addEventListener('mouseover', (e) => {
+      const cell = e.target.closest('td[data-col], th[data-col]');
+      clear();
+      if (!cell || !table.contains(cell)) return;
+      $$(`[data-col="${cell.dataset.col}"]`, table).forEach((c) => c.classList.add('cross-col'));
+      $$(':scope > td, :scope > th', cell.parentElement).forEach((c) => c.classList.add('cross-row'));
+    });
+    table.addEventListener('mouseleave', clear);
+    // A dropdown opened with the keyboard should light its cell too.
+    table.addEventListener('focusin', (e) => {
+      const cell = e.target.closest('td[data-col]');
+      if (cell) cell.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
     });
   }
 
-  /** Run something the first time a panel is opened — and now, if it already is. */
+  /** Run something the first time a panel is shown — and now, if it already is. */
   function onSectionOpen(id, fn) {
     const sec = document.getElementById(id);
     if (!sec) return;
     let done = false;
     const go = () => { if (done) return; done = true; fn(); };
-    if (sec.classList.contains('open')) go();
+    if (sec.dataset.opened) go();
     else sec.addEventListener('sec:open', go);
-  }
-
-  function openSection(slug) {
-    const sec = document.getElementById(`set-${slug}`);
-    if (!sec) return;
-    if (!sec.classList.contains('open')) {
-      const s = openSet();
-      s.add(sec.id);
-      saveOpen(s);
-      setSection(sec, true);
-    }
-    sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    sec.classList.add('flash');
-    setTimeout(() => sec.classList.remove('flash'), 1400);
-  }
-
-  function setAllSections(root, on) {
-    const s = openSet();
-    $$('.collapsible[id]', root).forEach((sec) => {
-      if (on) s.add(sec.id); else s.delete(sec.id);
-      setSection(sec, on);
-    });
-    saveOpen(s);
   }
 
   /* ------------------------------------------------------------ dashboard */
@@ -1785,24 +1821,41 @@
 
     root.innerHTML = `
       <h1 class="page">Staff</h1>
-      <p class="page-sub">The people visitors can ask for. Give each one their own Teams link and their visitors' arrivals go straight to them; a mobile number adds an optional text.</p>
+      <p class="page-sub">The people visitors can ask for. An email address is all most of them need — it is what lets
+        Smart Lobby tag them in your Teams channel when their visitor arrives.</p>
       <div class="card section">
         <div class="inline-form" style="margin-bottom:1rem">
           <label class="field"><span>Name</span><input class="input" id="h-name"></label>
           <label class="field"><span>Email</span><input class="input" id="h-email" type="email"></label>
           <label class="field"><span>Mobile (for SMS)</span><input class="input" id="h-phone" type="tel"></label>
           <label class="field"><span>Department</span><input class="input" id="h-dept"></label>
-          <label class="field"><span>Chat webhook (optional)</span><input class="input" id="h-hook" placeholder="Slack / Teams URL"></label>
           <button class="btn" id="h-add">Add staff member</button>
         </div>
+        <!--
+          Folded away because it is the exception, not a step. Most people are
+          reached by being tagged in the Teams channel, which needs nothing on
+          their record beyond an email — see Settings › Notifications.
+        -->
+        <details class="sub-fold">
+          <summary><h3>A personal chat link</h3>
+            <span class="muted">Only for somebody who is not in your Teams channel</span></summary>
+          <p class="muted" style="margin-top:0">Tagging someone in the channel only notifies them if they are a member
+            of it. For a supervisor or manager who is not, a personal chat webhook sends the arrival straight to them
+            as a direct message. It is also what makes an <b>Also tell</b> list under
+            <b>Settings › Notifications</b> arrive as a message rather than only a tag.</p>
+          <label class="field" style="max-width:32rem"><span>Chat webhook</span>
+            <input class="input" id="h-hook" placeholder="Slack, Teams or Google Chat URL"></label>
+        </details>
         <div class="table-wrap">${rows.length ? `<table>
-          <thead><tr><th>Name</th><th>Email</th><th>Mobile</th><th>Department</th><th>Webhook</th>
+          <thead><tr><th>Name</th><th>Email</th><th>Mobile</th><th>Department</th>
             <th>Dashboard access</th><th>Status</th><th></th></tr></thead>
           <tbody>${rows.map((h) => {
             const login = loginFor(h.id);
-            return `<tr><td><b>${esc(h.name)}</b></td><td>${esc(h.email || '')}</td>
+            return `<tr><td><b>${esc(h.name)}</b>${h.webhook_url
+              ? ' <span class="pill on" title="Has a personal chat link, so arrivals reach them directly">DM</span>' : ''}</td>
+            <td>${esc(h.email || '')}</td>
             <td>${esc(h.phone || '')}</td>
-            <td>${esc(h.department || '')}</td><td class="muted">${h.webhook_url ? 'configured' : '—'}</td>
+            <td>${esc(h.department || '')}</td>
             <td>${login
               ? `<span class="pill ${login.active ? 'on' : 'off'}">${esc(levelName(login.role))}</span>
                  ${login.must_change_password ? '<div class="muted">must pick a password</div>' : ''}
@@ -1836,11 +1889,14 @@
 
       <div class="card section">
         <h2>Setting up a chat webhook</h2>
-        <p class="muted" style="margin-top:0">A link posts arrivals straight into Microsoft Teams — a channel, or a
-          direct message to one person. Paste it into a staff member's <b>Chat webhook</b> field above and that
-          person's arrivals go there. Leave it blank and the company channel from
-          <b>Settings → Notifications</b> is used instead. Slack and Google Chat links work too, recognised from the
-          URL, so different people can be on different platforms.</p>
+        <p class="muted" style="margin-top:0">Most sites need only one of these: the company channel, set once under
+          <b>Settings → Notifications</b>. Everyone in that channel is reached by being tagged in the post, which
+          needs nothing here beyond their email address.</p>
+        <p class="muted">A personal link is for the exception — somebody who is <i>not</i> in that channel, and so
+          would never see the tag. Paste it into their <b>A personal chat link</b> box above and their visitors'
+          arrivals go straight to them as a direct message. It is also what makes an <b>Also tell</b> list under
+          Notifications arrive as a message rather than only a tag. Slack and Google Chat links work too, recognised
+          from the URL, so different people can be on different platforms.</p>
 
         <details class="howto">
           <summary><b>Microsoft Teams</b> — to a channel, or as a direct message to one person</summary>
@@ -2039,10 +2095,16 @@
           <label class="field"><span>Mobile (for SMS)</span><input class="input" id="se-phone" type="tel" value="${esc(person.phone || '')}"></label>
           <label class="field"><span>Department</span><input class="input" id="se-dept" value="${esc(person.department || '')}"></label>
         </div>
-        <label class="field"><span>Chat webhook</span>
-          <input class="input" id="se-hook" placeholder="Slack, Teams or Google Chat URL" value="${esc(person.webhook_url || '')}"></label>
-        <div class="row"><button class="btn subtle" type="button" id="se-test">Send a test to this webhook</button></div>
-        <div id="se-test-result"></div>
+        <details class="sub-fold" ${person.webhook_url ? 'open' : ''}>
+          <summary><h3>A personal chat link</h3>
+            <span class="muted">Only if they are not in your Teams channel</span></summary>
+          <p class="muted" style="margin-top:0">Being tagged in the channel only notifies a member of it. This sends
+            arrivals to them directly instead, and is what makes an <b>Also tell</b> list arrive as a message.</p>
+          <label class="field"><span>Chat webhook</span>
+            <input class="input" id="se-hook" placeholder="Slack, Teams or Google Chat URL" value="${esc(person.webhook_url || '')}"></label>
+          <div class="row"><button class="btn subtle" type="button" id="se-test">Send a test to this webhook</button></div>
+          <div id="se-test-result"></div>
+        </details>
         <label class="check"><input type="checkbox" id="se-active" ${person.active ? 'checked' : ''}>
           <span>Offered on the kiosk<br><span class="muted">Switch off for someone who has left, without losing their history</span></span></label>`,
         async (bg, close) => {
@@ -3100,7 +3162,7 @@
     : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
 
 
-  VIEWS.settings = async (root) => {
+  VIEWS.settings = async (root, section) => {
     SETTINGS = await api('/settings');
     const users = await api('/users');
     // For routing a visitor type to somebody beyond the person being visited.
@@ -3113,11 +3175,10 @@
     const bgs = s.org.backgrounds || [];
 
     root.innerHTML = `
-      <h1 class="page">Settings</h1>
-      <p class="page-sub">Everything here applies instantly to every kiosk.
-        Open a section below, or pick one from the list under Settings in the menu.</p>
-      <div class="row"><button class="btn ghost" id="sec-expand">Expand all</button>
-        <button class="btn ghost" id="sec-collapse">Collapse all</button></div>
+      <div class="page-eyebrow">Settings</div>
+      <h1 class="page" id="set-title">Settings</h1>
+      <p class="page-sub">Applies instantly to every kiosk. The rest of the settings are the entries under
+        <b>Settings</b> in the menu.</p>
 
       <div class="card section" id="set-branding"><h2>Branding</h2>
         <div class="form-grid">
@@ -3217,14 +3278,15 @@
       <div class="card section" id="set-details"><h2>Visitor form</h2>
         <p class="muted" style="margin-top:0">What each type of visitor is asked. An interview does not need a reason for
           visit — the card already says why they are here — so switch it off in that column alone.</p>
-        <div class="table-wrap"><table class="fields-table">
-          <thead><tr><th>Field</th>${detailTypes().map(([, l]) => `<th>${l}</th>`).join('')}</tr></thead>
+        <div class="table-wrap"><table class="fields-table cross-hi">
+          <thead><tr><th data-col="0">Field</th>${detailTypes()
+            .map(([, l], i) => `<th data-col="${i + 1}">${l}</th>`).join('')}</tr></thead>
           <tbody>${DETAIL_FIELDS.map(([field, label, hint]) => `<tr>
-            <td><b>${label}</b>${hint ? `<div class="muted">${hint}</div>` : ''}
+            <td data-col="0"><b>${label}</b>${hint ? `<div class="muted">${hint}</div>` : ''}
               <div><button class="btn link" type="button" data-rowoff="${field}">Turn off for everyone</button></div></td>
-            ${detailTypes().map(([type]) => {
+            ${detailTypes().map(([type], i) => {
               const value = ((s.details[type] || {})[field]) || 'off';
-              return `<td><select class="input" data-set="details.${type}.${field}">
+              return `<td data-col="${i + 1}"><select class="input" data-set="details.${type}.${field}">
                 ${[['off', 'Not asked'], ['optional', 'Optional'], ['required', 'Required']]
                   .map(([v, l]) => `<option value="${v}" ${value === v ? 'selected' : ''}>${l}</option>`).join('')}
               </select></td>`;
@@ -3695,7 +3757,8 @@
 
       <p class="muted">Everything here saves itself as you change it.</p>`;
 
-    collapseSections(root);
+    showSection(section || SECTION || firstSection());
+    crossHighlight($('.fields-table.cross-hi', root));
 
     const saveSettings = autoSave(async () => {
       const patch = {};
@@ -3727,8 +3790,6 @@
     });
     VIEWS.settings.save = saveSettings;
     autoSaveOn(root, saveSettings);
-    $('#sec-expand').addEventListener('click', () => setAllSections(root, true));
-    $('#sec-collapse').addEventListener('click', () => setAllSections(root, false));
 
     /* --------------------------------------------- the notification cards */
 
@@ -3966,14 +4027,33 @@
         ? 'Nothing of this kind has happened yet, so this shows made-up details.'
         : 'Shown with the most recent real one.';
 
-      // A photo Teams cannot reach is the one failure that looks like nothing.
+      /*
+       * A card with no face on it has three quite different causes that look
+       * exactly the same on screen: switched off, nobody to show one for, or
+       * an address Teams cannot fetch from. Saying which turns "the photo
+       * isn't showing" into something you can act on.
+       */
       const warn = $('#cd-photo-warning');
-      warn.innerHTML = (cards[cdEvent].show_photo && !data.public_url_reachable)
-        ? `<div class="notice error">Teams fetches the photo from
+      const def = cdEventDef();
+      warn.innerHTML = (() => {
+        if (def.subject === 'delivery') return '';
+        if (!cards[cdEvent].show_photo) {
+          return '<div class="notice">No photo on this card — <b>Show the visitor\'s photo</b> is switched off '
+            + 'for this notification. Sign-outs and parcels start that way.</div>';
+        }
+        if (!data.subject_has_photo) {
+          return '<div class="notice">The photo is switched on, but nobody in the example has one — either the '
+            + 'kiosk is not asking for a photo, or nobody has signed in with one yet. Real arrivals with a photo '
+            + 'will show it.</div>';
+        }
+        if (!data.public_url_reachable) {
+          return `<div class="notice error">Teams fetches the photo from
              <b>${esc(data.public_url)}</b>, which it cannot reach from outside. Set the public address below —
              or the PUBLIC_URL variable on the server — or the card will arrive with a blank space where the face
-             should be.</div>`
-        : '';
+             should be.</div>`;
+        }
+        return '';
+      })();
     }
 
     /** The Adaptive Card as Teams draws it, near enough to design against. */
@@ -5004,9 +5084,8 @@
     // A link to a page this login cannot open lands on the dashboard rather
     // than on an error, which is what a bookmark from a former role looks like.
     const view = (VIEWS[hashView] && allowed(hashView)) ? hashView : 'dashboard';
-    markNav(view, section);
-    await render(view);
-    if (view === 'settings' && section) openSection(section);
+    markNav(view, view === 'settings' ? (section || firstSection()) : section);
+    await render(view, section);
   }
 
   (async () => {

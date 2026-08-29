@@ -10,10 +10,10 @@ const { chromium, launchOptions } = require('./browser');
   await page.fill('#gate-pass', 'Testing123!');
   await page.click('#gate-submit');
   await page.waitForSelector('#shell:not(.hidden)', { timeout: 8000 });
+  // Each panel is its own page now, and this suite reads the notifications one.
   await page.click('[data-view="settings"]');
-  // The panels are folded by default now; this suite reads across all of them.
-  await page.waitForSelector('#sec-expand', { timeout: 8000 });
-  await page.click('#sec-expand');
+  await page.waitForSelector('#nav .subnav button[data-section="notifications"]', { timeout: 8000 });
+  await page.click('#nav .subnav button[data-section="notifications"]');
   await page.waitForSelector('#notify-log table, #notify-log .empty', { timeout: 8000 });
   console.log('activity summary:', await page.$eval('#notify-summary', (el) => el.textContent.trim()));
   console.log('log rows:', await page.$$eval('#notify-log tbody tr', (els) => els.length));
@@ -22,7 +22,9 @@ const { chromium, launchOptions } = require('./browser');
   // Teams replaced email: the channel link, its test button, and no email leftovers
   console.log('teams channel field present:', await page.$('[data-set="notify.global_webhook_url"]') !== null);
   console.log('teams test button label:', await page.$eval('#test-hook', (el) => el.textContent.trim()));
-  const body = await page.$eval('body', (el) => el.innerText);
+  // textContent rather than innerText: the panels not on screen are still in
+  // the DOM, and a leftover email field hiding on one of them still counts.
+  const body = await page.$eval('body', (el) => el.textContent);
   console.log('no SMTP wording left:', !/SMTP|smtp/.test(body));
   console.log('no email fields left:', await page.$('[data-set="notify.smtp_host"]') === null
     && await page.$('#email-provider') === null && await page.$('#test-email') === null);

@@ -1293,6 +1293,12 @@ function buildPreview(eventId, card) {
     teams: cards.teamsCard(model),
     sample: !real,
     card: cards.cardFor(event.id, notifyForPreview),
+    /*
+     * Whether the example this preview is built from has a face at all.
+     * Without it, "the photo is not showing" has three different causes that
+     * look identical, and the panel can only guess which one you hit.
+     */
+    subject_has_photo: !!photoUrl,
     fields: event.fields.map(({ id, label, sensitive }) => ({ id, label, sensitive: !!sensitive })),
     // A photo cannot reach Teams from an address only this machine can resolve.
     public_url: notify.baseUrl(),
