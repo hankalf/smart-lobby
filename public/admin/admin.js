@@ -165,6 +165,9 @@
   async function showBoardLink() {
     const link = $('#open-board');
     if (!link) return;
+    // The board link carries its key, so only somebody who could read it
+    // anyway is shown it.
+    if (!((ME && ME.areas) || []).includes('admin')) return link.classList.add('hidden');
     try {
       const b = await api('/board');
       if (b && b.url) {
@@ -1626,6 +1629,11 @@
 
   VIEWS.staff = async (root) => {
     const rows = await api('/staff');
+    // Which staff members have a dashboard login, and at what level.
+    const [logins, levels] = await Promise.all([api('/users'), api('/roles')]);
+    const loginFor = (hostId) => logins.find((u) => u.host_id === hostId) || null;
+    const levelName = (role) => (levels.find((l) => l.key === role) || {}).label || role;
+
     root.innerHTML = `
       <h1 class="page">Staff</h1>
       <p class="page-sub">The people visitors can ask for. Give each one their own Teams link and their visitors' arrivals go straight to them; a mobile number adds an optional text.</p>
@@ -1639,14 +1647,26 @@
           <button class="btn" id="h-add">Add staff member</button>
         </div>
         <div class="table-wrap">${rows.length ? `<table>
-          <thead><tr><th>Name</th><th>Email</th><th>Mobile</th><th>Department</th><th>Webhook</th><th>Status</th><th></th></tr></thead>
-          <tbody>${rows.map((h) => `<tr><td><b>${esc(h.name)}</b></td><td>${esc(h.email || '')}</td>
+          <thead><tr><th>Name</th><th>Email</th><th>Mobile</th><th>Department</th><th>Webhook</th>
+            <th>Dashboard access</th><th>Status</th><th></th></tr></thead>
+          <tbody>${rows.map((h) => {
+            const login = loginFor(h.id);
+            return `<tr><td><b>${esc(h.name)}</b></td><td>${esc(h.email || '')}</td>
             <td>${esc(h.phone || '')}</td>
             <td>${esc(h.department || '')}</td><td class="muted">${h.webhook_url ? 'configured' : '—'}</td>
+            <td>${login
+              ? `<span class="pill ${login.active ? 'on' : 'off'}">${esc(levelName(login.role))}</span>
+                 ${login.must_change_password ? '<div class="muted">must pick a password</div>' : ''}
+                 ${login.role === 'owner' ? '<div class="muted">owner</div>' : ''}`
+              : '<span class="muted">No login</span>'}</td>
             <td><span class="pill ${h.active ? 'on' : 'off'}">${h.active ? 'active' : 'off'}</span></td>
-            <td><button class="btn ghost" data-hedit="${h.id}">Edit</button>
-                <button class="btn ghost" data-hdel="${h.id}">Remove</button></td></tr>`).join('')}</tbody></table>`
+            <td style="white-space:nowrap"><button class="btn ghost" data-hedit="${h.id}">Edit</button>
+                <button class="btn ghost" data-haccess="${h.id}">${login ? 'Access' : 'Give a login'}</button>
+                <button class="btn ghost" data-hdel="${h.id}">Remove</button></td></tr>`;
+          }).join('')}</tbody></table>`
           : '<p class="empty">No staff yet — add the people visitors come to see.</p>'}</div>
+        <p class="muted"><b>Dashboard access</b> is separate from being someone a visitor can ask for. A staff member
+          with no login simply never signs in here.</p>
       </div>
 
       <div class="card section">
@@ -1761,6 +1781,105 @@
     $$('[data-hdel]').forEach((b) => b.addEventListener('click', () => confirmAction(
       'Remove this person? Past visits keep their name; they just stop being offered on the kiosk.',
       async () => { await api(`/staff/${b.dataset.hdel}`, { method: 'DELETE' }); render('staff'); })));
+
+    /**
+     * Dashboard access for one staff member, granted where the person already
+     * exists rather than as a second, unrelated list of accounts.
+     */
+    $$('[data-haccess]').forEach((b) => b.addEventListener('click', () => {
+      const staff = rows.find((h) => h.id === Number(b.dataset.haccess));
+      const login = loginFor(staff.id);
+      const owner = login && login.role === 'owner';
+      const iAmOwner = ME && ME.role === 'owner';
+
+      const options = levels
+        .filter((l) => l.key !== 'admin' || iAmOwner)
+        .map((l) => `<option value="${l.key}" ${login && login.role === l.key ? 'selected' : ''}>${esc(l.label)}</option>`)
+        .join('');
+
+      modal(`Dashboard access — ${staff.name}`, `
+        ${owner ? '<div class="notice">This is the owner account. Its access level cannot be changed, and it '
+          + 'cannot be removed — an install nobody can reach the settings on is an install nobody can fix.</div>' : ''}
+        ${login ? `<p class="muted">Signs in as <b>${esc(login.email)}</b>.</p>` : `
+          <label class="field"><span>Email to sign in with</span>
+            <input class="input" id="ax-email" type="email" value="${esc(staff.email || '')}"></label>`}
+        <label class="field"><span>Access level</span>
+          <select class="input" id="ax-role" ${owner ? 'disabled' : ''}>${options}</select>
+          <div class="muted" id="ax-describe" style="margin-top:.35rem"></div></label>
+        ${login ? '' : `
+          <label class="field"><span>Temporary password</span>
+            <input class="input" id="ax-pass" type="text" autocomplete="off">
+            <span class="muted">They will have to pick their own the first time they sign in, so this one
+              stops working the moment they do.</span></label>`}
+        ${login && !owner ? `
+          <div class="row" style="margin-top:1rem">
+            <button class="btn subtle" id="ax-reset" type="button">Reset their password</button>
+            <button class="btn ghost" id="ax-remove" type="button">Remove their login</button>
+          </div>` : ''}
+        <div id="ax-result"></div>`,
+      async (bg, close) => {
+        const role = $('#ax-role').value;
+        if (login) {
+          if (!owner) {
+            try {
+              await api(`/users/${login.id}`, { method: 'PATCH', body: { role } });
+              toast(`${staff.name} is now ${levelName(role)}`);
+            } catch (err) {
+              return toast((err.data && err.data.message) || 'Could not change that level');
+            }
+          }
+        } else {
+          const email = $('#ax-email').value.trim();
+          const password = $('#ax-pass').value;
+          if (!email) return toast('An email address is needed to sign in with');
+          if (String(password).length < 8) return toast('The temporary password needs at least 8 characters');
+          try {
+            await api('/users', { method: 'POST', body: {
+              email, password, name: staff.name, role, host_id: staff.id, must_change: true } });
+            toast(`${staff.name} can sign in as ${levelName(role)} with that password`, 6000);
+          } catch (err) {
+            return toast((err.data && err.data.message) || 'Could not create that login');
+          }
+        }
+        close();
+        render('staff');
+      }, login ? 'Save' : 'Create the login');
+
+      // What each level actually means, beside the picker rather than in a manual.
+      const describe = () => {
+        const chosen = levels.find((l) => l.key === $('#ax-role').value);
+        $('#ax-describe').textContent = chosen ? chosen.describe : '';
+      };
+      $('#ax-role').addEventListener('change', describe);
+      describe();
+      // A first password nobody has to invent.
+      const pass = $('#ax-pass');
+      if (pass) pass.value = Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 6);
+
+      const reset = $('#ax-reset');
+      if (reset) reset.addEventListener('click', async () => {
+        const next = prompt(`New temporary password for ${staff.name} — at least 8 characters.\n\n`
+          + 'They will be signed out everywhere and asked to pick their own.');
+        if (next === null) return;
+        try {
+          const r = await api(`/users/${login.id}/password`, { method: 'POST', body: { password: next } });
+          $('#ax-result').innerHTML = `<div class="notice">${esc(r.message)}</div>`;
+        } catch (err) {
+          $('#ax-result').innerHTML = `<div class="notice error">${esc((err.data && err.data.message) || 'Could not reset it.')}</div>`;
+        }
+      });
+
+      const remove = $('#ax-remove');
+      if (remove) remove.addEventListener('click', async () => {
+        if (!confirm(`Remove ${staff.name}'s login? They stay on the staff list — they just cannot sign in here.`)) return;
+        try {
+          await api(`/users/${login.id}`, { method: 'DELETE' });
+          toast('Login removed');
+          $('#modal-root').innerHTML = '';
+          render('staff');
+        } catch { toast('Could not remove that login'); }
+      });
+    }));
 
     $$('[data-hedit]').forEach((b) => b.addEventListener('click', () => {
       const person = rows.find((x) => String(x.id) === b.dataset.hedit);
@@ -4196,19 +4315,93 @@
 
   /* ----------------------------------------------------------------- init */
 
+  /** Everything this login is not allowed to reach simply is not drawn. */
+  function applyPermissions() {
+    const areas = (ME && ME.areas) || [];
+    $$('#nav [data-area]').forEach((el) => {
+      el.classList.toggle('hidden', !areas.includes(el.dataset.area));
+    });
+    // A heading whose every entry is hidden is a heading to nothing.
+    $$('#nav .subnav').forEach((sub) => {
+      const parent = $(`#nav > button[data-view="${sub.dataset.for}"]`);
+      const anyLeft = $$('button', sub).some((b) => !b.classList.contains('hidden'));
+      if (parent && !anyLeft) parent.classList.add('hidden');
+    });
+    $('#who').textContent = `${(ME && (ME.name || ME.email)) || ''}`
+      + (ME && ME.role && ME.role !== 'owner' ? ` · ${ME.role}` : '');
+  }
+
+  const allowed = (view) => {
+    const btn = $(`#nav [data-view="${view}"]`);
+    return !btn || !btn.dataset.area || ((ME && ME.areas) || []).includes(btn.dataset.area);
+  };
+
+  /**
+   * A login handed a temporary password picks its own before anything else.
+   *
+   * The server refuses everything but this until it is done, so this screen is
+   * the readable face of that rather than the thing enforcing it.
+   */
+  function forcePasswordChange() {
+    $('#shell').classList.add('hidden');
+    const gate = $('#gate');
+    gate.classList.remove('hidden');
+
+    /*
+     * The sign-in form already has its own submit handler bound. Replacing the
+     * element with a copy of itself is what drops that — otherwise both run,
+     * and the old one tries to sign in again with the fields now rearranged
+     * under it.
+     */
+    $('#gate-form').replaceWith($('#gate-form').cloneNode(true));
+
+    $('#gate-title').textContent = 'Choose a password';
+    $('#gate-sub').textContent = 'The password you were given is temporary. Pick your own to carry on.';
+    $('#gate-email').closest('label').hidden = true;
+    $('#gate-pass').closest('label').querySelector('span').textContent = 'Temporary password';
+    const extra = el(`<label class="field"><span>New password</span>
+      <input class="input" id="gate-new" type="password" autocomplete="new-password" required></label>`);
+    const again = el(`<label class="field"><span>New password again</span>
+      <input class="input" id="gate-again" type="password" autocomplete="new-password" required></label>`);
+    $('#gate-pass').closest('label').after(extra, again);
+    $('#gate-submit').textContent = 'Set my password';
+
+    $('#gate-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const box = $('#gate-error');
+      const next = $('#gate-new').value;
+      if (next !== $('#gate-again').value) {
+        box.textContent = 'The two new passwords do not match.';
+        return box.classList.remove('hidden');
+      }
+      try {
+        await api('/me/password', { method: 'POST', body: { current: $('#gate-pass').value, password: next } });
+        location.reload();
+      } catch (err) {
+        box.textContent = (err.data && err.data.message) || 'Could not set that password.';
+        box.classList.remove('hidden');
+      }
+    };
+  }
+
   async function start() {
     try {
       ME = await api('/me');
     } catch { return showGate(); }
-    SETTINGS = await api('/settings');
+    if (ME.must_change_password) return forcePasswordChange();
+    // Not the whole settings object: that is administrator-only, and every
+    // level needs the name, the colours and the site's clock.
+    SETTINGS = await api('/branding');
     document.documentElement.style.setProperty('--brand', SETTINGS.org.primary_color || '#2f7d5d');
     document.documentElement.style.setProperty('--brand-dark', SETTINGS.org.accent_color || '#123a2c');
     applyBranding();
-    $('#who').textContent = `${ME.name || ME.email}`;
+    applyPermissions();
     $('#shell').classList.remove('hidden');
     // #settings/retention opens the settings page on that panel.
     const [hashView, section] = (location.hash || '#dashboard').slice(1).split('/');
-    const view = VIEWS[hashView] ? hashView : 'dashboard';
+    // A link to a page this login cannot open lands on the dashboard rather
+    // than on an error, which is what a bookmark from a former role looks like.
+    const view = (VIEWS[hashView] && allowed(hashView)) ? hashView : 'dashboard';
     markNav(view, section);
     await render(view);
     if (view === 'settings' && section) openSection(section);

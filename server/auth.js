@@ -18,13 +18,14 @@ function parseCookies(req) {
   return out;
 }
 
-function createUser({ email, password, name, role = 'admin' }) {
+function createUser({ email, password, name, role = 'admin', hostId = null, mustChange = false }) {
   const hash = bcrypt.hashSync(password, 10);
   const res = run(
-    'INSERT INTO users (email, password_hash, name, role, active, created_at) VALUES (?,?,?,?,1,?)',
-    String(email).toLowerCase().trim(), hash, name || email, role, nowISO()
+    `INSERT INTO users (email, password_hash, name, role, host_id, must_change_password, active, created_at)
+     VALUES (?,?,?,?,?,?,1,?)`,
+    String(email).toLowerCase().trim(), hash, name || email, role, hostId, mustChange ? 1 : 0, nowISO()
   );
-  return get('SELECT id, email, name, role FROM users WHERE id = ?', res.lastInsertRowid);
+  return get('SELECT id, email, name, role, host_id, must_change_password FROM users WHERE id = ?', res.lastInsertRowid);
 }
 
 function verifyLogin(email, password) {
@@ -54,12 +55,16 @@ function currentUser(req) {
   const token = parseCookies(req)[COOKIE];
   if (!token) return null;
   const row = get(
-    `SELECT u.id, u.email, u.name, u.role FROM sessions s
+    `SELECT u.id, u.email, u.name, u.role, u.host_id, u.must_change_password FROM sessions s
      JOIN users u ON u.id = s.user_id
      WHERE s.token = ? AND s.expires_at > ? AND u.active = 1`,
     token, nowISO()
   );
-  return row || null;
+  if (!row) return null;
+  row.must_change_password = !!row.must_change_password;
+  // What this login may see, worked out here so nothing downstream has to.
+  row.areas = require('./roles').areasFor(row.role);
+  return row;
 }
 
 function requireAuth(req, res, next) {
@@ -76,9 +81,10 @@ function requireAuth(req, res, next) {
  * longer trustworthy, so leaving the other sessions signed in would defeat
  * the point. `keepToken` is the browser doing the changing, which stays.
  */
-function setPassword(userId, password, keepToken) {
+function setPassword(userId, password, keepToken, { mustChange = false } = {}) {
   if (!password || String(password).length < 8) throw new Error('weak_password');
-  run('UPDATE users SET password_hash = ? WHERE id = ?', bcrypt.hashSync(String(password), 10), userId);
+  run('UPDATE users SET password_hash = ?, must_change_password = ? WHERE id = ?',
+    bcrypt.hashSync(String(password), 10), mustChange ? 1 : 0, userId);
   if (keepToken) run('DELETE FROM sessions WHERE user_id = ? AND token != ?', userId, keepToken);
   else run('DELETE FROM sessions WHERE user_id = ?', userId);
 }

@@ -51,6 +51,8 @@ const SUITES = [
   { name: 'board', file: 'board-test.js' },
   { name: 'account', file: 'account-test.js' },
   { name: 'backup', file: 'backup-test.js' },
+  { name: 'roles', file: 'roles-test.js' },
+  { name: 'roles-ui', file: 'roles-ui-test.js', browser: true },
   { name: 'xss', file: 'xss-test.js', browser: true },
   { name: 'attack', file: 'attack-test.js' },
   { name: 'admin-smoke', file: 'admin-smoke.js', browser: true },

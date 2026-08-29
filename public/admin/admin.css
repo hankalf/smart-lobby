@@ -8,8 +8,19 @@
 .notice.error { background: #fdecea; color: var(--danger); }
 
 /* ----------------------------------------------------------------- shell */
-.shell { display: grid; grid-template-columns: 250px 1fr; min-height: 100vh; }
-.side { background: var(--brand-dark); color: #dfeae5; display: flex; flex-direction: column; padding: 1.25rem 1rem; gap: 1.25rem; }
+/*
+ * The menu stays where it is and the page scrolls beside it. With the whole
+ * window scrolling, "Sign out" and "Open kiosk" sat below the fold of a long
+ * visits list — you had to scroll to the bottom of somebody else's data to
+ * reach the buttons that belong to the app.
+ */
+.shell { display: grid; grid-template-columns: 250px 1fr; height: 100vh; overflow: hidden; }
+.side {
+  background: var(--brand-dark); color: #dfeae5; display: flex; flex-direction: column;
+  padding: 1.25rem 1rem; gap: 1.25rem;
+  /* Its own scrollbar, for when every settings sub-entry is showing. */
+  height: 100vh; overflow-y: auto;
+}
 .brand { display: flex; align-items: center; gap: .6rem; font-weight: 700; font-size: 1.05rem; color: #fff; }
 .brand-mark { width: 32px; height: 32px; border-radius: 9px; background: var(--brand); display: grid; place-items: center; font-size: .8rem; flex: 0 0 auto; }
 .brand-mark.has-logo { width: auto; height: auto; max-width: 120px; background: #fff; padding: 5px 7px; border-radius: 10px; }
@@ -27,13 +38,14 @@
 .side-foot .btn.link { color: #9fb8ae; text-align: left; }
 .side-foot .muted { color: #82998f; }
 
-.main { padding: 1.75rem 2rem 4rem; overflow-x: hidden; background: var(--bg); }
+.main { padding: 1.75rem 2rem 4rem; overflow-x: hidden; overflow-y: auto; height: 100vh; background: var(--bg); }
 @media (max-width: 860px) {
-  .shell { grid-template-columns: 1fr; }
-  .side { flex-direction: row; flex-wrap: wrap; align-items: center; }
+  /* Narrow screens stack it, and the window scrolls as one again. */
+  .shell { grid-template-columns: 1fr; height: auto; overflow: visible; }
+  .side { flex-direction: row; flex-wrap: wrap; align-items: center; height: auto; overflow: visible; }
   #nav { flex-direction: row; flex-wrap: wrap; }
   .side-foot { flex-direction: row; margin: 0; align-items: center; }
-  .main { padding: 1rem; }
+  .main { padding: 1rem; height: auto; overflow: visible; }
 }
 
 /* ---------------------------------------------------------------- layout */

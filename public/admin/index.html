@@ -31,13 +31,13 @@
   <aside class="side">
     <div class="brand"><span class="brand-mark" id="brand-mark">SL</span><span id="brand-name">Smart Lobby</span></div>
     <nav id="nav">
-      <button data-view="dashboard" class="active">Dashboard</button>
-      <button data-view="visits">Visits</button>
-      <button data-view="visitors">Visitor registry</button>
-      <button data-view="drivers">Drivers</button>
-      <button data-view="deliveries">Deliveries</button>
-      <button data-view="staff">Staff</button>
-      <button data-view="projects">Projects</button>
+      <button data-view="dashboard" data-area="dashboard" class="active">Dashboard</button>
+      <button data-view="visits" data-area="visits">Visits</button>
+      <button data-view="visitors" data-area="visitors">Visitor registry</button>
+      <button data-view="drivers" data-area="drivers">Drivers</button>
+      <button data-view="deliveries" data-area="deliveries">Deliveries</button>
+      <button data-view="staff" data-area="admin">Staff</button>
+      <button data-view="projects" data-area="projects">Projects</button>
 
       <!--
         Two parents with children. A parent that has no page of its own opens
@@ -45,35 +45,35 @@
         Children are either a whole view (data-view) or one panel on the
         settings page to open and jump to (data-section).
       -->
-      <button data-view="signin" data-group="signin">Sign-in setup</button>
+      <button data-view="signin" data-area="admin" data-group="signin">Sign-in setup</button>
       <div class="subnav" data-for="signin" hidden>
-        <button data-view="induction">Induction decks</button>
-        <button data-view="documents">Documents</button>
-        <button data-view="vtypes">Visitor types</button>
-        <button data-view="badges">Badges</button>
+        <button data-view="induction" data-area="admin">Induction decks</button>
+        <button data-view="documents" data-area="admin">Documents</button>
+        <button data-view="vtypes" data-area="admin">Visitor types</button>
+        <button data-view="badges" data-area="admin">Badges</button>
       </div>
 
-      <button data-view="reports">Reports</button>
-      <button data-view="settings" data-group="settings">Settings</button>
+      <button data-view="reports" data-area="reports">Reports</button>
+      <button data-view="settings" data-area="admin" data-group="settings">Settings</button>
       <div class="subnav" data-for="settings" hidden>
-        <button data-section="branding">Branding</button>
-        <button data-section="details">Visitor form</button>
-        <button data-section="flow">Kiosk sign-in flow</button>
-        <button data-section="badges">ID badge printing</button>
-        <button data-section="induction">Induction</button>
-        <button data-section="deliveries">Deliveries</button>
-        <button data-section="access">Access control</button>
-        <button data-section="notifications">Notifications</button>
-        <button data-view="devices">Devices</button>
-        <button data-view="printers">Printers</button>
-        <button data-view="access">Access &amp; doors</button>
-        <button data-view="locations">Locations</button>
-        <button data-section="board">Live on-site board</button>
-        <button data-section="retention">Data retention &amp; privacy</button>
-        <button data-section="backups">Backups</button>
-        <button data-section="deleted">Deleted records</button>
-        <button data-section="users">Admin users</button>
-        <button data-section="activity">Activity log</button>
+        <button data-area="admin" data-section="branding">Branding</button>
+        <button data-area="admin" data-section="details">Visitor form</button>
+        <button data-area="admin" data-section="flow">Kiosk sign-in flow</button>
+        <button data-area="admin" data-section="badges">ID badge printing</button>
+        <button data-area="admin" data-section="induction">Induction</button>
+        <button data-area="admin" data-section="deliveries">Deliveries</button>
+        <button data-area="admin" data-section="access">Access control</button>
+        <button data-area="admin" data-section="notifications">Notifications</button>
+        <button data-view="devices" data-area="admin">Devices</button>
+        <button data-view="printers" data-area="admin">Printers</button>
+        <button data-view="access" data-area="admin">Access &amp; doors</button>
+        <button data-view="locations" data-area="admin">Locations</button>
+        <button data-area="admin" data-section="board">Live on-site board</button>
+        <button data-area="admin" data-section="retention">Data retention &amp; privacy</button>
+        <button data-area="admin" data-section="backups">Backups</button>
+        <button data-area="admin" data-section="deleted">Deleted records</button>
+        <button data-area="admin" data-section="users">Admin users</button>
+        <button data-area="admin" data-section="activity">Activity log</button>
       </div>
     </nav>
     <div class="side-foot">

@@ -32,6 +32,29 @@ installation.
 
 To use a different port: `PORT=3010 npm start`.
 
+### Access levels
+
+Logins are granted from the **Staff** tab, against the person who already exists there. Four levels:
+
+| | Sees |
+|---|---|
+| Reception | Dashboard, Visits, Visitor registry, Projects, Reports |
+| Clerk | Dashboard, Drivers, Deliveries |
+| Manager | Everything reception and clerk can do |
+| Administrator | Everything, including settings, backups, accounts and deleted records |
+
+The first account is the **owner** — an administrator that cannot be demoted or removed, because an
+install nobody can reach the settings on is an install nobody can fix. Only the owner can grant
+administrator.
+
+`server/roles.js` is the single place that decides. The dashboard reads it to know which tabs to
+draw, and every request is checked against it on the way in: a route not named there needs
+administrator, so forgetting to classify a new one leaves a locked door rather than an open one.
+
+A password set by somebody else is temporary. Until it is changed the login can do exactly two
+things — read who it is, and change it — so whoever typed it does not go on being able to sign in
+as that person.
+
 ### Nobody can sign in
 
 There is no reset email to send, so the way back in is on the machine holding the data:

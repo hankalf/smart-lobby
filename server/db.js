@@ -436,6 +436,20 @@ function migrate() {
   addColumn('notifications', 'attempts', 'INTEGER NOT NULL DEFAULT 1');
   addColumn('notifications', 'payload', 'TEXT');
   addColumn('notifications', 'next_try_at', 'TEXT');
+
+  /*
+   * Access levels. Everyone with a login used to see everything: one role,
+   * 'admin', which meant the whole dashboard including the settings, the
+   * archive and every other account. Reception does not need the backups and
+   * the person booking deliveries does not need the visitor registry.
+   *
+   * The login can also be tied to a staff member, so it is granted where the
+   * person already exists rather than as a second, unrelated list — and a
+   * first password can be made temporary, so whoever set it does not go on
+   * knowing it.
+   */
+  addColumn('users', 'host_id', 'INTEGER');
+  addColumn('users', 'must_change_password', 'INTEGER NOT NULL DEFAULT 0');
   backfillDeviceSlugs();
   exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_slug ON devices(slug)');
   /*

@@ -14,6 +14,7 @@ const deviceSlugs = require('../devices');
 const ratelimit = require('../ratelimit');
 const archive = require('../archive');
 const cards = require('../notify-card');
+const roles = require('../roles');
 
 const router = express.Router();
 const clean = (v) => (typeof v === 'string' ? v.trim() : v);
@@ -110,12 +111,48 @@ router.post('/login', loginLimit, (req, res) => {
   ratelimit.clear('login-ip', req);
   ratelimit.clear('login-user', req, (r) => String((r.body && r.body.email) || '').toLowerCase());
   auth.startSession(res, user);
-  res.json({ ok: true, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
+  res.json({
+    ok: true,
+    user: {
+      id: user.id, email: user.email, name: user.name, role: user.role,
+      areas: roles.areasFor(user.role),
+      must_change_password: !!user.must_change_password
+    }
+  });
 });
 
 router.post('/logout', (req, res) => { auth.endSession(req, res); res.json({ ok: true }); });
 
 router.use(auth.requireAuth);
+
+/*
+ * The permission check, on every request rather than in the menu.
+ *
+ * Hiding a tab from somebody who can still call the endpoint behind it is not
+ * a permission system, so this sits ahead of every route below and asks
+ * roles.js the same question the dashboard asks when it decides what to draw.
+ *
+ * A login carrying a temporary password can do exactly two things until it is
+ * changed: read who it is, and change it. Otherwise "you must pick a password"
+ * would be a suggestion.
+ */
+router.use((req, res, next) => {
+  if (req.user.must_change_password && !(req.path === '/me' || req.path === '/me/password')) {
+    return res.status(403).json({
+      error: 'password_change_required',
+      message: 'Choose a new password before going any further.'
+    });
+  }
+  const area = roles.areaForRequest(req.method, req.path);
+  if (area && !roles.can(req.user.role, area)) {
+    return res.status(403).json({
+      error: 'not_allowed',
+      area,
+      message: `Your access level does not include ${area}.`
+    });
+  }
+  next();
+});
 
 // Any successful change in the dashboard bumps the configuration revision, so
 // every kiosk picks it up on its next check-in without anybody touching them.
@@ -130,6 +167,19 @@ router.use((req, res, next) => {
 });
 
 router.get('/me', (req, res) => res.json(req.user));
+
+/**
+ * Just enough for the dashboard to draw itself: the name, the colours, the
+ * time zone every timestamp is formatted in, and the visitor-type labels.
+ *
+ * The whole settings object is administrator-only — it holds the Teams webhook
+ * and the board key — but reception still needs times shown on the site's own
+ * clock, so this is the part everybody signed in may read.
+ */
+router.get('/branding', (req, res) => {
+  const s = settings.getAll();
+  res.json({ org: s.org, types: s.types, kiosk: { spanish_enabled: s.kiosk.spanish_enabled } });
+});
 
 /* ------------------------------------------------------------- dashboard */
 
@@ -1402,16 +1452,60 @@ router.post('/board/camera-test', async (req, res) => {
 
 /* ----------------------------------------------------------------- users */
 
-router.get('/users', (req, res) => res.json(all('SELECT id, email, name, role, active, created_at FROM users ORDER BY id')));
+router.get('/users', (req, res) => res.json(all(
+  `SELECT u.id, u.email, u.name, u.role, u.active, u.created_at, u.host_id, u.must_change_password,
+          h.name AS staff_name
+   FROM users u LEFT JOIN hosts h ON h.id = u.host_id ORDER BY u.id`)));
+
+/** The access levels themselves, so the dashboard need not hard-code them. */
+router.get('/roles', (req, res) => res.json(roles.describe()));
 
 router.post('/users', (req, res) => {
-  const { email, password, name, role } = req.body || {};
+  const { email, password, name, role, host_id, must_change } = req.body || {};
   if (!email || !password || String(password).length < 8) return res.status(400).json({ error: 'weak_credentials' });
-  try {
-    res.json(auth.createUser({ email, password, name, role: role || 'admin' }));
-  } catch (err) {
-    res.status(400).json({ error: 'user_exists' });
+  if (role && !roles.ROLES[role]) return res.status(400).json({ error: 'unknown_role' });
+  // Only an owner hands out administrator, or an administrator could quietly
+  // promote themselves past whoever set them up.
+  if (roles.isAdmin(role || 'admin') && req.user.role !== 'owner') {
+    return res.status(403).json({ error: 'owner_only', message: 'Only the owner can create an administrator.' });
   }
+  try {
+    const created = auth.createUser({
+      email, password, name, role: role || 'reception',
+      hostId: host_id || null,
+      // The person setting it up should not go on knowing the password.
+      mustChange: must_change !== false
+    });
+    audit(req, 'create', 'user', created.id, { email: created.email, role: created.role });
+    res.json(created);
+  } catch (err) {
+    res.status(400).json({ error: 'user_exists', message: 'There is already a login with that email address.' });
+  }
+});
+
+/** Change somebody's access level, or which staff member their login belongs to. */
+router.patch('/users/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const target = get('SELECT id, role, email FROM users WHERE id = ?', id);
+  if (!target) return res.status(404).json({ error: 'not_found' });
+  if (target.role === 'owner') {
+    return res.status(400).json({ error: 'owner_fixed', message: 'The owner\'s access level cannot be changed.' });
+  }
+  if (id === req.user.id) {
+    return res.status(400).json({ error: 'not_your_own', message: 'You cannot change your own access level.' });
+  }
+  const b = req.body || {};
+  if (b.role !== undefined) {
+    if (!roles.ROLES[b.role] || b.role === 'owner') return res.status(400).json({ error: 'unknown_role' });
+    if (roles.isAdmin(b.role) && req.user.role !== 'owner') {
+      return res.status(403).json({ error: 'owner_only', message: 'Only the owner can grant administrator.' });
+    }
+    run('UPDATE users SET role = ? WHERE id = ?', b.role, id);
+  }
+  if (b.host_id !== undefined) run('UPDATE users SET host_id = ? WHERE id = ?', b.host_id || null, id);
+  if (b.active !== undefined) run('UPDATE users SET active = ? WHERE id = ?', b.active ? 1 : 0, id);
+  audit(req, 'update', 'user', id, b);
+  res.json(get('SELECT id, email, name, role, active, host_id, must_change_password FROM users WHERE id = ?', id));
 });
 
 router.delete('/users/:id', (req, res) => {
@@ -1443,7 +1537,7 @@ router.post('/me/password', passwordLimit, (req, res) => {
   if (!password || String(password).length < 8) {
     return res.status(400).json({ error: 'weak_password', message: 'Use at least 8 characters.' });
   }
-  auth.setPassword(req.user.id, password, auth.parseCookies(req)[auth.COOKIE]);
+  auth.setPassword(req.user.id, password, auth.parseCookies(req)[auth.COOKIE], { mustChange: false });
   audit(req, 'password_change', 'user', req.user.id);
   res.json({ ok: true, message: 'Password changed. Any other browser signed in as you has been signed out.' });
 });
@@ -1454,7 +1548,9 @@ router.post('/me/password', passwordLimit, (req, res) => {
  * that path asks for the current password above.
  */
 router.post('/users/:id/password', (req, res) => {
-  if (req.user.role !== 'owner') return res.status(403).json({ error: 'owner_only', message: 'Only the owner can reset a password.' });
+  if (!roles.isAdmin(req.user.role)) {
+    return res.status(403).json({ error: 'not_allowed', message: 'Only an administrator can reset a password.' });
+  }
   const id = Number(req.params.id);
   if (id === req.user.id) return res.status(400).json({ error: 'use_own_form', message: 'Change your own password under Your account.' });
   const target = get('SELECT id, email FROM users WHERE id = ?', id);
@@ -1463,9 +1559,17 @@ router.post('/users/:id/password', (req, res) => {
   if (!password || String(password).length < 8) {
     return res.status(400).json({ error: 'weak_password', message: 'Use at least 8 characters.' });
   }
-  auth.setPassword(id, password);
-  audit(req, 'password_reset', 'user', id, { email: target.email });
-  res.json({ ok: true, message: `${target.email} can now sign in with that password. They were signed out everywhere.` });
+  // Temporary unless explicitly set otherwise: whoever typed it should not go
+  // on being able to sign in as that person.
+  const temporary = (req.body || {}).must_change !== false;
+  auth.setPassword(id, password, null, { mustChange: temporary });
+  audit(req, 'password_reset', 'user', id, { email: target.email, temporary });
+  res.json({
+    ok: true,
+    temporary,
+    message: `${target.email} can now sign in with that password. They were signed out everywhere`
+      + (temporary ? ', and will have to pick their own before they can do anything.' : '.')
+  });
 });
 
 /* ----------------------------------------------------------------- stats */
