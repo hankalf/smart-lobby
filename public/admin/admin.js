@@ -557,6 +557,21 @@
    * only somebody who thought to open the activity list would ever see them.
    * These say it on the page people actually look at.
    */
+  /*
+   * Wired after the dashboard is drawn, because the notice it belongs to is
+   * built as a string like the rest of them.
+   */
+  function wireExampleClear() {
+    const b = $('#clear-examples');
+    if (!b) return;
+    b.addEventListener('click', async () => {
+      if (!confirm('Remove the four example visitors and their visits? Your own records are untouched.')) return;
+      const r = await api('/examples', { method: 'DELETE' });
+      toast(`${r.removed} example${r.removed === 1 ? '' : 's'} cleared`);
+      render('dashboard');
+    });
+  }
+
   function healthNotices(h) {
     if (!h) return '';
     const out = [];
@@ -569,6 +584,20 @@
       out.push(`<div class="notice">${n.waiting} notification${n.waiting === 1 ? ' is' : 's are'} waiting to be
         sent again after a failure.</div>`);
     }
+    if (h.examples && h.examples.present && h.examples.real_visits) {
+      out.push(`<div class="notice">Your own visits have started arriving, so the example records this site was
+        set up with have done their job. <button class="btn link" id="clear-examples">Clear them out</button></div>`);
+    }
+
+    const c = h.compliance || {};
+    if (c.enabled && (c.expired || c.expiring)) {
+      const bits = [];
+      if (c.expired) bits.push(`<b>${c.expired} certificate${c.expired === 1 ? ' has' : 's have'} lapsed.</b>`);
+      if (c.expiring) bits.push(`${c.expiring} run${c.expiring === 1 ? 's' : ''} out within ${c.warn_days} days.`);
+      out.push(`<div class="notice${c.expired ? ' error' : ''}">${bits.join(' ')}
+        Whoever they belong to may be turned away at the gate — the list is under <b>Certificates</b>.</div>`);
+    }
+
     const b = h.backup || {};
     if (b.pending_restore) {
       out.push(`<div class="notice"><b>A restore is waiting to be applied.</b> It takes effect the next time the
@@ -632,6 +661,7 @@
         </div>
       </div>`;
 
+    wireExampleClear();
     $('#btn-rollcall').addEventListener('click', rollCall);
     $('#btn-signout-all').addEventListener('click', () => confirmAction(
       'Sign out every person currently on site?',
@@ -2895,6 +2925,281 @@
 
   /* ------------------------------------------------------------- projects */
 
+  /* ----------------------------------------------------------- compliance */
+
+  const DATE_ONLY = (d) => (d ? String(d).slice(0, 10) : '');
+
+  /*
+   * The paperwork that says somebody may work here, and stops saying it.
+   *
+   * The list leads with what has already lapsed, because that is the row
+   * somebody has to act on today — not the one running out in three weeks.
+   */
+  VIEWS.compliance = async (root) => {
+    const data = await api('/certificates');
+    const rows = data.expiring || [];
+    const kinds = data.kinds || [];
+    const expired = rows.filter((r) => r.expired);
+    const soon = rows.filter((r) => !r.expired);
+    const s = SETTINGS && SETTINGS.compliance ? SETTINGS.compliance : {};
+
+    root.innerHTML = `
+      <h1 class="page">Certificates</h1>
+      <p class="page-sub">Insurance, safety cards and method statements — the paperwork with a date on it. Held
+        against a company, so one policy covers all their people, or against one person for their own card.</p>
+
+      ${!data.health.enabled ? `<div class="notice"><b>Checking is switched off.</b> Certificates can be recorded and
+        this page will still warn you before they lapse, but nothing is checked at the kiosk until you turn it on
+        under <b>Settings → Certificates</b>.</div>` : ''}
+
+      <div class="grid cards" style="margin-bottom:1.25rem">
+        <div class="card stat"><div class="n">${expired.length}</div><div class="l">Out of date now</div></div>
+        <div class="card stat"><div class="n">${soon.length}</div>
+          <div class="l">Running out within ${esc(String(data.health.warn_days || 30))} days</div></div>
+      </div>
+
+      <div class="card section">
+        <div class="row between" style="margin-bottom:.5rem">
+          <h2 style="margin:0">What needs chasing</h2>
+          <button class="btn" id="cert-add">Record a certificate</button>
+        </div>
+        <div class="table-wrap">${rows.length ? `<table>
+          <thead><tr><th>Held by</th><th>Certificate</th><th>Reference</th><th>Expires</th><th></th></tr></thead>
+          <tbody>${rows.map((r) => `<tr>
+            <td><b>${esc(r.holder)}</b><div class="muted">${r.company_id ? 'Company' : 'Person'}</div></td>
+            <td>${esc(r.label)}</td>
+            <td class="muted">${esc(r.reference || '—')}</td>
+            <td><span class="pill ${r.expired ? 'off' : 'on'}">${esc(DATE_ONLY(r.expires_on))}</span>
+              <div class="muted">${r.expired
+                ? `${Math.abs(r.days_left)} day${Math.abs(r.days_left) === 1 ? '' : 's'} ago`
+                : `in ${r.days_left} day${r.days_left === 1 ? '' : 's'}`}</div></td>
+            <td style="white-space:nowrap">
+              <button class="btn ghost" data-certedit="${r.id}">Edit</button>
+              <button class="btn ghost" data-certdel="${r.id}">Remove</button></td>
+          </tr>`).join('')}</tbody></table>`
+          : '<p class="empty">Nothing lapsing. Certificates with no expiry date never appear here.</p>'}</div>
+      </div>`;
+
+    $('#cert-add').addEventListener('click', () => certificateForm(null, kinds));
+    $$('[data-certedit]').forEach((b) => b.addEventListener('click',
+      () => certificateForm(rows.find((r) => r.id === Number(b.dataset.certedit)), kinds)));
+    $$('[data-certdel]').forEach((b) => b.addEventListener('click', async () => {
+      if (!confirm('Remove this certificate? The record of it goes; nobody is turned away for it afterwards.')) return;
+      await api(`/certificates/${b.dataset.certdel}`, { method: 'DELETE' });
+      render('compliance');
+    }));
+  };
+
+  /**
+   * Record or correct one certificate.
+   *
+   * Whose it is comes first, because a company policy and a personal card are
+   * different things and picking the wrong one is how a gate lets the wrong
+   * person through.
+   */
+  async function certificateForm(existing, kinds) {
+    const [companies, people] = await Promise.all([
+      api('/companies').then((d) => d.companies || []).catch(() => []),
+      api('/visitors').catch(() => [])
+    ]);
+    const isCompany = !existing || !!existing.company_id;
+    const m = modal(existing ? 'Edit certificate' : 'Record a certificate', `
+      <div class="form-grid">
+        <label class="field"><span>Held by</span>
+          <select class="input" id="cf-holder">
+            <option value="company" ${isCompany ? 'selected' : ''}>A company — covers all their people</option>
+            <option value="visitor" ${isCompany ? '' : 'selected'}>One person — their own card</option>
+          </select></label>
+        <label class="field" id="cf-kind-wrap"><span>Kind</span>
+          <select class="input" id="cf-kind">
+            ${kinds.map((k) => `<option value="${esc(k.key)}"
+              ${existing && existing.kind === k.key ? 'selected' : ''}>${esc(k.label)}</option>`).join('')}
+          </select></label>
+      </div>
+      <label class="field" id="cf-company-wrap"><span>Company</span>
+        <select class="input" id="cf-company">
+          ${companies.map((c) => `<option value="${c.id}"
+            ${existing && existing.company_id === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')
+            || '<option value="">No companies yet</option>'}
+        </select></label>
+      <label class="field hidden" id="cf-visitor-wrap"><span>Person</span>
+        <select class="input" id="cf-visitor">
+          ${people.slice(0, 300).map((p) => `<option value="${p.id}"
+            ${existing && existing.visitor_id === p.id ? 'selected' : ''}>${esc(p.full_name)}${p.company
+              ? ` — ${esc(p.company)}` : ''}</option>`).join('') || '<option value="">Nobody on file yet</option>'}
+        </select></label>
+      <div class="form-grid">
+        <label class="field"><span>Reference</span>
+          <input class="input" id="cf-ref" value="${esc((existing && existing.reference) || '')}"
+            placeholder="Policy or card number"></label>
+        <label class="field"><span>Expires</span>
+          <input class="input" id="cf-expires" type="date" value="${esc(DATE_ONLY(existing && existing.expires_on))}">
+          <span class="muted">Leave empty for something that does not expire</span></label>
+      </div>
+      <label class="field"><span>Notes</span>
+        <textarea class="input" id="cf-notes" rows="2">${esc((existing && existing.notes) || '')}</textarea></label>`,
+      async (bg, close) => {
+        const holder = $('#cf-holder', bg).value;
+        const body = {
+          kind: $('#cf-kind', bg).value,
+          reference: $('#cf-ref', bg).value.trim(),
+          expires_on: $('#cf-expires', bg).value || null,
+          notes: $('#cf-notes', bg).value.trim()
+        };
+        if (holder === 'company') { body.company_id = Number($('#cf-company', bg).value) || null; body.visitor_id = null; }
+        else { body.visitor_id = Number($('#cf-visitor', bg).value) || null; body.company_id = null; }
+        const r = existing
+          ? await api(`/certificates/${existing.id}`, { method: 'PATCH', body })
+          : await api('/certificates', { method: 'POST', body });
+        if (r && r.error) return toast(r.message || 'Could not save');
+        close();
+        render('compliance');
+      });
+
+    const swap = () => {
+      const company = $('#cf-holder', m.bg).value === 'company';
+      $('#cf-company-wrap', m.bg).classList.toggle('hidden', !company);
+      $('#cf-visitor-wrap', m.bg).classList.toggle('hidden', company);
+    };
+    $('#cf-holder', m.bg).addEventListener('change', swap);
+    swap();
+  }
+
+  /* ------------------------------------------------------------ companies */
+
+  /*
+   * The firms people come from, as records rather than as whatever was typed
+   * at the kiosk that morning. The two things worth doing here are correcting
+   * a name — which corrects it on every visit already recorded — and merging
+   * two that turn out to be the same firm.
+   */
+  VIEWS.companies = async (root) => {
+    const data = await api('/companies');
+    const rows = data.companies || [];
+    const dupes = data.possible_duplicates || [];
+
+    root.innerHTML = `
+      <h1 class="page">Companies</h1>
+      <p class="page-sub">Every firm that has been on site. A name typed wrong at the kiosk is corrected here, and
+        two that are the same firm can be merged — both fix every visit already recorded, not just the next one.</p>
+
+      ${dupes.length ? `<div class="card section" id="dupe-card">
+        <h2>These look like the same firm</h2>
+        <p class="muted" style="margin-top:0">Suggestions only — similar names are sometimes two real companies.
+          Merging keeps everybody and everything they have done.</p>
+        <div class="section-order">
+          ${dupes.map((d) => `<div class="section-row">
+            <span><b>${esc(d.a.name)}</b> and <b>${esc(d.b.name)}</b></span>
+            <span class="flow-moves">
+              <button class="btn ghost" data-mergedupe="${d.b.id}:${d.a.id}">Keep “${esc(d.a.name)}”</button>
+              <button class="btn ghost" data-mergedupe="${d.a.id}:${d.b.id}">Keep “${esc(d.b.name)}”</button>
+            </span></div>`).join('')}
+        </div>
+      </div>` : ''}
+
+      <div class="card section">
+        <div class="inline-form" style="margin-bottom:1rem">
+          <label class="field"><span>Add a company</span><input class="input" id="co-name" placeholder="Acme Roofing Ltd"></label>
+          <button class="btn" id="co-add">Add</button>
+          <input class="input" id="co-find" placeholder="Search" style="max-width:14rem">
+        </div>
+        <div class="table-wrap">${rows.length ? `<table>
+          <thead><tr><th>Company</th><th>People</th><th>Visits</th><th>Last on site</th><th>Status</th><th></th></tr></thead>
+          <tbody id="co-rows">${rows.map((c) => `<tr data-co="${c.id}" data-name="${esc((c.name || '').toLowerCase())}">
+            <td><b>${esc(c.name)}</b>${c.notes ? `<div class="muted">${esc(c.notes)}</div>` : ''}</td>
+            <td>${c.people}</td><td>${c.visits}</td>
+            <td class="muted">${c.last_visit_at ? esc(fmtDate(c.last_visit_at)) : '—'}</td>
+            <td><span class="pill ${c.blocked ? 'off' : 'on'}">${c.blocked ? 'barred' : 'allowed'}</span></td>
+            <td style="white-space:nowrap">
+              <button class="btn ghost" data-coedit="${c.id}">Edit</button>
+              <button class="btn ghost" data-comerge="${c.id}">Merge</button>
+              <button class="btn ghost" data-codel="${c.id}">Remove</button></td>
+          </tr>`).join('')}</tbody></table>`
+          : '<p class="empty">No companies yet. They appear as people sign in.</p>'}</div>
+        <p class="muted">Barring a company turns away everybody from it at the kiosk, with the same “please see
+          reception” a barred individual gets. Removing one leaves its people and their history alone — they simply
+          stop being attached to a firm.</p>
+      </div>`;
+
+    $('#co-find').addEventListener('input', (e) => {
+      const needle = e.target.value.trim().toLowerCase();
+      $$('#co-rows tr').forEach((tr) => { tr.hidden = !!needle && !tr.dataset.name.includes(needle); });
+    });
+
+    $('#co-add').addEventListener('click', async () => {
+      const name = $('#co-name').value.trim();
+      if (!name) return toast('Give the company a name');
+      await api('/companies', { method: 'POST', body: { name } });
+      render('companies');
+    });
+
+    $$('[data-coedit]').forEach((b) => b.addEventListener('click', () => editCompany(Number(b.dataset.coedit), rows)));
+    $$('[data-comerge]').forEach((b) => b.addEventListener('click', () => mergeCompany(Number(b.dataset.comerge), rows)));
+    $$('[data-codel]').forEach((b) => b.addEventListener('click', async () => {
+      const c = rows.find((x) => x.id === Number(b.dataset.codel));
+      if (!confirm(`Remove ${c.name}? Its ${c.people} ${c.people === 1 ? 'person keeps' : 'people keep'} `
+        + 'their history — they just stop being attached to a firm.')) return;
+      await api(`/companies/${c.id}`, { method: 'DELETE' });
+      render('companies');
+    }));
+    $$('[data-mergedupe]').forEach((b) => b.addEventListener('click', async () => {
+      const [from, into] = b.dataset.mergedupe.split(':').map(Number);
+      await doMerge(from, into, rows);
+    }));
+  };
+
+  function editCompany(id, rows) {
+    const c = rows.find((x) => x.id === id);
+    const m = modal(`Edit ${c.name}`, `
+      <label class="field"><span>Name</span><input class="input" id="ce-name" value="${esc(c.name)}">
+        <span class="muted">Correcting a spelling here corrects it on all ${c.visits} visit${c.visits === 1 ? '' : 's'}
+          already recorded, not only the next one.</span></label>
+      <label class="field"><span>Notes</span><textarea class="input" id="ce-notes" rows="3">${esc(c.notes || '')}</textarea></label>
+      <label class="check"><input type="checkbox" id="ce-blocked" ${c.blocked ? 'checked' : ''}>
+        <span>Bar this company from site<br><span class="muted">Everybody from it is turned away at the kiosk with
+          “please see reception”</span></span></label>`,
+      async (bg, close) => {
+        const r = await api(`/companies/${id}`, { method: 'PATCH', body: {
+          name: $('#ce-name', bg).value.trim(),
+          notes: $('#ce-notes', bg).value.trim(),
+          blocked: $('#ce-blocked', bg).checked
+        } });
+        if (r && r.error) return toast(r.message || 'Could not save');
+        close();
+        render('companies');
+      });
+    return m;
+  }
+
+  function mergeCompany(id, rows) {
+    const c = rows.find((x) => x.id === id);
+    const others = rows.filter((x) => x.id !== id);
+    if (!others.length) return toast('There is nothing to merge it with');
+    modal(`Merge ${c.name} into another company`, `
+      <p class="muted" style="margin-top:0">Everybody from <b>${esc(c.name)}</b> moves across and the name on their
+        visits is corrected. <b>${esc(c.name)}</b> is then removed. Nothing is lost — a person's history is theirs,
+        so it travels with them.</p>
+      <label class="field"><span>Keep which company?</span>
+        <select class="input" id="cm-into">
+          ${others.map((o) => `<option value="${o.id}">${esc(o.name)} — ${o.people} `
+            + `${o.people === 1 ? 'person' : 'people'}</option>`).join('')}
+        </select></label>`,
+      async (bg, close) => {
+        close();
+        await doMerge(id, Number($('#cm-into', bg).value), rows);
+      }, 'Merge');
+  }
+
+  async function doMerge(fromId, intoId, rows) {
+    const from = rows.find((x) => x.id === fromId);
+    const into = rows.find((x) => x.id === intoId);
+    const r = await api(`/companies/${fromId}/merge`, { method: 'POST', body: { into: intoId } });
+    if (r && r.error) return toast(r.message || 'Could not merge');
+    toast(`${from ? from.name : 'That company'} folded into ${into ? into.name : 'the other'} — `
+      + `${r.moved} ${r.moved === 1 ? 'person' : 'people'} moved`, 5000);
+    render('companies');
+  }
+
   VIEWS.projects = async (root) => {
     const rows = await api('/projects');
     root.innerHTML = `
@@ -3528,6 +3833,51 @@
         ${chk('deliveries.signature_on_collection', 'Capture a signature on collection')}
       </div>
 
+      <div class="card section" id="set-compliance"><h2>Certificates</h2>
+        <p class="muted" style="margin-top:0">Insurance, safety cards, method statements — paperwork with a date on
+          it. Recorded under <b>Certificates</b> in the menu; this decides what is insisted on, and what happens at
+          the kiosk when it has lapsed.</p>
+        <div class="check-list">
+          ${chk('compliance.enabled', 'Check certificates when somebody signs in',
+            'With this off nothing is checked at the gate, but the Certificates page still warns you before one lapses')}
+        </div>
+        <div class="form-grid">
+          <label class="field"><span>When something is missing or out of date</span>
+            <select class="input" data-set="compliance.on_fail">
+              <option value="warn" ${s.compliance.on_fail !== 'block' ? 'selected' : ''}>Let them in, and say so at the desk</option>
+              <option value="block" ${s.compliance.on_fail === 'block' ? 'selected' : ''}>Turn them away — see reception</option>
+            </select>
+            <span class="muted">Start with the first. A closed gate on the day you switch this on, before anything
+              has been uploaded, turns everybody away at once.</span></label>
+          <label class="field"><span>Warn this many days ahead</span>
+            <input class="input" data-set="compliance.warn_days" type="number" min="1" max="365"
+              value="${esc(s.compliance.warn_days ?? 30)}"></label>
+        </div>
+
+        <h3>What each visitor type must have</h3>
+        <p class="muted" style="margin-top:0">A firm's certificate covers all of its people; a person's own covers
+          only them. Either satisfies the requirement.</p>
+        <div class="route-cards">
+          ${routeTypes().map((ty) => {
+            const need = ((s.compliance.required || {})[ty.key] || []);
+            return `<div class="route-card" data-needcard="${esc(ty.key)}">
+              <div class="route-head">
+                <span class="route-icon">${esc(ty.icon)}</span>
+                <span class="route-label">${esc(ty.label)}</span>
+              </div>
+              <div class="route-body">
+                <div class="route-people">
+                  ${(s.compliance.kinds || []).map((k) => `<label class="check route-person">
+                    <input type="checkbox" data-needkind="${esc(ty.key)}" value="${esc(k.key)}"
+                      ${need.includes(k.key) ? 'checked' : ''}> <span>${esc(k.label)}</span></label>`).join('')
+                    || '<p class="muted" style="margin:0">No kinds of certificate set up yet.</p>'}
+                </div>
+              </div>
+            </div>`;
+          }).join('') || '<div class="section-row off"><span>No visitor types yet.</span></div>'}
+        </div>
+      </div>
+
       <div class="card section" id="set-access"><h2>Access control</h2>
         <p class="muted" style="margin-top:0">Releasing a door or gate from the kiosk.
           <b>Request entry</b> puts a button on the kiosk home screen for somebody who needs letting in without
@@ -3616,6 +3966,13 @@
                     <option value="person">Circle</option>
                     <option value="square">Square</option>
                   </select></label>
+                <label class="field"><span>Size</span>
+                  <select class="input" id="cd-photo-size">
+                    <option value="small">Small</option>
+                    <option value="medium">Medium</option>
+                    <option value="large">Large</option>
+                  </select>
+                  <span class="muted">A face you can recognise across a desk is the point of having one</span></label>
               </div>
             </div>
             <div id="cd-photo-warning"></div>
@@ -3920,6 +4277,7 @@
       }
       if (VIEWS.settings.collectNotifyTypes) setPath(patch, 'notify.types_notified', VIEWS.settings.collectNotifyTypes());
       if (VIEWS.settings.collectRouting) setPath(patch, 'notify.type_routing', VIEWS.settings.collectRouting());
+      if (VIEWS.settings.collectRequired) setPath(patch, 'compliance.required', VIEWS.settings.collectRequired());
       SETTINGS = await api('/settings', { method: 'PUT', body: patch });
       // A rejected value — a time zone Intl cannot parse — is worth interrupting
       // for, because it was not saved and nothing else on screen would say so.
@@ -3995,6 +4353,7 @@
       cdSet('#cd-footer', card.footer_template);
       cdSet('#cd-photo-place', card.photo_placement || 'left');
       cdSet('#cd-photo-shape', card.photo_shape || 'person');
+      cdSet('#cd-photo-size', card.photo_size || 'large');
       cdSet('#cd-mention-line', card.mention_template || def.defaults.mention_template);
       cdSet('#cd-also-line', card.also_template);
       $('#cd-photo').checked = card.show_photo !== false;
@@ -4019,6 +4378,7 @@
       card.show_photo = $('#cd-photo').checked;
       card.photo_placement = $('#cd-photo-place').value;
       card.photo_shape = $('#cd-photo-shape').value;
+      card.photo_size = $('#cd-photo-size').value;
       card.mention_host = $('#cd-mention').checked;
       card.mention_template = $('#cd-mention-line').value;
       card.also_template = $('#cd-also-line').value;
@@ -4047,6 +4407,15 @@
     VIEWS.settings.collectNotifyTypes = () => {
       const out = {};
       $$('[data-notifytype]').forEach((el) => { out[el.dataset.notifytype] = el.checked; });
+      return out;
+    };
+
+    /** Which certificates each visitor type must have. */
+    VIEWS.settings.collectRequired = () => {
+      const out = {};
+      $$('[data-needcard]').forEach((card) => {
+        out[card.dataset.needcard] = $$('[data-needkind]:checked', card).map((box) => box.value);
+      });
       return out;
     };
 
@@ -4220,8 +4589,10 @@
 
     /** The Adaptive Card as Teams draws it, near enough to design against. */
     function teamsPreviewHtml(m) {
+      const px = { small: 56, medium: 84, large: 120 }[m.photoSize] || 120;
       const photo = m.photoUrl
-        ? `<img class="tp-photo ${m.photoShape === 'person' ? 'round' : ''}" src="${esc(m.photoUrl)}" alt="">`
+        ? `<img class="tp-photo ${m.photoShape === 'person' ? 'round' : ''}" src="${esc(m.photoUrl)}"
+             style="width:${px}px;height:${px}px" alt="">`
         : '';
       /*
        * The tag line is a template with {host} in it, exactly as it is on the
@@ -4252,8 +4623,13 @@
           : `<div class="tp-lines">${m.fields.map((f) =>
               `<div>${f.label ? `<b>${esc(f.label)}:</b> ` : ''}${esc(f.value)}</div>`).join('')}</div>`)
         : '';
+      /*
+       * The same arrangement the card itself uses: face beside the heading,
+       * facts at full width underneath. Both in one narrow column was what
+       * cut the longer values off.
+       */
       const main = (photo && m.photoPlacement === 'left')
-        ? `<div class="tp-row">${photo}<div class="tp-main">${heading}${details}</div></div>`
+        ? `<div class="tp-row">${photo}<div class="tp-main">${heading}</div></div>${details}`
         : `${photo}${heading}${details}`;
       const links = m.links || [];
       return `<div class="tp-card">
@@ -4266,7 +4642,8 @@
 
     // The card designer's own controls carry no data-set, so they ask here.
     ['#cd-header', '#cd-details', '#cd-title', '#cd-subtitle', '#cd-footer', '#cd-photo',
-      '#cd-photo-place', '#cd-photo-shape', '#cd-mention', '#cd-mention-line', '#cd-also-line']
+      '#cd-photo-place', '#cd-photo-shape', '#cd-photo-size',
+      '#cd-mention', '#cd-mention-line', '#cd-also-line']
       .forEach((sel) => {
         const el = $(sel);
         if (el) el.addEventListener('input', () => { drawCardPreview(); saveSettings.soon(); });
@@ -4280,6 +4657,7 @@
       if (card) card.classList.toggle('not-posting', !el.checked);
       saveSettings.soon();
     }));
+    $$('[data-needkind]').forEach((el) => el.addEventListener('change', () => saveSettings.soon()));
     $$('[data-routestaff]').forEach((el) => el.addEventListener('change', () => {
       routeSummary(el.dataset.routestaff);
       /*
@@ -4958,6 +5336,7 @@
       }
       if (VIEWS.settings.collectNotifyTypes) setPath(patch, 'notify.types_notified', VIEWS.settings.collectNotifyTypes());
       if (VIEWS.settings.collectRouting) setPath(patch, 'notify.type_routing', VIEWS.settings.collectRouting());
+      if (VIEWS.settings.collectRequired) setPath(patch, 'compliance.required', VIEWS.settings.collectRequired());
       SETTINGS = await api('/settings', { method: 'PUT', body: patch });
     }
 

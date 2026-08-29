@@ -86,9 +86,16 @@ router.post('/setup', ratelimit.limit({ name: 'setup', windowMs: 60 * 60000, max
   if (!get('SELECT id FROM sites LIMIT 1')) {
     run('INSERT INTO sites (name, active, created_at) VALUES (?,1,?)', org_name || 'Main site', nowISO());
   }
+  /*
+   * One example visit of each type, so the dashboard, the board, the badge
+   * designer and the Teams preview all have something real to draw on the
+   * very first screen rather than saying "nothing yet" four times over.
+   */
+  const examples = require('../examples').seed();
   auth.startSession(res, user, req);
-  res.json({ ok: true, user });
+  res.json({ ok: true, user, examples });
 });
+
 
 /*
  * A password prompt on a public URL. Ten tries a quarter-hour is far more than
@@ -207,6 +214,15 @@ router.get('/dashboard', (req, res) => {
     // Whether anything has quietly stopped working — see notify.health().
     health: {
       ...notify.health(),
+      /*
+       * Whether the examples this site was set up with are still on file, and
+       * whether anybody real has arrived since — which together are the
+       * moment to offer to clear them out.
+       */
+      examples: (() => {
+        const examples = require('../examples');
+        return { present: examples.present(), real_visits: examples.present() && !examples.onlyExamples() };
+      })(),
       backup: { ...require('../backup').health(), offsite: require('../offsite').health() }
     },
     recent_deliveries: all(
@@ -1216,9 +1232,9 @@ function sampleVisit() {
   return {
     real: false,
     visit: {
-      id: 0, full_name: 'Hank Alfred', company: 'Example Contracting', phone: '(415) 268-0142',
+      id: 0, full_name: 'John Doe', company: 'Example Contracting', phone: '(415) 268-0142',
       email: 'visitor@example.com', visit_type: 'contractor', purpose: 'Foundation pour',
-      vehicle_reg: 'TX 8842B', badge_no: 'V260829-014', host_name: 'Hank Alfred',
+      vehicle_reg: 'TX 8842B', badge_no: 'V260829-014', host_name: 'John Doe',
       host_email: 'host@example.com',
       site_name: 'Main site', project_name: 'Lakeview Phase 2', location_name: 'North gate',
       device_name: 'Front gate iPad', signed_in_at: new Date().toISOString(), signed_out_at: null,
@@ -1241,10 +1257,10 @@ function sampleDelivery() {
   return {
     real: false,
     delivery: {
-      id: 0, courier_name: 'Hank Alfred', courier_company: 'UPS', parcel_count: 3,
+      id: 0, courier_name: 'John Doe', courier_company: 'UPS', parcel_count: 3,
       tracking: '1Z999AA10123456784', notes: 'Two boxes and a tube',
-      host_name: 'Hank Alfred', host_email: 'host@example.com',
-      recipient_text: 'Hank Alfred', site_name: 'Main site',
+      host_name: 'John Doe', host_email: 'host@example.com',
+      recipient_text: 'John Doe', site_name: 'Main site',
       received_at: new Date().toISOString()
     }
   };
@@ -1341,6 +1357,137 @@ router.post('/settings/test-webhook', async (req, res) => {
     tagged_nobody: true,
     public_url_reachable: preview.public_url_reachable
   });
+});
+
+/*
+ * Clear the examples out. Offered once a site has visits of its own, so
+ * nobody has to work out which of the Does were real.
+ */
+router.get('/examples', (req, res) => {
+  const examples = require('../examples');
+  res.json({ present: examples.present(), only: examples.onlyExamples() });
+});
+
+router.delete('/examples', (req, res) => {
+  const gone = require('../examples').clear();
+  audit(req, 'delete', 'visitors', null, { examples: gone });
+  res.json({ ok: true, removed: gone });
+});
+
+/* ------------------------------------------------------------ companies */
+
+const companies = require('../companies');
+
+router.get('/companies', (req, res) => res.json({
+  companies: companies.list(),
+  // Names close enough to be worth a look, offered rather than acted on.
+  possible_duplicates: companies.duplicates()
+}));
+
+router.get('/companies/:id', (req, res) => {
+  const c = companies.detail(Number(req.params.id));
+  if (!c) return res.status(404).json({ error: 'not_found' });
+  res.json(c);
+});
+
+router.post('/companies', (req, res) => {
+  const name = clean(req.body && req.body.name);
+  if (!name) return res.status(400).json({ error: 'name_required', message: 'A company needs a name.' });
+  const c = companies.resolve(name);
+  audit(req, 'create', 'companies', c.id, { name });
+  res.json(c);
+});
+
+router.patch('/companies/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const b = req.body || {};
+  try {
+    if (b.name !== undefined) companies.rename(id, b.name);
+  } catch (err) {
+    return res.status(400).json({ error: 'rename_failed', message: err.message });
+  }
+  if (b.notes !== undefined) run('UPDATE companies SET notes = ? WHERE id = ?', clean(b.notes) || null, id);
+  if (b.blocked !== undefined) run('UPDATE companies SET blocked = ? WHERE id = ?', b.blocked ? 1 : 0, id);
+  audit(req, 'update', 'companies', id, b);
+  res.json(companies.detail(id));
+});
+
+/** Fold one company into another — the misspelling into the correct one. */
+router.post('/companies/:id/merge', (req, res) => {
+  try {
+    const result = companies.merge(Number(req.params.id), Number(req.body && req.body.into));
+    audit(req, 'merge', 'companies', Number(req.params.id),
+      { from: result.from, into: result.into.name, people: result.moved });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(400).json({ error: 'merge_failed', message: err.message });
+  }
+});
+
+/*
+ * Removing a company does not remove anybody: their history is theirs. They
+ * simply stop being attached to a firm, and the next sign-in makes a fresh
+ * record from whatever they type.
+ */
+router.delete('/companies/:id', (req, res) => {
+  const id = Number(req.params.id);
+  run('UPDATE visitors SET company_id = NULL WHERE company_id = ?', id);
+  run('DELETE FROM companies WHERE id = ?', id);
+  audit(req, 'delete', 'companies', id);
+  res.json({ ok: true });
+});
+
+/* ---------------------------------------------------------- certificates */
+
+const compliance = require('../compliance');
+
+/** What the dashboard needs to draw the panel: the kinds, and what is lapsing. */
+router.get('/certificates', (req, res) => res.json({
+  kinds: compliance.kinds(),
+  expiring: compliance.expiring(req.query.days),
+  health: compliance.health()
+}));
+
+router.get('/certificates/for', (req, res) => {
+  const companyId = req.query.company_id ? Number(req.query.company_id) : null;
+  const visitorId = req.query.visitor_id ? Number(req.query.visitor_id) : null;
+  if (!companyId && !visitorId) return res.status(400).json({ error: 'who' });
+  res.json(compliance.listFor({ companyId, visitorId }));
+});
+
+router.post('/certificates', (req, res) => {
+  try {
+    const made = compliance.create(req.body || {});
+    audit(req, 'create', 'certificates', made.id, { kind: made.kind, expires_on: made.expires_on });
+    res.json(made);
+  } catch (err) {
+    res.status(400).json({ error: 'bad_certificate', message: err.message });
+  }
+});
+
+router.patch('/certificates/:id', (req, res) => {
+  const updated = compliance.update(Number(req.params.id), req.body || {});
+  audit(req, 'update', 'certificates', Number(req.params.id), req.body);
+  res.json(updated);
+});
+
+router.delete('/certificates/:id', (req, res) => {
+  compliance.remove(Number(req.params.id));
+  audit(req, 'delete', 'certificates', Number(req.params.id));
+  res.json({ ok: true });
+});
+
+/*
+ * Whether one person would get through the gate right now.
+ *
+ * Reception asks this before somebody drives across town, and the answer is
+ * the same one the kiosk uses rather than a second opinion.
+ */
+router.get('/certificates/check', (req, res) => {
+  res.json(compliance.check(String(req.query.visit_type || 'contractor'), {
+    visitorId: req.query.visitor_id ? Number(req.query.visitor_id) : null,
+    companyId: req.query.company_id ? Number(req.query.company_id) : null
+  }));
 });
 
 /* -------------------------------------------------------------- backups */

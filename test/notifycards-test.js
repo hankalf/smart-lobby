@@ -10,12 +10,12 @@ const ok = (n, c, x) => { if (c) { pass++; console.log(`  ok  ${n}`); } else { f
 const cards = require('../server/notify-card');
 
 const VISIT = {
-  full_name: 'Hank Alfred', company: 'Example Contracting', visit_type: 'contractor',
-  host_name: 'Hank Alfred', host_email: 'host@example.com', project_name: 'Lakeview Phase 2',
+  full_name: 'John Doe', company: 'Example Contracting', visit_type: 'contractor',
+  host_name: 'John Doe', host_email: 'host@example.com', project_name: 'Lakeview Phase 2',
   signed_in_at: '2026-08-29T09:00:00.000Z', signed_out_at: '2026-08-29T12:20:00.000Z'
 };
 const PARCEL = {
-  host_name: 'Hank Alfred', host_email: 'host@example.com', courier_name: 'Pat Doe',
+  host_name: 'John Doe', host_email: 'host@example.com', courier_name: 'Pat Doe',
   courier_company: 'UPS', parcel_count: 3, tracking: '1Z999', received_at: '2026-08-29T09:00:00.000Z'
 };
 const CTX = {
@@ -48,7 +48,7 @@ function unit() {
   ok('…and tags them as cleared to work', /cleared to work/.test(induction.mentionTemplate || ''));
 
   const delivery = cards.buildModel('delivery', PARCEL, empty, CTX);
-  ok('a parcel is about a parcel', /Delivery waiting for Hank Alfred/.test(delivery.title), delivery.title);
+  ok('a parcel is about a parcel', /Delivery waiting for John Doe/.test(delivery.title), delivery.title);
   ok('…and never says a visitor is here', !/visitor/.test(delivery.mentionTemplate || ''), delivery.mentionTemplate);
   ok('a parcel carries parcel facts, not visit ones',
     delivery.fields.some((f) => f.label === 'Tracking') && !delivery.fields.some((f) => f.label === 'Project'),
@@ -58,13 +58,13 @@ function unit() {
   /* ---- each event keeps its own design ---- */
   const mixed = { cards: { signin: { title_template: 'ARRIVED: {name}' } } };
   ok('designing one event leaves the others alone',
-    cards.buildModel('signin', VISIT, mixed, CTX).title === 'ARRIVED: Hank Alfred'
+    cards.buildModel('signin', VISIT, mixed, CTX).title === 'ARRIVED: John Doe'
     && /has signed out/.test(cards.buildModel('signout', VISIT, mixed, CTX).title));
 
   /* ---- the older single design still applies to arrivals ---- */
   const legacy = { card: { title_template: 'OLD: {name}' } };
   ok('a design set up before there were four is kept for arrivals',
-    cards.buildModel('signin', VISIT, legacy, CTX).title === 'OLD: Hank Alfred');
+    cards.buildModel('signin', VISIT, legacy, CTX).title === 'OLD: John Doe');
   ok('…and is not inflicted on parcels',
     /Delivery waiting/.test(cards.buildModel('delivery', PARCEL, legacy, CTX).title));
 
@@ -110,14 +110,14 @@ function unit() {
   const line = JSON.stringify(tagged.body).match(/<at>[^<]*<\/at>/);
   ok('the tag markup is in the text', !!line, JSON.stringify(tagged.body).slice(0, 200));
   ok('…and matches the entity exactly',
-    tagged.msteams.entities[0].text === '<at>Hank Alfred</at>', JSON.stringify(tagged.msteams));
+    tagged.msteams.entities[0].text === '<at>John Doe</at>', JSON.stringify(tagged.msteams));
 
   const untagged = cards.buildModel('signin', VISIT, { cards: { signin: { mention_host: false } } }, CTX);
   ok('turning the tag off leaves no <at> behind',
     !/<at>/.test(JSON.stringify(cards.teamsCard(untagged))));
 
   /* ---- routing a visitor type to somebody beyond the host ---- */
-  const safety = [{ name: 'Hank Alfred', email: 'safety@example.com' }];
+  const safety = [{ name: 'John Doe', email: 'safety@example.com' }];
   const routed = cards.buildModel('signin', VISIT, empty, { ...CTX, also: safety });
   ok('a routed person is tagged as well as the host',
     routed.alsoMention.length === 1 && routed.alsoMention[0].email === 'safety@example.com',
@@ -133,7 +133,7 @@ function unit() {
 
   // Routing somebody who is already the host would tag them twice.
   const dupe = cards.buildModel('signin', VISIT, empty,
-    { ...CTX, also: [{ name: 'Hank Alfred', email: 'HOST@example.com' }] });
+    { ...CTX, also: [{ name: 'John Doe', email: 'HOST@example.com' }] });
   ok('the host is not tagged twice when routed to themselves',
     dupe.alsoMention.length === 0, JSON.stringify(dupe.alsoMention));
 
@@ -249,7 +249,7 @@ function unit() {
   /* ---- routing a visitor type, in the dashboard and on the wire ---- */
   const officer = await page.evaluate(() => fetch('/api/admin/staff', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Hank Alfred', email: 'safety@example.com', active: 1 })
+    body: JSON.stringify({ name: 'John Doe', email: 'safety@example.com', active: 1 })
   }).then((r) => r.json()));
   ok('a staff member to route to exists', !!(officer && officer.id), JSON.stringify(officer).slice(0, 80));
 
@@ -263,8 +263,8 @@ function unit() {
     const add = (body) => fetch('/api/admin/staff', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
     });
-    await add({ name: 'Hank Alfred 41', active: 1 });
-    for (let i = 42; i <= 50; i++) await add({ name: `Hank Alfred ${i}`, email: `h${i}@example.com`, active: 1 });
+    await add({ name: 'John Doe 41', active: 1 });
+    for (let i = 42; i <= 50; i++) await add({ name: `John Doe ${i}`, email: `h${i}@example.com`, active: 1 });
   });
 
   await page.reload();
@@ -289,7 +289,7 @@ function unit() {
   await page.check(`[data-routecard="contractor"] [data-routestaff][value="${officer.id}"]`);
   await pillSaved();
   ok('ticking somebody updates the line saying who it reaches',
-    /Hank Alfred/.test(await page.textContent('[data-routecount="contractor"]')),
+    /John Doe/.test(await page.textContent('[data-routecount="contractor"]')),
     await page.textContent('[data-routecount="contractor"]'));
   const routing = await page.evaluate(() =>
     fetch('/api/admin/settings').then((r) => r.json()).then((s) => s.notify.type_routing));

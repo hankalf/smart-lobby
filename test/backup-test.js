@@ -22,12 +22,12 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
 
 (async () => {
   await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
-  const host = (await req('POST', '/api/admin/staff', { name: 'Hank Alfred 44', email: 'bk@x.test', active: 1 })).data;
+  const host = (await req('POST', '/api/admin/staff', { name: 'John Doe 44', email: 'bk@x.test', active: 1 })).data;
 
   /* ---- something worth backing up: a visit, a photo, a signature ---- */
   const agreement = (await req('GET', '/api/admin/agreements')).data[0];
   const r = await req('POST', '/api/kiosk/signin', {
-    full_name: 'Hank Alfred 42', company: 'Backup Co', phone: '415-268-8001',
+    full_name: 'John Doe 42', company: 'Backup Co', phone: '415-268-8001',
     visit_type: 'visitor', host_id: host.id, photo: PNG,
     documents: [{ agreement_id: agreement.id, signature: PNG, answers: {} }],
     client_ref: 'bk-' + Date.now()
@@ -191,12 +191,12 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
 
   /* ---- the state that gets thrown away, so the restore has something to prove ---- */
   await req('POST', '/api/kiosk/signin', {
-    full_name: 'Hank Alfred 43', company: 'Later Co', phone: '415-268-8002',
+    full_name: 'John Doe 43', company: 'Later Co', phone: '415-268-8002',
     visit_type: 'visitor', host_id: host.id, client_ref: 'after-' + Date.now()
   });
   const before = (await req('GET', '/api/admin/visits?limit=100')).data;
   ok('somebody was added after the backup was taken',
-    before.some((v) => v.full_name === 'Hank Alfred 43'));
+    before.some((v) => v.full_name === 'John Doe 43'));
 
   /* ---- staging it ---- */
   const staged = await upload('/api/admin/restore', archive);
@@ -207,7 +207,7 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
     (await req('GET', '/api/admin/backups')).data.backups.some((b) => b.file === staged.data.safety_backup));
 
   ok('nothing has changed yet — it is still the newer data',
-    (await req('GET', '/api/admin/visits?limit=100')).data.some((v) => v.full_name === 'Hank Alfred 43'));
+    (await req('GET', '/api/admin/visits?limit=100')).data.some((v) => v.full_name === 'John Doe 43'));
   ok('the dashboard says a restore is waiting',
     (await req('GET', '/api/admin/dashboard')).data.health.backup.pending_restore === true);
 
@@ -233,8 +233,8 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
   const { DatabaseSync } = require('node:sqlite');
   const restored = new DatabaseSync(path.join(DATA_DIR, 'smartlobby.db'), { readOnly: true });
   const names2 = restored.prepare('SELECT full_name FROM visitors').all().map((v) => v.full_name);
-  ok('the visitor from the backup is back', names2.includes('Hank Alfred 42'), names2.join(','));
-  ok('the one added afterwards is gone', !names2.includes('Hank Alfred 43'), names2.join(','));
+  ok('the visitor from the backup is back', names2.includes('John Doe 42'), names2.join(','));
+  ok('the one added afterwards is gone', !names2.includes('John Doe 43'), names2.join(','));
   const sig = restored.prepare('SELECT signature_path FROM signatures ORDER BY id DESC LIMIT 1').get();
   ok('their signature record came back', !!sig && !!sig.signature_path, JSON.stringify(sig));
   restored.close();

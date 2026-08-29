@@ -354,7 +354,10 @@ function health() {
   const configured = !!settings.getSection('notify').global_webhook_url;
   return {
     notifications: { sent: recent.length - failed, failed, waiting, configured, window_hours: 24 },
-    quiet_devices: quiet.map((d) => ({ name: d.name, last_seen_at: d.last_seen_at }))
+    quiet_devices: quiet.map((d) => ({ name: d.name, last_seen_at: d.last_seen_at })),
+    // Paperwork that has lapsed, or is about to, is a thing somebody has to
+    // act on days before it turns into a person sent home from the gate.
+    compliance: require('./compliance').health()
   };
 }
 

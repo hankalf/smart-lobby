@@ -122,6 +122,39 @@ const DEFAULTS = {
     footer_text: 'Please return this badge on exit',
     font_scale: 1
   },
+  /*
+   * The paperwork a site insists on before somebody works there.
+   *
+   * Off by default: a site that does not track certificates should not have a
+   * gate that can refuse people. Turning it on decides which kinds each
+   * visitor type needs, and whether a lapsed one is a warning at the desk or
+   * a closed door.
+   */
+  compliance: {
+    enabled: false,
+    /*
+     * The kinds a site keeps. Each is { key, label, ask_reference }. A kind
+     * added here is immediately requirable, previewable and reportable — the
+     * dashboard reads this list rather than holding one of its own.
+     */
+    kinds: [
+      { key: 'insurance', label: 'Public liability insurance' },
+      { key: 'safety_card', label: 'Safety card / CSCS' },
+      { key: 'rams', label: 'Risk assessment & method statement' }
+    ],
+    // Which kinds each visitor type must have, keyed by type.
+    required: {},
+    // How long before an expiry the dashboard starts saying so.
+    warn_days: 30,
+    /*
+     * What happens at the kiosk when something required is missing or out of
+     * date. 'warn' signs them in and tells reception; 'block' turns them away.
+     * Warning is the default because a site that has just switched this on has
+     * not uploaded anything yet, and a closed gate on day one is worse than a
+     * quiet one.
+     */
+    on_fail: 'warn'
+  },
   induction: {
     enabled: true,
     show_to_returning_visitors: false,

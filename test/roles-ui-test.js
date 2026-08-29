@@ -14,7 +14,7 @@ const api = async (method, p, body, cookie) => {
 
 (async () => {
   const owner = (await api('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' })).cookie;
-  const staff = (await api('POST', '/api/admin/staff', { name: 'Hank Alfred 60', email: 'ui-clerk@x.test', active: 1 }, owner)).data;
+  const staff = (await api('POST', '/api/admin/staff', { name: 'John Doe 60', email: 'ui-clerk@x.test', active: 1 }, owner)).data;
   await api('POST', '/api/admin/users', {
     email: 'ui-clerk@x.test', password: 'temporary123', name: staff.name, role: 'clerk', host_id: staff.id
   }, owner);

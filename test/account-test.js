@@ -44,7 +44,7 @@ async function req(method, path, body, jar) {
     (await req('POST', '/api/admin/login', { email: OWNER, password: changed }, null)).status === 200);
 
   /* ---- an owner setting somebody else's ---- */
-  r = await req('POST', '/api/admin/users', { name: 'Hank Alfred 2', email: 'reset@x.test', password: 'firstpass1' });
+  r = await req('POST', '/api/admin/users', { name: 'John Doe 2', email: 'reset@x.test', password: 'firstpass1' });
   const other = r.data;
   ok('a second user can be added', r.status === 200 && !!other.id, JSON.stringify(r.data));
   r = await req('POST', `/api/admin/users/${other.id}/password`, { password: 'secondpass1' });
@@ -106,13 +106,13 @@ async function req(method, path, body, jar) {
   /* ---- a webhook that fails for a retryable reason is queued ---- */
   await req('PUT', '/api/admin/settings', { notify: { global_webhook_url: 'http://127.0.0.1:9/teams' } });
   await req('POST', '/api/kiosk/signin', {
-    full_name: 'Hank Alfred 16', company: 'Retry Co', phone: '415-268-7301',
+    full_name: 'John Doe 16', company: 'Retry Co', phone: '415-268-7301',
     visit_type: 'contractor', project_id: 1, client_ref: 'retry-' + Date.now()
   });
   await new Promise((r2) => setTimeout(r2, 1200));
   const log = (await req('GET', '/api/admin/notifications')).data;
   const rows = log.rows || log;
-  const rita = rows.find((n) => (n.subject || '').includes('Hank Alfred 16'));
+  const rita = rows.find((n) => (n.subject || '').includes('John Doe 16'));
   ok('an unreachable webhook is queued to try again', rita && rita.status === 'retrying',
     JSON.stringify(rita && { status: rita.status, error: (rita.error || '').slice(0, 50) }));
   ok('…with a time to try it at', rita && !!rita.next_try_at, rita && String(rita.next_try_at));
@@ -137,7 +137,7 @@ async function req(method, path, body, jar) {
   const hook = `http://127.0.0.1:${sink.address().port}/hook`;
 
   // A visitor needs somebody to be visiting, so one is made here.
-  const evHost = (await req('POST', '/api/admin/staff', { name: 'Hank Alfred', email: 'ev@x.test', active: 1 })).data;
+  const evHost = (await req('POST', '/api/admin/staff', { name: 'John Doe', email: 'ev@x.test', active: 1 })).data;
   const settle = () => new Promise((go) => setTimeout(go, 500));
   const signIn = async (name, type, extra = {}) => {
     posts.length = 0;
@@ -152,7 +152,7 @@ async function req(method, path, body, jar) {
   await req('PUT', '/api/admin/settings', {
     notify: { global_webhook_url: hook, on_signin: true, on_signout: true, types_notified: {} }
   });
-  let res = await signIn('Hank Alfred 1', 'contractor', { project_id: 1 });
+  let res = await signIn('John Doe 1', 'contractor', { project_id: 1 });
   ok('signing in posts to the channel', posts.length === 1, `${posts.length} post(s)`);
   const firstVisit = res.data.visit && res.data.visit.id;
 
@@ -162,27 +162,27 @@ async function req(method, path, body, jar) {
   ok('signing out posts when that is switched on', posts.length === 1, `${posts.length} post(s)`);
 
   await req('PUT', '/api/admin/settings', { notify: { on_signout: false } });
-  res = await signIn('Hank Alfred 2', 'contractor', { project_id: 1 });
+  res = await signIn('John Doe 2', 'contractor', { project_id: 1 });
   posts.length = 0;
   await req('POST', `/api/admin/visits/${res.data.visit.id}/signout`);
   await settle();
   ok('…and stays quiet when it is not', posts.length === 0, `${posts.length} post(s)`);
 
   await req('PUT', '/api/admin/settings', { notify: { on_signin: false } });
-  await signIn('Hank Alfred 3', 'contractor', { project_id: 1 });
+  await signIn('John Doe 3', 'contractor', { project_id: 1 });
   ok('sign-in can be switched off entirely', posts.length === 0, `${posts.length} post(s)`);
 
   await req('PUT', '/api/admin/settings', {
     notify: { on_signin: true, types_notified: { contractor: false, visitor: true } }
   });
-  await signIn('Hank Alfred 13', 'contractor', { project_id: 1 });
+  await signIn('John Doe 13', 'contractor', { project_id: 1 });
   ok('a visitor type can be left out', posts.length === 0, `${posts.length} post(s)`);
-  await signIn('Hank Alfred 7', 'visitor', { host_id: evHost.id });
+  await signIn('John Doe 7', 'visitor', { host_id: evHost.id });
   ok('…while another still posts', posts.length === 1, `${posts.length} post(s)`);
 
   // A type nobody has switched off must still be announced.
   await req('PUT', '/api/admin/settings', { notify: { types_notified: { contractor: false } } });
-  await signIn('Hank Alfred 11', 'visitor', { host_id: evHost.id });
+  await signIn('John Doe 11', 'visitor', { host_id: evHost.id });
   ok('a type not named in the list posts by default', posts.length === 1, `${posts.length} post(s)`);
 
   await req('PUT', '/api/admin/settings', { notify: { global_webhook_url: '', types_notified: {} } });
@@ -225,7 +225,7 @@ async function req(method, path, body, jar) {
   /* --------------------------------------------------- undoing a signout */
 
   r = await req('POST', '/api/kiosk/signin', {
-    full_name: 'Hank Alfred', company: 'Undo Co', phone: '415-268-7401',
+    full_name: 'John Doe', company: 'Undo Co', phone: '415-268-7401',
     visit_type: 'contractor', project_id: 1, client_ref: 'undo-' + Date.now()
   });
   const visitId = r.data.visit.id;

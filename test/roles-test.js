@@ -41,7 +41,7 @@ const signIn = async (email, password) =>
   const jars = {};
   for (const level of ['reception', 'clerk', 'manager']) {
     const person = (await req('POST', '/api/admin/staff',
-      { name: `Hank Alfred ${level}`, email: `${level}@x.test`, active: 1 })).data;
+      { name: `John Doe ${level}`, email: `${level}@x.test`, active: 1 })).data;
     staff[level] = person;
     const made = await req('POST', '/api/admin/users', {
       email: `${level}@x.test`, password: 'temporary123', name: person.name, role: level, host_id: person.id

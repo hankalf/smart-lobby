@@ -73,6 +73,15 @@ function duration(from, to) {
   return `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`;
 }
 
+/**
+ * How wide the face is drawn, in pixels.
+ *
+ * Adaptive Cards' named sizes are advisory and Teams draws Medium small; an
+ * explicit width is the only way to get a picture somebody can recognise.
+ */
+const PHOTO_PX = { small: 56, medium: 84, large: 120 };
+const PHOTO_SIZES = Object.keys(PHOTO_PX);
+
 /** Teams only understands its own palette, so a card style is a choice, not a colour. */
 const HEADER_STYLES = ['none', 'accent', 'emphasis', 'good', 'warning', 'attention'];
 
@@ -82,6 +91,7 @@ const CARD_BASE = {
   show_photo: true,
   photo_placement: 'left',
   photo_shape: 'person',
+  photo_size: 'large',
   details_style: 'facts',
   footer_template: '{org} · Smart Lobby',
   // The line naming anybody this visitor type is routed to, beyond the host.
@@ -260,7 +270,7 @@ function buildLinks(c, ctx) {
 /** Fill {name}, {company}, {host}… leaving nothing behind when a value is empty. */
 function fill(template, tokens) {
   const text = String(template || '').replace(/\{(\w+)\}/g, (_, key) => tokens[key] || '');
-  // "Hank Alfred has arrived to see " when nobody was named — tidy the seam.
+  // "John Doe has arrived to see " when nobody was named — tidy the seam.
   return text.replace(/\s+/g, ' ').replace(/^[\s·,—-]+/, '').replace(/[\s·,—-]+$/, '').trim();
 }
 
@@ -355,6 +365,7 @@ function buildModel(eventId, row, notify, ctx) {
     photoUrl: c.show_photo ? (ctx.photoUrl || null) : null,
     photoPlacement: c.photo_placement === 'top' ? 'top' : 'left',
     photoShape: c.photo_shape === 'square' ? 'square' : 'person',
+    photoSize: PHOTO_SIZES.includes(c.photo_size) ? c.photo_size : 'large',
     headerStyle: HEADER_STYLES.includes(c.header_style) ? c.header_style : 'accent',
     detailsStyle: c.details_style === 'lines' ? 'lines' : 'facts',
     footer: fill(c.footer_template, tokens) || null,
@@ -424,23 +435,35 @@ function teamsCard(m) {
         text: m.fields.map((f) => (f.label ? `**${f.label}:** ${f.value}` : String(f.value))).join('\n\n') }]
       : []);
 
+  /*
+   * An explicit width rather than size: 'Medium', which Teams renders at
+   * around 64px — a thumbnail too small to recognise anybody from across a
+   * desk, which is the entire point of putting a face on the card.
+   */
   const photo = m.photoUrl
-    ? { type: 'Image', url: m.photoUrl, size: 'Medium', style: m.photoShape === 'person' ? 'Person' : 'Default',
-      altText: 'Visitor photo' }
+    ? { type: 'Image', url: m.photoUrl, width: `${PHOTO_PX[m.photoSize] || PHOTO_PX.large}px`,
+      style: m.photoShape === 'person' ? 'Person' : 'Default', altText: 'Visitor photo' }
     : null;
 
   /*
-   * A face beside the facts rather than above them: the same information in
-   * roughly half the height, which is what makes it readable in a busy channel.
+   * A face beside the heading, and the facts at full width underneath.
+   *
+   * Both used to sit in the same narrow column beside the photo, which left
+   * the facts perhaps two thirds of the card to lay out a label and a value
+   * in — so long values wrapped raggedly or were cut off, and the card was
+   * taller than it needed to be anyway. The heading is short and reads well
+   * next to a face; the facts want the whole width.
    */
   const main = photo && m.photoPlacement === 'left'
     ? [{
         type: 'ColumnSet',
+        spacing: 'None',
         columns: [
-          { type: 'Column', width: 'auto', items: [photo] },
-          { type: 'Column', width: 'stretch', items: [...heading, ...details] }
+          { type: 'Column', width: 'auto', verticalContentAlignment: 'Center', items: [photo] },
+          { type: 'Column', width: 'stretch', spacing: 'Medium',
+            verticalContentAlignment: 'Center', items: heading }
         ]
-      }]
+      }, ...details.map((d) => ({ ...d, spacing: 'Medium' }))]
     : [...(photo ? [photo] : []), ...heading, ...details];
 
   const body = m.headerStyle === 'none'
@@ -534,13 +557,14 @@ const catalogue = () => ({
     tokens: TOKENS[e.subject]
   })),
   links: LINKS.map(({ id, label, needs }) => ({ id, label, needs: needs || null })),
+  photo_sizes: PHOTO_SIZES.map((key) => ({ key, px: PHOTO_PX[key] })),
   links_max: LINKS_MAX,
   header_styles: HEADER_STYLES
 });
 
 module.exports = {
   VISIT_FIELDS, DELIVERY_FIELDS, EVENTS, EVENT_BY_ID, LINKS, LINKS_MAX,
-  DEFAULT_CARD, CARD_BASE, HEADER_STYLES, cardDefaults, cardFor, catalogue,
+  DEFAULT_CARD, CARD_BASE, HEADER_STYLES, PHOTO_PX, PHOTO_SIZES, cardDefaults, cardFor, catalogue,
   buildModel, render, teamsCard,
   // Older name, older shape: one shared design and a list of ready-made lines.
   FIELDS: VISIT_FIELDS, FIELD_BY_ID: Object.fromEntries(VISIT_FIELDS.map((f) => [f.id, f]))

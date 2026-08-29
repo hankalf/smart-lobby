@@ -105,6 +105,48 @@ function migrate() {
     created_at TEXT NOT NULL
   );
 
+  /*
+   * The firms people come from.
+   *
+   * Company used to be free text typed at the kiosk, which meant "Vaccums",
+   * "Vacuums Ltd" and "vacuums" were three different companies as far as any
+   * report was concerned, and a misspelling could never be corrected once it
+   * was in. A company is a record now: the typed name is matched to one, and
+   * renaming or merging fixes it everywhere at once.
+   */
+  CREATE TABLE IF NOT EXISTS companies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    notes TEXT,
+    blocked INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+  );
+
+  /*
+   * Insurance, safety tickets, licences — the paperwork that says somebody is
+   * allowed to work, and stops saying it on a date.
+   *
+   * Held against a company (one insurance certificate covering all their
+   * people) or against a person (their own card), because both are real. An
+   * expiry that nobody is told about is the whole problem, so this exists to
+   * be checked at the gate and warned about before it lapses.
+   */
+  CREATE TABLE IF NOT EXISTS certificates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+    visitor_id INTEGER REFERENCES visitors(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    reference TEXT,
+    issued_on TEXT,
+    expires_on TEXT,
+    file_path TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_certificates_company ON certificates(company_id);
+  CREATE INDEX IF NOT EXISTS idx_certificates_visitor ON certificates(visitor_id);
+  CREATE INDEX IF NOT EXISTS idx_certificates_expiry ON certificates(expires_on);
+
   CREATE TABLE IF NOT EXISTS visitors (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     full_name TEXT NOT NULL,
@@ -450,6 +492,24 @@ function migrate() {
    */
   addColumn('users', 'host_id', 'INTEGER');
   addColumn('users', 'must_change_password', 'INTEGER NOT NULL DEFAULT 0');
+
+  /*
+   * Which firm a visitor belongs to. The `company` text column stays as the
+   * name to print, kept in step whenever a company is renamed or merged —
+   * everything that reads p.company goes on working, and the id is what
+   * actually decides they are the same firm.
+   */
+  addColumn('visitors', 'company_id', 'INTEGER REFERENCES companies(id) ON DELETE SET NULL');
+  /*
+   * Which records are the examples a fresh install starts with.
+   *
+   * A flag rather than a list of names: clearing them matched on full_name to
+   * begin with, so a real visitor who happened to share a name with one would
+   * have been deleted along with their whole history.
+   */
+  addColumn('visitors', 'is_example', 'INTEGER NOT NULL DEFAULT 0');
+  exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_companies_name ON companies(lower(name))');
+  backfillCompanies();
   backfillDeviceSlugs();
   exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_slug ON devices(slug)');
   /*
@@ -460,6 +520,32 @@ function migrate() {
    */
   dedupeClientRefs();
   exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_visits_client_ref ON visits(client_ref) WHERE client_ref IS NOT NULL`);
+}
+
+/**
+ * Turn the company names already typed into records.
+ *
+ * Case and surrounding space are ignored when deciding two names are the same
+ * one, so "ACME roofing " and "Acme Roofing" become one company rather than
+ * two. Anything genuinely misspelled stays its own company until somebody
+ * merges it, which is a decision only a person can make.
+ */
+function backfillCompanies() {
+  const loose = all(`SELECT id, company FROM visitors
+                     WHERE company IS NOT NULL AND trim(company) != '' AND company_id IS NULL`);
+  if (!loose.length) return;
+  let made = 0;
+  for (const v of loose) {
+    const name = String(v.company).trim();
+    let row = get('SELECT id FROM companies WHERE lower(name) = lower(?)', name);
+    if (!row) {
+      run('INSERT INTO companies (name, created_at) VALUES (?,?)', name, nowISO());
+      row = get('SELECT id FROM companies WHERE lower(name) = lower(?)', name);
+      made++;
+    }
+    run('UPDATE visitors SET company_id = ?, company = ? WHERE id = ?', row.id, name, v.id);
+  }
+  console.log(`[migrate] linked ${loose.length} visitor(s) to ${made} new compan${made === 1 ? 'y' : 'ies'}`);
 }
 
 function dedupeClientRefs() {

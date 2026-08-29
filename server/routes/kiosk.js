@@ -7,6 +7,8 @@ const files = require('../files');
 const notify = require('../notify');
 const accessCtl = require('../access');
 const { nextBadgeNo } = require('../badges');
+const companies = require('../companies');
+const compliance = require('../compliance');
 const localtime = require('../localtime');
 const devices = require('../devices');
 const phoneRules = require('../../public/kiosk/phone');
@@ -445,16 +447,45 @@ router.post('/signin', writeLimit, async (req, res) => {
 
     const photoPath = files.saveDataUrl(b.photo, 'private', 'photos');
 
+    /*
+     * The firm they typed, matched to a record rather than kept as loose text
+     * — so a name already on file is reused whatever the capitals, and a
+     * correction made later reaches this visit too.
+     */
+    const company = companies.resolve(b.company);
+    const companyName = company ? company.name : (clean(b.company) || null);
+    if (company && company.blocked) {
+      return res.status(403).json({ error: 'blocked', message: 'Please see reception.' });
+    }
+
     if (visitor) {
       run(`UPDATE visitors SET full_name = ?, company = COALESCE(?, company), email = COALESCE(?, email),
              phone = COALESCE(?, phone), photo_path = COALESCE(?, photo_path),
              visit_count = visit_count + 1, last_visit_at = ? WHERE id = ?`,
-        fullName, clean(b.company) || null, email || null, phone || null, photoPath, nowISO(), visitor.id);
+        fullName, companyName, email || null, phone || null, photoPath, nowISO(), visitor.id);
+      if (company) run('UPDATE visitors SET company_id = ? WHERE id = ?', company.id, visitor.id);
     } else {
       const r = run(`INSERT INTO visitors (full_name, company, email, phone, photo_path, visit_count, last_visit_at, created_at)
                      VALUES (?,?,?,?,?,1,?,?)`,
-        fullName, clean(b.company) || null, email || null, phone || null, photoPath, nowISO(), nowISO());
+        fullName, companyName, email || null, phone || null, photoPath, nowISO(), nowISO());
       visitor = get('SELECT * FROM visitors WHERE id = ?', r.lastInsertRowid);
+      if (company) run('UPDATE visitors SET company_id = ? WHERE id = ?', company.id, visitor.id);
+    }
+
+    /*
+     * The paperwork. Checked after the visitor and company are known, since a
+     * firm's insurance covers its people and a person's own card covers only
+     * them. Whether a lapse closes the gate or merely says so at the desk is
+     * the site's decision, not this one's.
+     */
+    const papers = compliance.check(visitType, {
+      visitorId: visitor.id, companyId: company ? company.id : null
+    });
+    if (papers.blocking) {
+      return res.status(403).json({
+        error: 'compliance', detail: compliance.explain(papers),
+        message: 'Please see reception before signing in.'
+      });
     }
 
     const badgeCfg = settings.getSection('badge');
@@ -548,7 +579,11 @@ router.post('/signin', writeLimit, async (req, res) => {
       accessCtl.autoUnlock('signin', { visitId, actor: fullName, siteId: site ? site.id : null }).catch(() => {});
     }
 
-    res.json({ ok: true, visit, badge: badgeCfg.enabled ? { ...badgeCfg, badge_no: badgeNo } : null, checkout_code: code });
+    res.json({
+      ok: true, visit, badge: badgeCfg.enabled ? { ...badgeCfg, badge_no: badgeNo } : null, checkout_code: code,
+      // Signed in, but with something out of date the desk should chase.
+      compliance: papers.ok ? null : { detail: compliance.explain(papers) }
+    });
   } catch (err) {
     res.status(500).json({ error: 'signin_failed', detail: String(err.message || err) });
   }

@@ -97,9 +97,10 @@ h1.page { font-size: 1.6rem; margin: 0 0 .25rem; color: var(--brand-dark); }
 .tp-band-warning { background: #fff9f5; }
 .tp-band-attention { background: #fdf3f4; }
 .tp-band-none { background: #fff; }
-.tp-row { display: flex; gap: .75rem; align-items: flex-start; }
+.tp-row { display: flex; gap: .9rem; align-items: center; }
 .tp-main { min-width: 0; flex: 1; }
-.tp-photo { width: 58px; height: 58px; object-fit: cover; border-radius: 4px; flex: 0 0 auto; }
+/* Width and height come from the card's own size setting, inline. */
+.tp-photo { object-fit: cover; border-radius: 4px; flex: 0 0 auto; }
 .tp-photo.round { border-radius: 50%; }
 .tp-band > .tp-photo { margin-bottom: .6rem; }
 .tp-title { font-weight: 600; font-size: .95rem; line-height: 1.3; overflow-wrap: anywhere; }
@@ -108,7 +109,7 @@ h1.page { font-size: 1.6rem; margin: 0 0 .25rem; color: var(--brand-dark); }
 .tp-title.tp-warning { color: #bc4b09; }
 .tp-title.tp-attention { color: #c4314b; }
 .tp-sub { color: #616161; margin-top: .1rem; overflow-wrap: anywhere; }
-.tp-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .2rem .6rem; margin-top: .6rem; }
+.tp-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .25rem .9rem; margin-top: .75rem; }
 .tp-fact-l { font-weight: 600; white-space: nowrap; }
 .tp-fact-v { overflow-wrap: anywhere; }
 .tp-lines { margin-top: .6rem; display: grid; gap: .25rem; overflow-wrap: anywhere; }

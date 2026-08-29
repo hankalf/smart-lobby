@@ -29,7 +29,15 @@ const ok = (n, c, x) => { if (c) { pass++; console.log(`  ok  ${n}`); } else { f
   await page.waitForSelector('#set-branding');
   ok('the sub-list appears under Settings', await page.isVisible('#nav .subnav[data-for="settings"]'));
   const items = await page.$$eval('#nav .subnav[data-for="settings"] button[data-section]', (b) => b.map((x) => x.dataset.section));
-  ok('it lists every panel', items.length === 14, items.join(','));
+  /*
+   * Counted against the panels themselves rather than against a number that
+   * has to be remembered: adding a settings panel and forgetting its menu
+   * entry is exactly what this is for, and a magic number only catches it
+   * until somebody updates the number instead of the menu.
+   */
+  const panels = await page.$$eval('.card.section[id^="set-"]', (s) => s.map((x) => x.id.slice(4)));
+  ok('it lists every panel', items.length === panels.length,
+    `menu: ${items.join(',')} / panels: ${panels.join(',')}`);
 
   /* ---- the two groups ---- */
   ok('Sign-in setup has its own list',

@@ -17,12 +17,12 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
 (async () => {
   await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
   const staff = (await req('POST', '/api/admin/staff', {
-    name: 'Hank Alfred 70', email: 'parcels@x.test', active: 1 })).data;
+    name: 'John Doe 70', email: 'parcels@x.test', active: 1 })).data;
   ok('somebody for a parcel to be for', !!staff.id);
 
   const settings = (over) => req('PUT', '/api/admin/settings', { deliveries: over });
   const book = (over = {}) => req('POST', '/api/kiosk/delivery', {
-    courier_name: 'Hank Alfred', courier_company: 'UPS', recipient_host_id: staff.id,
+    courier_name: 'John Doe', courier_company: 'UPS', recipient_host_id: staff.id,
     tracking: '1Z999AA1', parcel_count: 2, photo: PNG, ...over
   });
 
@@ -73,7 +73,7 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
   const rows = list.rows || list || [];
   ok('the parcel is waiting on the deliveries page', rows.some((d) => d.id === firstId), `${rows.length} rows`);
   const mine = rows.find((d) => d.id === firstId);
-  ok('…with the courier on it', mine && mine.courier_name === 'Hank Alfred', JSON.stringify(mine || {}).slice(0, 90));
+  ok('…with the courier on it', mine && mine.courier_name === 'John Doe', JSON.stringify(mine || {}).slice(0, 90));
   ok('…and how many parcels', mine && mine.parcel_count === 2, String(mine && mine.parcel_count));
   ok('…and its photo kept somewhere private',
     mine && String(mine.photo_path || '').includes('/private/'), String(mine && mine.photo_path));
@@ -84,12 +84,12 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
 
   /* ---- collecting it ---- */
   r = await req('POST', `/api/admin/deliveries/${firstId}/collect`, {
-    collected_by: 'Hank Alfred', signature: PNG });
+    collected_by: 'John Doe', signature: PNG });
   ok('a parcel can be collected', r.status === 200, `${r.status} ${JSON.stringify(r.data)}`);
   const after = ((await req('GET', '/api/admin/deliveries')).data.rows
     || (await req('GET', '/api/admin/deliveries')).data || []).find((d) => d.id === firstId);
   ok('…and stops being awaiting', after && after.status !== 'awaiting', String(after && after.status));
-  ok('…recording who took it', after && /Hank Alfred/.test(after.collected_by || ''), String(after && after.collected_by));
+  ok('…recording who took it', after && /John Doe/.test(after.collected_by || ''), String(after && after.collected_by));
 
   /* ---- a parcel count that makes no sense ---- */
   for (const count of [-5, 0, 'many', null, 1e9]) await book({ parcel_count: count });

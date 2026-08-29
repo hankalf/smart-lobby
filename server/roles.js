@@ -73,6 +73,12 @@ const AREA_BY_PREFIX = {
   rollcall: 'visits',
   visits: 'visits',
   visitors: 'visitors',
+  // The firms behind the people, so it sits with the registry.
+  companies: 'visitors',
+  // The sample records a fresh install starts with, and clearing them out.
+  examples: 'visitors',
+  // Reception chases lapsing paperwork; changing it is handled below.
+  certificates: 'visitors',
   projects: 'projects',
   reports: 'reports',
   drivers: 'drivers',
@@ -112,6 +118,8 @@ function areaForRequest(method, urlPath) {
    * — and especially granting a login through it — is administration.
    */
   if (segment === 'staff' && method !== 'GET') return 'admin';
+  // Reading what is lapsing is reception's job; deciding the rules is not.
+  if (segment === 'certificates' && method !== 'GET') return 'visitors';
   return AREA_BY_PREFIX[segment] || 'admin';
 }
 

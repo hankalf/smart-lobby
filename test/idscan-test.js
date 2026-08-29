@@ -24,7 +24,7 @@ async function req(method, path, body) {
 
   /* ---- with the scan off, licence data sent anyway is not stored ---- */
   r = await req('POST', '/api/kiosk/signin', {
-    full_name: 'Hank Alfred 12', company: 'C', phone: '415-268-0301', visit_type: 'contractor', project_id: 1,
+    full_name: 'John Doe 12', company: 'C', phone: '415-268-0301', visit_type: 'contractor', project_id: 1,
     id_name: 'Somebody Else', id_number: 'X999', id_state: 'TX', client_ref: 'idoff-' + Date.now()
   });
   ok('sign-in works with the scan off', r.status === 200, JSON.stringify(r.data).slice(0, 90));
@@ -42,19 +42,19 @@ async function req(method, path, body) {
 
   /* ---- optional: a sign-in without a scan still works ---- */
   r = await req('POST', '/api/kiosk/signin', {
-    full_name: 'Hank Alfred 18', company: 'C', phone: '415-268-0302', visit_type: 'contractor', project_id: 1,
+    full_name: 'John Doe 18', company: 'C', phone: '415-268-0302', visit_type: 'contractor', project_id: 1,
     client_ref: 'idopt-' + Date.now()
   });
   ok('optional means a sign-in without a scan is allowed', r.status === 200, JSON.stringify(r.data).slice(0, 90));
 
   /* ---- a scanned licence is stored ---- */
   r = await req('POST', '/api/kiosk/signin', {
-    full_name: 'Hank Alfred 4', company: 'Haulage Co', phone: '415-268-0303', visit_type: 'contractor', project_id: 1,
-    id_name: 'Hank Alfred 4', id_number: '12345678', id_state: 'TX', client_ref: 'idscan-' + Date.now()
+    full_name: 'John Doe 4', company: 'Haulage Co', phone: '415-268-0303', visit_type: 'contractor', project_id: 1,
+    id_name: 'John Doe 4', id_number: '12345678', id_state: 'TX', client_ref: 'idscan-' + Date.now()
   });
   ok('a scanned sign-in is accepted', r.status === 200, JSON.stringify(r.data).slice(0, 90));
   detail = (await req('GET', `/api/admin/visits/${r.data.visit.id}`)).data;
-  ok('the name from the licence is stored', detail.id_name === 'Hank Alfred 4', detail.id_name);
+  ok('the name from the licence is stored', detail.id_name === 'John Doe 4', detail.id_name);
   ok('the licence number is stored', detail.id_number === '12345678', detail.id_number);
   ok('the issuing state is stored', detail.id_state === 'TX', detail.id_state);
 
@@ -62,19 +62,19 @@ async function req(method, path, body) {
   settings.details.contractor.id_scan = 'required';
   await req('PUT', '/api/admin/settings', { details: settings.details });
   r = await req('POST', '/api/kiosk/signin', {
-    full_name: 'Hank Alfred 9', company: 'C', phone: '415-268-0304', visit_type: 'contractor', project_id: 1,
+    full_name: 'John Doe 9', company: 'C', phone: '415-268-0304', visit_type: 'contractor', project_id: 1,
     client_ref: 'idreq-' + Date.now()
   });
   ok('required refuses a sign-in with no licence', r.status === 400 && r.data.error === 'id_scan_required', JSON.stringify(r.data));
   r = await req('POST', '/api/kiosk/signin', {
-    full_name: 'Hank Alfred 2', company: 'C', phone: '415-268-0305', visit_type: 'contractor', project_id: 1,
-    id_name: 'Hank Alfred 2', id_number: 'D4455667', id_state: 'CA', client_ref: 'idreq2-' + Date.now()
+    full_name: 'John Doe 2', company: 'C', phone: '415-268-0305', visit_type: 'contractor', project_id: 1,
+    id_name: 'John Doe 2', id_number: 'D4455667', id_state: 'CA', client_ref: 'idreq2-' + Date.now()
   });
   ok('required accepts one with a licence', r.status === 200, JSON.stringify(r.data).slice(0, 90));
 
   /* ---- sanitising ---- */
   r = await req('POST', '/api/kiosk/signin', {
-    full_name: 'Hank Alfred 6', company: 'C', phone: '415-268-0306', visit_type: 'contractor', project_id: 1,
+    full_name: 'John Doe 6', company: 'C', phone: '415-268-0306', visit_type: 'contractor', project_id: 1,
     id_name: 'A'.repeat(500), id_number: 'B'.repeat(500), id_state: 'texas', client_ref: 'idlong-' + Date.now()
   });
   detail = (await req('GET', `/api/admin/visits/${r.data.visit.id}`)).data;
@@ -84,11 +84,11 @@ async function req(method, path, body) {
     !detail.id_state || /^[A-Z]{1,2}$/.test(detail.id_state), JSON.stringify(detail.id_state));
 
   r = await req('POST', '/api/kiosk/signin', {
-    full_name: 'Hank Alfred 10', company: 'C', phone: '415-268-0307', visit_type: 'contractor', project_id: 1,
-    id_name: 'Hank Alfred', id_number: 'L1234-5678-9012', id_state: 'on', client_ref: 'idsp-' + Date.now()
+    full_name: 'John Doe 10', company: 'C', phone: '415-268-0307', visit_type: 'contractor', project_id: 1,
+    id_name: 'John Doe', id_number: 'L1234-5678-9012', id_state: 'on', client_ref: 'idsp-' + Date.now()
   });
   detail = (await req('GET', `/api/admin/visits/${r.data.visit.id}`)).data;
-  ok('spaces in a name survive', detail.id_name === 'Hank Alfred', detail.id_name);
+  ok('spaces in a name survive', detail.id_name === 'John Doe', detail.id_name);
   ok('hyphens in a licence number survive', detail.id_number === 'L1234-5678-9012', detail.id_number);
   ok('a lowercase state is upper-cased', detail.id_state === 'ON', detail.id_state);
 

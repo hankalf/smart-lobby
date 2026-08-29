@@ -119,7 +119,7 @@ const sample = (over, seq = 1, type = 'contractor') =>
   /* ---- and a real sign-in honours it ---- */
   await req('PUT', '/api/admin/settings', { badge: { badge_prefixes: { visitor: 'VIS' } } });
   const prefixed = await req('POST', '/api/kiosk/signin', {
-    full_name: 'Hank Alfred 91', company: 'Badge Co', phone: '415-268-0991',
+    full_name: 'John Doe 91', company: 'Badge Co', phone: '415-268-0991',
     visit_type: 'visitor', client_ref: `badge-prefix-${Date.now()}`
   });
   ok('a badge printed for that type carries its own prefix',
@@ -131,7 +131,7 @@ const sample = (over, seq = 1, type = 'contractor') =>
   // it out would keep the old prefix and clearing it would appear to do nothing.
   await req('PUT', '/api/admin/settings', { badge: { badge_prefixes: { visitor: '' } } });
   const cleared = await req('POST', '/api/kiosk/signin', {
-    full_name: 'Hank Alfred 92', company: 'Badge Co', phone: '415-268-0992',
+    full_name: 'John Doe 92', company: 'Badge Co', phone: '415-268-0992',
     visit_type: 'visitor', client_ref: `badge-clear-${Date.now()}`
   });
   ok('clearing a per-type prefix really clears it',
@@ -141,7 +141,7 @@ const sample = (over, seq = 1, type = 'contractor') =>
   const issued = [];
   for (let i = 0; i < 4; i++) {
     const s = await req('POST', '/api/kiosk/signin', {
-      full_name: `Hank Alfred 8${i}`, company: 'Badge Co', phone: `415-268-09${10 + i}`,
+      full_name: `John Doe 8${i}`, company: 'Badge Co', phone: `415-268-09${10 + i}`,
       visit_type: 'visitor', client_ref: `badge-${Date.now()}-${i}`
     });
     if (s.data && s.data.badge) issued.push(s.data.badge.badge_no);
@@ -161,7 +161,7 @@ const sample = (over, seq = 1, type = 'contractor') =>
   const newest = (visits.rows || visits || [])[0];
   await req('DELETE', `/api/admin/visits/${newest.id}`);
   const after = await req('POST', '/api/kiosk/signin', {
-    full_name: 'Hank Alfred 89', company: 'Badge Co', phone: '415-268-0999',
+    full_name: 'John Doe 89', company: 'Badge Co', phone: '415-268-0999',
     visit_type: 'visitor', client_ref: `badge-after-${Date.now()}`
   });
   const next = after.data && after.data.badge && after.data.badge.badge_no;
@@ -171,7 +171,7 @@ const sample = (over, seq = 1, type = 'contractor') =>
   /* ---- a changed format keeps counting under its own shape ---- */
   await req('PUT', '/api/admin/settings', { badge: { badge_format: 'SITE-{seq}', badge_seq_digits: 4 } });
   const reshaped = await req('POST', '/api/kiosk/signin', {
-    full_name: 'Hank Alfred 90', company: 'Badge Co', phone: '415-268-0998',
+    full_name: 'John Doe 90', company: 'Badge Co', phone: '415-268-0998',
     visit_type: 'visitor', client_ref: `badge-shape-${Date.now()}`
   });
   ok('a changed format takes effect on the next badge',

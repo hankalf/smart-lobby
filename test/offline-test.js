@@ -13,7 +13,7 @@ const ok = (n, c, x) => { if (c) { pass++; console.log(`  ok  ${n}`); } else { f
   await page.goto(`${BASE}/kiosk/front-gate`);
   await page.waitForSelector('body.cfg-ready', { timeout: 10000 });
 
-  const NAME = 'Hank Alfred 21 ' + Date.now();
+  const NAME = 'John Doe 21 ' + Date.now();
   // Block the sign-in endpoint so the kiosk queues it, as a dead spot would.
   let blocking = true;
   await page.route('**/api/kiosk/signin', (route) => (blocking ? route.abort('failed') : route.continue()));

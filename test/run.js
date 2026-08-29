@@ -35,6 +35,8 @@ const DATA_DIR = process.env.TEST_DATA_DIR || path.join(os.tmpdir(), 'smart-lobb
 /** Suites needing a browser are skipped, loudly, when there is not one. */
 const SUITES = [
   { name: 'api', file: 'api-test.js' },
+  // Straight after api, which performs the first-run setup that seeds them.
+  { name: 'examples', file: 'examples-test.js' },
   { name: 'browser', file: 'browser-test.js', browser: true },
   { name: 'settings-smoke', file: 'settings-smoke.js', browser: true },
   { name: 'edge', file: 'edge-test.js' },
@@ -50,6 +52,8 @@ const SUITES = [
   { name: 'card', file: 'card-test.js' },
   { name: 'badgeno', file: 'badgeno-test.js' },
   { name: 'delivery', file: 'delivery-test.js' },
+  { name: 'companies', file: 'companies-test.js' },
+  { name: 'compliance', file: 'compliance-test.js' },
   { name: 'notifycards', file: 'notifycards-test.js', browser: true },
   { name: 'board', file: 'board-test.js' },
   { name: 'account', file: 'account-test.js' },

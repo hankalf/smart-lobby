@@ -51,12 +51,12 @@ const cardText = (p) => JSON.stringify(p.body);
     posts[0] && cardText(posts[0]).slice(0, 120));
 
   /* a staff member with their own Teams link */
-  r = await req('POST', '/api/admin/staff', { name: 'Hank Alfred', email: 'dana@x.test', webhook_url: PERSON, active: 1 });
+  r = await req('POST', '/api/admin/staff', { name: 'John Doe', email: 'dana@x.test', webhook_url: PERSON, active: 1 });
   const host = r.data;
   ok('staff member with a Teams link created', !!host.id && host.webhook_url === PERSON);
 
   posts.length = 0;
-  r = await req('POST', '/api/kiosk/signin', { full_name: 'Hank Alfred 19', company: 'Teams Co', phone: '415-268-0700',
+  r = await req('POST', '/api/kiosk/signin', { full_name: 'John Doe 19', company: 'Teams Co', phone: '415-268-0700',
     visit_type: 'contractor', project_id: 1, host_id: host.id, client_ref: 'teams-' + Date.now() });
   ok('sign-in ok', r.status === 200, JSON.stringify(r.data).slice(0, 90));
   await new Promise((r2) => setTimeout(r2, 1200));
@@ -65,7 +65,7 @@ const cardText = (p) => JSON.stringify(p.body);
   const toChannel = posts.find((p) => p.path.endsWith('/channel'));
   ok('the person being visited is messaged', !!toPerson, JSON.stringify(posts.map((p) => p.path)));
   ok('the company channel is posted too', !!toChannel);
-  ok('the card names visitor and host', !!toPerson && /Hank Alfred 19/.test(cardText(toPerson)) && /Hank Alfred/.test(cardText(toPerson)));
+  ok('the card names visitor and host', !!toPerson && /John Doe 19/.test(cardText(toPerson)) && /John Doe/.test(cardText(toPerson)));
 
   /* both attempts are in the activity log as sent */
   r = await req('GET', '/api/admin/notifications');
@@ -76,7 +76,7 @@ const cardText = (p) => JSON.stringify(p.body);
 
   /* ---- a visitor type routed to somebody who is not the host ---- */
   r = await req('POST', '/api/admin/staff', {
-    name: 'Hank Alfred', email: 'safety@x.test', webhook_url: SAFETY, active: 1 });
+    name: 'John Doe', email: 'safety@x.test', webhook_url: SAFETY, active: 1 });
   const officer = r.data;
   ok('a safety officer with their own Teams link exists', !!officer.id);
 
@@ -84,7 +84,7 @@ const cardText = (p) => JSON.stringify(p.body);
     notify: { type_routing: { contractor: { staff: [officer.id] } } } });
 
   posts.length = 0;
-  r = await req('POST', '/api/kiosk/signin', { full_name: 'Hank Alfred 20', company: 'Teams Co', phone: '415-268-0701',
+  r = await req('POST', '/api/kiosk/signin', { full_name: 'John Doe 20', company: 'Teams Co', phone: '415-268-0701',
     visit_type: 'contractor', project_id: 1, host_id: host.id, client_ref: 'route-' + Date.now() });
   ok('a routed contractor signs in', r.status === 200, JSON.stringify(r.data).slice(0, 90));
   await new Promise((r2) => setTimeout(r2, 1400));
@@ -108,7 +108,7 @@ const cardText = (p) => JSON.stringify(p.body);
 
   /* a visitor of another type is not routed to them */
   posts.length = 0;
-  r = await req('POST', '/api/kiosk/signin', { full_name: 'Hank Alfred 21', company: 'Teams Co', phone: '415-268-0702',
+  r = await req('POST', '/api/kiosk/signin', { full_name: 'John Doe 21', company: 'Teams Co', phone: '415-268-0702',
     visit_type: 'visitor', host_id: host.id, client_ref: 'noroute-' + Date.now() });
   await new Promise((r2) => setTimeout(r2, 1400));
   ok('a type with no routing does not reach them',
@@ -117,7 +117,7 @@ const cardText = (p) => JSON.stringify(p.body);
   /* somebody who has left the company stops being tagged */
   await req('PATCH', `/api/admin/staff/${officer.id}`, { active: 0 });
   posts.length = 0;
-  r = await req('POST', '/api/kiosk/signin', { full_name: 'Hank Alfred 22', company: 'Teams Co', phone: '415-268-0703',
+  r = await req('POST', '/api/kiosk/signin', { full_name: 'John Doe 22', company: 'Teams Co', phone: '415-268-0703',
     visit_type: 'contractor', project_id: 1, host_id: host.id, client_ref: 'gone-' + Date.now() });
   await new Promise((r2) => setTimeout(r2, 1400));
   ok('a routed person who has left is dropped, not left tagged forever',
