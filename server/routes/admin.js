@@ -8,7 +8,8 @@ const files = require('../files');
 const notify = require('../notify');
 const accessCtl = require('../access');
 const decks = require('../slides');
-const { nextBadgeNo } = require('../badges');
+const badges = require('../badges');
+const { nextBadgeNo } = badges;
 const localtime = require('../localtime');
 const deviceSlugs = require('../devices');
 const ratelimit = require('../ratelimit');
@@ -251,7 +252,7 @@ router.post('/visits/:id/badge', (req, res) => {
   if (!visit) return res.status(404).json({ error: 'not_found' });
 
   if (!visit.badge_no) {
-    visit.badge_no = nextBadgeNo(localtime.dayOf(visit.signed_in_at));
+    visit.badge_no = nextBadgeNo(localtime.dayOf(visit.signed_in_at), visit.visit_type);
     run('UPDATE visits SET badge_no = ? WHERE id = ?', visit.badge_no, visit.id);
   }
 
@@ -1454,6 +1455,38 @@ router.delete('/restore', (req, res) => {
 /* ----------------------------------------------------------- wall board */
 
 const boardRoutes = require('./board');
+
+/**
+ * What a badge number would look like, without issuing one.
+ *
+ * Rendered by the same code that numbers a real badge, so the example on the
+ * settings page cannot drift from what comes out of the printer.
+ */
+router.get('/badges/number-preview', (req, res) => {
+  const cfg = { ...settings.getSection('badge') };
+  if (req.query.format !== undefined) cfg.badge_format = String(req.query.format);
+  if (req.query.digits !== undefined) cfg.badge_seq_digits = Number(req.query.digits);
+  if (req.query.prefix !== undefined) cfg.badge_prefix = String(req.query.prefix);
+
+  const day = localtime.today();
+  const types = ((settings.getAll().types || []).map((t) => t.key).filter(Boolean));
+  res.json({
+    tokens: badges.TOKENS,
+    digits: { min: badges.MIN_DIGITS, max: badges.MAX_DIGITS },
+    // The first three of the day, so a counter that is too narrow is obvious.
+    examples: (types.length ? types : ['visitor']).slice(0, 4).map((type) => ({
+      type,
+      numbers: [1, 2, 3].map((n) => badges.sampleBadgeNo(day, type, cfg, n))
+    })),
+    /*
+     * Two types sharing a prefix share one run of numbers; giving each its own
+     * needs {type} in the format. Neither is wrong, but which one you have
+     * should not be a surprise at the printer.
+     */
+    separate_series: new Set((types.length ? types : ['visitor'])
+      .map((type) => badges.renderFormat(day, type, cfg).prefix)).size > 1
+  });
+});
 
 router.get('/board', (req, res) => {
   const b = settings.getSection('board');

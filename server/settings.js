@@ -104,6 +104,13 @@ const DEFAULTS = {
     show_qr: true,
     show_badge_no: true,
     badge_prefix: 'V',
+    /*
+     * What a badge number looks like — see server/badges.js for the tokens.
+     * The default is what every badge printed before this was a setting, so
+     * nothing changes for a site that never touches it.
+     */
+    badge_format: '{prefix}{yy}{mm}{dd}-{seq}',
+    badge_seq_digits: 3,
     title_text: 'VISITOR',
     footer_text: 'Please return this badge on exit',
     font_scale: 1

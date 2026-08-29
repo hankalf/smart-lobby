@@ -470,6 +470,16 @@ code.token { background: var(--bg); padding: .15rem .4rem; border-radius: 5px; f
 /* The button that stands in for the icon field on a visitor type row. */
 .icon-pick { font-size: 1.35rem; line-height: 1; min-width: 3.2rem; padding: .4rem .5rem; }
 
+/* ------------------------------------------------------- badge numbering */
+.bn-samples { display: grid; gap: .3rem; margin: .6rem 0 .4rem; }
+.bn-row { display: flex; align-items: baseline; gap: .75rem; flex-wrap: wrap; }
+.bn-row .muted { min-width: 6rem; text-transform: capitalize; }
+.bn-nums { display: flex; gap: .4rem; flex-wrap: wrap; }
+.bn-nums code {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+  padding: .1rem .45rem; font-size: .88rem;
+}
+
 /* ------------------------------------------------- what auto-save is doing */
 .save-state {
   position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 90;

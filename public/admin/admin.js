@@ -1661,8 +1661,22 @@
           <div class="field-list">
             ${txt('badge.title_text', 'Header')}
             ${txt('badge.footer_text', 'Footer')}
-            ${txt('badge.badge_prefix', 'Badge number prefix')}
           </div>
+
+          <h3>Badge numbers</h3>
+          <p class="muted" style="margin-top:0">Every badge gets a number, counted fresh each day. What that number
+            looks like is up to you.</p>
+          <div class="form-grid">
+            ${txt('badge.badge_prefix', 'Prefix')}
+            <label class="field"><span>Counter digits</span>
+              <input class="input" data-set="badge.badge_seq_digits" type="number" min="1" max="8"
+                value="${esc(b.badge_seq_digits ?? 3)}">
+              <span class="muted">3 gives 001 to 999 in a day</span></label>
+          </div>
+          <label class="field"><span>Format</span>
+            <input class="input" data-set="badge.badge_format" value="${esc(b.badge_format || '{prefix}{yy}{mm}{dd}-{seq}')}">
+            <span class="muted" id="bn-tokens"></span></label>
+          <div id="bn-preview"></div>
         </div>
 
         <div class="card section">
@@ -1753,6 +1767,58 @@
       SETTINGS = await api('/settings', { method: 'PUT', body: patch });
     });
     autoSaveOn(root, saveBadge, '[data-set^="badge."]');
+
+    /*
+     * What the next three badges would be called, drawn by the server from the
+     * same code that numbers a real one — so the example here cannot drift
+     * from what comes out of the printer.
+     */
+    let numberTimer = null;
+    const drawNumbers = () => { clearTimeout(numberTimer); numberTimer = setTimeout(loadNumbers, 250); };
+
+    async function loadNumbers() {
+      const box = $('#bn-preview');
+      if (!box) return;
+      const q = new URLSearchParams({
+        format: $('[data-set="badge.badge_format"]').value,
+        digits: $('[data-set="badge.badge_seq_digits"]').value,
+        prefix: $('[data-set="badge.badge_prefix"]').value
+      });
+      let data;
+      try { data = await api(`/badges/number-preview?${q}`); }
+      catch (err) {
+        if (err.message === 'unauthenticated') return;
+        box.innerHTML = `<p class="empty">${esc(err.message)}</p>`;
+        return;
+      }
+
+      const legend = $('#bn-tokens');
+      if (legend) {
+        legend.innerHTML = data.tokens
+          .map((t) => `<code title="${esc(t.describe)}">{${esc(t.id)}}</code>`).join(' ')
+          + '. <b>{seq}</b> is the counter — a format without one would hand everybody the same number, '
+          + 'so it is added on the end.';
+      }
+
+      box.innerHTML = `<div class="bn-samples">
+        ${data.examples.map((e) => `<div class="bn-row">
+          <span class="muted">${esc(e.type)}</span>
+          <span class="bn-nums">${e.numbers.map((n) => `<code>${esc(n)}</code>`).join('')}</span>
+        </div>`).join('')}
+      </div>
+      <p class="muted">${data.separate_series
+        ? 'Each visitor type counts on its own, because the format tells them apart.'
+        : 'Every type shares one run of numbers for the day. Put <code>{type}</code> in the format to give each its own.'}
+      </p>
+      <p class="muted">Changing this leaves badges already printed alone — the counter starts again at 1 under the new
+        shape, so avoid changing it partway through a day.</p>`;
+    }
+
+    ['badge.badge_format', 'badge.badge_seq_digits', 'badge.badge_prefix'].forEach((path) => {
+      const el = $(`[data-set="${path}"]`);
+      if (el) el.addEventListener('input', drawNumbers);
+    });
+    loadNumbers();
 
     drawBadgePreview();
   };
@@ -2490,6 +2556,9 @@
   VIEWS.vtypes = async (root) => {
     SETTINGS = await api('/settings');
     const s = SETTINGS;
+    // The kiosk hides Request entry until there is a door to open, so the
+    // preview has to know whether there is one.
+    const DOORS = (await api('/access-points').catch(() => [])).filter((d) => d.enabled !== 0);
     // Edited as a local copy; nothing reaches the kiosk until Save.
     const types = (SETTINGS.types || []).map((ty) => ({ ...ty }));
     const MODES = [['card', 'Own card on the home screen'], ['picker', 'Behind the Sign in card'],
@@ -2571,7 +2640,13 @@
         ...onCards.map((ty) => typeTile(ty, true)),
         ...(s.kiosk.show_delivery_button && s.deliveries.enabled
           ? [tile('📦', es ? 'Entrega' : 'Delivery', es ? 'Entrega de mensajería' : 'Courier drop-off')] : []),
-        ...(s.access.enabled && s.access.unlock_button_on_kiosk
+        /*
+         * The same three conditions the kiosk itself uses. It was two here,
+         * so the preview drew a Request entry button that the kiosk left off
+         * for want of a door — a preview that shows something the real screen
+         * does not is worse than no preview.
+         */
+        ...(s.access.enabled && s.access.unlock_button_on_kiosk && DOORS.length
           ? [tile('🔓', es ? 'Solicitar entrada' : 'Request entry', es ? 'Abrir la puerta' : 'Unlock the door')] : [])
       ];
 
@@ -3396,9 +3471,16 @@
       </div>
 
       <div class="card section" id="set-access"><h2>Access control</h2>
-        ${chk('access.enabled', 'Enable door control')}
-        ${chk('access.unlock_button_on_kiosk', 'Show a “Request entry” button on the kiosk')}
-        ${chk('access.unlock_on_signin', 'Unlock doors automatically when someone signs in')}
+        <p class="muted" style="margin-top:0">Releasing a door or gate from the kiosk.
+          <b>Request entry</b> puts a button on the kiosk home screen for somebody who needs letting in without
+          signing in — a delivery driver at a gate, a contractor returning from their van.</p>
+        <div class="check-list">
+          ${chk('access.enabled', 'Enable door control')}
+          ${chk('access.unlock_button_on_kiosk', 'Show a “Request entry” button on the kiosk',
+            'It only appears once there is a door for it to open — see Access &amp; doors')}
+          ${chk('access.unlock_on_signin', 'Unlock doors automatically when someone signs in')}
+        </div>
+        <div id="access-doors-warning"></div>
       </div>
 
       <div class="card section" id="set-notifications"><h2>Notifications</h2>
@@ -3790,6 +3872,28 @@
     });
     VIEWS.settings.save = saveSettings;
     autoSaveOn(root, saveSettings);
+
+    /*
+     * The kiosk shows the Request entry button only when there is a door for
+     * it to open — ticking the box and finding nothing on the kiosk was the
+     * kind of silence that costs an afternoon.
+     */
+    async function checkAccessDoors() {
+      const box = $('#access-doors-warning');
+      if (!box) return;
+      let doors = [];
+      try { doors = await api('/access-points'); } catch { return; }
+      const live = doors.filter((d) => d.enabled !== 0);
+      const wanted = $('[data-set="access.unlock_button_on_kiosk"]');
+      box.innerHTML = (wanted && wanted.checked && !live.length)
+        ? '<div class="notice error"><b>The button will not appear yet.</b> “Request entry” needs at least one '
+          + 'switched-on door under <b>Settings → Access &amp; doors</b>. Until there is one the kiosk leaves the '
+          + 'button off rather than showing something that cannot work.</div>'
+        : '';
+    }
+    onSectionOpen('set-access', checkAccessDoors);
+    const unlockBox = $('[data-set="access.unlock_button_on_kiosk"]');
+    if (unlockBox) unlockBox.addEventListener('change', checkAccessDoors);
 
     /* --------------------------------------------- the notification cards */
 

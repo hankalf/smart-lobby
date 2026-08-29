@@ -458,7 +458,7 @@ router.post('/signin', writeLimit, async (req, res) => {
     }
 
     const badgeCfg = settings.getSection('badge');
-    const badgeNo = badgeCfg.enabled ? nextBadgeNo(localtime.today()) : null;
+    const badgeNo = badgeCfg.enabled ? nextBadgeNo(localtime.today(), visitType) : null;
     const code = crypto.randomBytes(4).toString('hex').toUpperCase();
 
     // Which entrance or area they signed in at, taken from the kiosk itself.
