@@ -308,17 +308,17 @@
 
   /**
    * The board sits beside "Open kiosk", but only once it has been switched on
-   * — the link carries the key, and a link to a board that does not exist yet
-   * is worse than no link at all.
+   * — a link to a board that does not exist yet is worse than no link at all.
+   *
+   * Shown to everyone signed in, not only administrators. Reception and
+   * whoever books deliveries in are the people most likely to want the roster
+   * up on a second screen, and they are not the people who can switch it on.
    */
   async function showBoardLink() {
     const link = $('#open-board');
     if (!link) return;
-    // The board link carries its key, so only somebody who could read it
-    // anyway is shown it.
-    if (!((ME && ME.areas) || []).includes('admin')) return link.classList.add('hidden');
     try {
-      const b = await api('/board');
+      const b = await api('/board/link');
       if (b && b.url) {
         link.href = b.url;
         link.classList.remove('hidden');

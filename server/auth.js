@@ -35,11 +35,23 @@ function verifyLogin(email, password) {
   return user;
 }
 
-function startSession(res, user) {
+/**
+ * Whether this connection is one a Secure cookie can travel over.
+ *
+ * Read from the request rather than from NODE_ENV, which was the bug: a
+ * platform that terminates TLS ahead of the app — Railway does — passes the
+ * real scheme in a header and does not set NODE_ENV for you, so the session
+ * cookie went out without Secure on a site served entirely over https. Asking
+ * the request is also right for a LAN install on plain http, where marking
+ * the cookie Secure would stop anyone signing in at all.
+ */
+const overHttps = (req) => !!req && (req.secure || req.headers['x-forwarded-proto'] === 'https');
+
+function startSession(res, user, req) {
   const token = crypto.randomBytes(32).toString('hex');
   const expires = new Date(Date.now() + SESSION_DAYS * 864e5);
   run('INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?,?,?,?)', token, user.id, nowISO(), expires.toISOString());
-  const secure = process.env.NODE_ENV === 'production' && process.env.INSECURE_COOKIES !== 'true';
+  const secure = overHttps(req) && process.env.INSECURE_COOKIES !== 'true';
   res.setHeader('Set-Cookie',
     `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_DAYS * 86400}${secure ? '; Secure' : ''}`);
   return token;
@@ -48,7 +60,10 @@ function startSession(res, user) {
 function endSession(req, res) {
   const token = parseCookies(req)[COOKIE];
   if (token) run('DELETE FROM sessions WHERE token = ?', token);
-  res.setHeader('Set-Cookie', `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+  // Cleared with the same flags it was set with, or the browser keeps it.
+  const secure = overHttps(req) && process.env.INSECURE_COOKIES !== 'true';
+  res.setHeader('Set-Cookie',
+    `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure ? '; Secure' : ''}`);
 }
 
 function currentUser(req) {

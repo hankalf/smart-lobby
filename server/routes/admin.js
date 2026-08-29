@@ -85,7 +85,7 @@ router.post('/setup', ratelimit.limit({ name: 'setup', windowMs: 60 * 60000, max
   if (!get('SELECT id FROM sites LIMIT 1')) {
     run('INSERT INTO sites (name, active, created_at) VALUES (?,1,?)', org_name || 'Main site', nowISO());
   }
-  auth.startSession(res, user);
+  auth.startSession(res, user, req);
   res.json({ ok: true, user });
 });
 
@@ -110,7 +110,7 @@ router.post('/login', loginLimit, (req, res) => {
   // and then got it right is not left near a limit they cannot see.
   ratelimit.clear('login-ip', req);
   ratelimit.clear('login-user', req, (r) => String((r.body && r.body.email) || '').toLowerCase());
-  auth.startSession(res, user);
+  auth.startSession(res, user, req);
   res.json({
     ok: true,
     user: {
@@ -1458,6 +1458,23 @@ const boardRoutes = require('./board');
 router.get('/board', (req, res) => {
   const b = settings.getSection('board');
   res.json({ ...b, url: b.enabled && b.key ? `${notify.baseUrl()}/board/${b.key}` : null });
+});
+
+/*
+ * Just the address, for the link in the side menu.
+ *
+ * Everyone signed in can read this, not only administrators: reception and
+ * whoever books deliveries in are exactly the people who want the board open
+ * on a second screen. It carries nothing but whether the board is on and
+ * where it is — the camera settings and the ability to reissue the key stay
+ * on /board, which stays administrative.
+ */
+router.get('/board/link', (req, res) => {
+  const b = settings.getSection('board');
+  res.json({
+    enabled: !!b.enabled,
+    url: b.enabled && b.key ? `${notify.baseUrl()}/board/${b.key}` : null
+  });
 });
 
 /**

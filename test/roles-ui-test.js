@@ -18,6 +18,8 @@ const api = async (method, p, body, cookie) => {
   await api('POST', '/api/admin/users', {
     email: 'ui-clerk@x.test', password: 'temporary123', name: staff.name, role: 'clerk', host_id: staff.id
   }, owner);
+  // Switched on by the owner, so the clerk's side menu has something to link to.
+  await api('POST', '/api/admin/board/key', { enabled: true }, owner);
 
   const browser = await chromium.launch({ ...launchOptions() });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -59,7 +61,15 @@ const api = async (method, p, body, cookie) => {
   ok('…and no Settings tab', !tabs.includes('Settings'), tabs.join(','));
   ok('…and no Visits or Visitor registry', !tabs.includes('Visits') && !tabs.includes('Visitor registry'), tabs.join(','));
   ok('their level is shown beside their name', /clerk/i.test(await page.textContent('#who')), await page.textContent('#who'));
-  ok('the board link is not offered to them', await page.isHidden('#open-board'));
+  /*
+   * The board is for exactly this person — the roster up on a second screen
+   * — so the link is offered whatever their level. It stays hidden only
+   * while the board itself is switched off.
+   */
+  ok('the board link is offered to them once the board is on',
+    await page.isVisible('#open-board'));
+  ok('…pointing at the board', /\/board\//.test(await page.getAttribute('#open-board', 'href') || ''),
+    await page.getAttribute('#open-board', 'href'));
 
   /* ---- and a link they should not have lands somewhere harmless ---- */
   await page.goto(`${BASE}/admin/#settings/backups`);

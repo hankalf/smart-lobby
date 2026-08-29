@@ -141,6 +141,22 @@ const signIn = async (email, password) =>
   ok('…and reception, who has reports, still gets them',
     (await req('GET', '/api/admin/stats', null, jars.reception)).status === 200);
 
+  /* ---- the on-site board is offered to every level, its settings are not ---- */
+  for (const level of ['reception', 'clerk', 'manager']) {
+    const res = await req('GET', '/api/admin/board/link', null, jars[level]);
+    ok(`a ${level} can find the on-site board`, res.status === 200, `${res.status}`);
+    ok(`…and is told only whether it is on and where`,
+      res.status === 200 && Object.keys(res.data || {}).sort().join(',') === 'enabled,url',
+      JSON.stringify(res.data));
+  }
+  ok('the board settings stay administrative',
+    (await req('GET', '/api/admin/board', null, jars.reception)).status === 403,
+    String((await req('GET', '/api/admin/board', null, jars.reception)).status));
+  ok('…so the camera address is not handed out with the link',
+    !JSON.stringify((await req('GET', '/api/admin/board/link', null, jars.clerk)).data).includes('camera'));
+  r = await req('POST', '/api/admin/board/key', { enabled: true }, jars.reception);
+  ok('and reception cannot reissue the key', r.status === 403, String(r.status));
+
   /* ---- the menu is not the control ---- */
   const me = (await req('GET', '/api/admin/me', null, jars.reception)).data;
   ok('the dashboard is told what to draw', Array.isArray(me.areas) && me.areas.includes('visits'), JSON.stringify(me.areas));

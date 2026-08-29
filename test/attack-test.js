@@ -71,6 +71,22 @@ const post = (path, body, headers = {}) =>
   ok('the session cookie is HttpOnly', /HttpOnly/i.test(setCookie), setCookie);
   ok('the session cookie sets SameSite', /SameSite/i.test(setCookie), setCookie);
 
+  /*
+   * Railway terminates TLS ahead of the app, so the request arrives over plain
+   * http with the real scheme in a header. Without honouring that the session
+   * cookie ships without Secure, and any http link to the domain leaks it.
+   * Checked here, before the brute-force section below trips the limiter.
+   */
+  const behindProxy = await raw('/api/admin/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Forwarded-Proto': 'https' },
+    body: JSON.stringify({ email: 'hankalfr@gmail.com', password: 'Testing123!' })
+  });
+  const proxied = behindProxy.headers.get('set-cookie') || '';
+  ok('the session cookie is Secure when the proxy says https', /;\s*Secure/i.test(proxied), proxied);
+  ok('…and SameSite stops another site sending it', /SameSite=(Lax|Strict)/i.test(proxied), proxied);
+  const spare = proxied.split(';')[0];
+
   /* ============ 4. Private media ============ */
   // Find a real photo/signature path, then try to read it without a session.
   const visits = (await j('/api/admin/visits?limit=50', { headers: { cookie } })).data;
@@ -197,7 +213,61 @@ const post = (path, body, headers = {}) =>
     ok('a guessed device token resolves to nothing', guess.data.device_id === null);
   }
 
+  /* ============ 11. The database and the backups ============ */
+  /*
+   * The one file that holds everything. Anywhere it is reachable over http is
+   * a complete breach — names, phone numbers, licence numbers and photos in
+   * one download, no login needed.
+   */
+  const dbPaths = ['/data/smartlobby.db', '/smartlobby.db', '/data/smartlobby.db-wal', '/media/private/../smartlobby.db',
+    '/data/backups', '/backups', '/data/notify-photo.key', '/.env', '/package.json', '/server/db.js'];
+  const served = [];
+  for (const p of dbPaths) {
+    const r = await raw(p);
+    if (r.status === 200) served.push(`${p} (200)`);
+  }
+  ok('nothing that holds the data is served over http', served.length === 0, served.join(', '));
+
+  const anonBackups = await j('/api/admin/backups');
+  ok('the backup list needs a login', anonBackups.status !== 200, String(anonBackups.status));
+  const anonDownload = await raw('/api/admin/backups/download?file=smartlobby.zip');
+  ok('a backup cannot be downloaded anonymously', anonDownload.status !== 200, String(anonDownload.status));
+
+  /* ============ 12. The on-site board's key ============ */
+  const boardCfg = (await j('/api/admin/board', { headers: { cookie } })).data;
+  ok('the board key is long enough that guessing is hopeless',
+    !boardCfg.key || String(boardCfg.key).length >= 24, `${(boardCfg.key || '').length} chars`);
+  ok('a wrong board key gives nothing away', (await raw('/board/' + 'a'.repeat(32))).status === 404,
+    String((await raw('/board/' + 'a'.repeat(32))).status));
+  ok('and neither does its data endpoint',
+    (await j('/api/board/' + 'a'.repeat(32) + '/data')).status !== 200,
+    String((await j('/api/board/' + 'a'.repeat(32) + '/data')).status));
+
+  /* ============ 13. Licence data, the most sensitive thing held ============ */
+  const withId = (await j('/api/admin/visits?limit=50', { headers: { cookie } })).data;
+  const idRows = (withId.rows || withId || []);
+  ok('a licence number never reaches the unauthenticated kiosk lookup',
+    !/id_number|licen[cs]e_number/i.test(JSON.stringify((await post('/api/kiosk/lookup', { phone: '415-268-0101' })).data || {})),
+    'licence field present in a kiosk response');
+  ok('…nor the sign-out list',
+    !/id_number/i.test(JSON.stringify((await post('/api/kiosk/signout/search', { q: 'a' })).data || [])));
+  ok('…nor the public board',
+    !/id_number|phone/i.test(JSON.stringify(
+      (await j(`/api/board/${boardCfg.key || 'none'}/data`)).data || {})),
+    'a licence number or phone number is on the wall board');
+
+  /* ============ 14. Signing out really ends the session ============ */
+  // Last, and on the spare session, so nothing above loses its login.
+  ok('a session works before signing out',
+    (await j('/api/admin/dashboard', { headers: { cookie: spare } })).status === 200);
+  await j('/api/admin/logout', { method: 'POST', headers: { cookie: spare } });
+  ok('…and the same cookie is dead afterwards, not merely cleared in the browser',
+    (await j('/api/admin/dashboard', { headers: { cookie: spare } })).status === 401,
+    String((await j('/api/admin/dashboard', { headers: { cookie: spare } })).status));
+
   console.log(`\n${pass} defences held, ${fail} weaknesses found`);
   if (finding.length) { console.log('\nWEAKNESSES:'); finding.forEach((f) => console.log(' - ' + f)); }
-  process.exit(0);
+  // A weakness fails the run. Exiting 0 meant the one suite whose whole job is
+  // to find them reported "everything passed" while listing one.
+  process.exit(finding.length ? 1 : 0);
 })().catch((e) => { console.error('CRASH', e); process.exit(1); });

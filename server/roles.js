@@ -85,12 +85,25 @@ const AREA_BY_PREFIX = {
 /** Everything about your own session and account, whoever you are. */
 const ALWAYS_ALLOWED = new Set(['me', 'logout', 'login', 'setup', 'bootstrap', 'branding']);
 
+/*
+ * A few requests anyone signed in may make, matched on the whole path rather
+ * than its first segment — because the segment they sit under is otherwise
+ * administrative.
+ *
+ * `/board/link` is the address of the on-site board and nothing else. The
+ * board settings, which include the camera and the key that can be reissued,
+ * stay under `/board` and stay administrative.
+ */
+const OPEN_PATHS = new Set(['GET /board/link']);
+
 /**
  * @returns {string|null} the area this request needs, or null if anyone signed
  *   in may make it
  */
 function areaForRequest(method, urlPath) {
-  const segment = String(urlPath || '').split('?')[0].split('/').filter(Boolean)[0] || '';
+  const path = String(urlPath || '').split('?')[0].replace(/\/+$/, '') || '/';
+  if (OPEN_PATHS.has(`${String(method || '').toUpperCase()} ${path}`)) return null;
+  const segment = path.split('/').filter(Boolean)[0] || '';
   if (ALWAYS_ALLOWED.has(segment)) return null;
   // Changing your own password is not an administrative act.
   if (segment === 'me') return null;
@@ -107,4 +120,4 @@ const describe = () => Object.entries(ROLES)
   .filter(([key]) => key !== 'owner')
   .map(([key, r]) => ({ key, label: r.label, describe: r.describe, areas: r.areas }));
 
-module.exports = { AREAS, ROLES, areasFor, can, isAdmin, areaForRequest, describe };
+module.exports = { AREAS, ROLES, areasFor, can, isAdmin, areaForRequest, describe, OPEN_PATHS };
