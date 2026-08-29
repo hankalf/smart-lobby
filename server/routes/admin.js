@@ -1178,14 +1178,14 @@ router.get('/notifications', (req, res) => {
  * layout rules in the browser to drift out of step with these.
  */
 router.get('/notify/preview', (req, res) => {
-  const n = settings.getSection('notify');
-  const card = req.query.card ? safeJson(req.query.card, n.card) : n.card;
-  res.json(buildPreview(card));
+  const event = cards.EVENT_BY_ID[req.query.event] ? req.query.event : 'signin';
+  res.json(buildPreview(event, req.query.card ? safeJson(req.query.card, null) : null));
 });
 
 router.post('/notify/preview', (req, res) => {
-  const n = settings.getSection('notify');
-  res.json(buildPreview((req.body && req.body.card) || n.card));
+  const body = req.body || {};
+  const event = cards.EVENT_BY_ID[body.event] ? body.event : 'signin';
+  res.json(buildPreview(event, body.card || null));
 });
 
 function safeJson(text, fallback) {
@@ -1226,25 +1226,90 @@ function sampleVisit() {
   };
 }
 
-function buildPreview(card) {
-  const { visit, real } = sampleVisit();
-  const model = cards.buildModel(visit, card, {
+/**
+ * A parcel to show in the delivery designer.
+ *
+ * The real one if reception has booked any in, since a preview of the wording
+ * with somebody's actual courier on it is worth more than an invented one.
+ */
+function sampleDelivery() {
+  const real = get(`SELECT d.*, h.name AS host_name, h.email AS host_email
+                    FROM deliveries d LEFT JOIN hosts h ON h.id = d.recipient_host_id
+                    ORDER BY d.received_at DESC LIMIT 1`);
+  if (real) return { delivery: real, real: true };
+  return {
+    real: false,
+    delivery: {
+      id: 0, courier_name: 'Hank Alfred', courier_company: 'UPS', parcel_count: 3,
+      tracking: '1Z999AA10123456784', notes: 'Two boxes and a tube',
+      host_name: 'Hank Alfred', host_email: 'host@example.com',
+      recipient_text: 'Hank Alfred', site_name: 'Main site',
+      received_at: new Date().toISOString()
+    }
+  };
+}
+
+/**
+ * What one event's card looks like right now.
+ *
+ * `card` overrides what is saved, so the designer can show a change before it
+ * has been written — which, with auto-save, is a matter of a second, but the
+ * preview should never lag behind the controls.
+ */
+function buildPreview(eventId, card) {
+  const n = settings.getSection('notify');
+  const event = cards.EVENT_BY_ID[eventId] || cards.EVENT_BY_ID.signin;
+  // A card passed in is a whole design in its own right, not a patch.
+  const notifyForPreview = card ? { ...n, cards: { ...(n.cards || {}), [event.id]: card } } : n;
+
+  const { row, real, photoUrl, fallbackTitle } = event.subject === 'delivery'
+    ? (() => {
+        const s = sampleDelivery();
+        return { row: s.delivery, real: s.real, photoUrl: null,
+          fallbackTitle: `Delivery waiting for ${s.delivery.host_name || s.delivery.recipient_text}` };
+      })()
+    : (() => {
+        const s = sampleVisit();
+        return { row: s.visit, real: s.real, photoUrl: notify.cardPhotoUrl(s.visit),
+          fallbackTitle: `${s.visit.full_name} has arrived` };
+      })();
+
+  const model = cards.buildModel(event.id, row, notifyForPreview, {
     org: settings.getSection('org'),
     fmtTime: notify.fmtTime,
     baseUrl: notify.baseUrl(),
-    photoUrl: notify.cardPhotoUrl(visit),
-    fallbackTitle: `${visit.full_name} has arrived`
+    boardUrl: notify.boardUrl(),
+    photoUrl,
+    // Whoever this visitor type is routed to, so the preview shows the extra
+    // tag line rather than hiding it until the first real arrival.
+    also: event.subject === 'visit' ? notify.routedStaff(row.visit_type) : [],
+    now: new Date().toISOString(),
+    fallbackTitle
   });
+
   return {
+    event: event.id,
     model,
     teams: cards.teamsCard(model),
     sample: !real,
-    fields: cards.FIELDS.map(({ id, label, sensitive }) => ({ id, label, sensitive: !!sensitive })),
+    card: cards.cardFor(event.id, notifyForPreview),
+    fields: event.fields.map(({ id, label, sensitive }) => ({ id, label, sensitive: !!sensitive })),
     // A photo cannot reach Teams from an address only this machine can resolve.
     public_url: notify.baseUrl(),
     public_url_reachable: /^https?:\/\/(?!localhost|127\.|0\.0\.0\.0)/i.test(notify.baseUrl())
   };
 }
+
+/** Everything the designers need to draw themselves — events, fields, links. */
+router.get('/notify/catalogue', (req, res) => {
+  const n = settings.getSection('notify');
+  res.json({
+    ...cards.catalogue(),
+    // What is in force per event, defaults and the older shared design folded in.
+    cards: Object.fromEntries(cards.EVENTS.map((e) => [e.id, cards.cardFor(e.id, n)])),
+    board_url: notify.boardUrl()
+  });
+});
 
 router.post('/settings/test-webhook', async (req, res) => {
   if (!clean(req.body.url)) return res.json({ ok: false, detail: 'Enter a webhook URL first.' });
@@ -1258,8 +1323,10 @@ router.post('/settings/test-webhook', async (req, res) => {
    * button being pressed, and who may not even be in that team. A real
    * arrival tags the host; a test is not an arrival.
    */
-  const preview = buildPreview((req.body && req.body.card) || settings.getSection('notify').card);
-  const model = { ...preview.model, title: `${preview.model.title} — test`, mention: null };
+  const body = req.body || {};
+  const event = cards.EVENT_BY_ID[body.event] ? body.event : 'signin';
+  const preview = buildPreview(event, body.card || null);
+  const model = { ...preview.model, title: `${preview.model.title} — test`, mention: null, mentionTemplate: null };
   const result = await notify.sendWebhook({ url: req.body.url, model });
   res.json({
     ...result,

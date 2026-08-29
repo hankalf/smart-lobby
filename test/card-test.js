@@ -52,9 +52,9 @@ function findAll(node, type, out = []) {
    * check should depend on.
    */
   const cards = require('../server/notify-card');
-  const bare = cards.buildModel(
+  const bare = cards.buildModel('signin',
     { full_name: 'Hank Alfred', visit_type: 'visitor', signed_in_at: new Date().toISOString() },
-    { title_template: '{name} has arrived to see {host}', fields: [] },
+    { cards: { signin: { title_template: '{name} has arrived to see {host}', fields: [] } } },
     { org: { name: 'Test' }, fmtTime: (x) => x, baseUrl: '' });
   ok('an unnamed host reads as reception', /to see reception$/.test(bare.title), bare.title);
   ok('a visit with no host is not tagged', bare.mention === null, JSON.stringify(bare.mention));

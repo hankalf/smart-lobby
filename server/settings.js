@@ -155,6 +155,16 @@ const DEFAULTS = {
      * does not silently go unannounced.
      */
     types_notified: {},
+    /*
+     * And who else, beyond the person being visited.
+     *
+     * Keyed by visitor type: { contractor: { staff: [3, 7] } }. Those people
+     * are tagged in the channel post and get it through their own chat
+     * webhook if they have one — a safety officer who wants every contractor,
+     * an HR manager who wants every interview, without either of them having
+     * to watch a channel for the three arrivals a week that concern them.
+     */
+    type_routing: {},
     global_webhook_url: '',
     webhook_channel_always: true,
     webhook_format: 'teams',
@@ -164,8 +174,19 @@ const DEFAULTS = {
      * dashboard, since getting it wrong shows up only as a missing picture.
      */
     public_url: '',
-    // What an arrival looks like when it lands — see server/notify-card.js.
-    card: { ...require('./notify-card').DEFAULT_CARD }
+    /*
+     * What each kind of notification looks like when it lands — one design per
+     * event, see server/notify-card.js. `card` is the single shared design
+     * that came before there were four; sign-ins still fall back to it, so a
+     * site that had one set up keeps exactly the card it had.
+     *
+     * Deliberately empty rather than pre-filled with each event's defaults:
+     * an entry here means "somebody designed this", which is what lets
+     * sign-ins inherit the older shared design instead of silently replacing
+     * it with a stock one.
+     */
+    card: { ...require('./notify-card').DEFAULT_CARD },
+    cards: {}
   },
   /*
    * The wall board: who is on site, on a page somebody can leave open.

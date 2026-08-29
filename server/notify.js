@@ -70,17 +70,19 @@ function detectWebhookFormat(url) {
  * channel as well when that is switched on. With it off the channel is only a
  * fallback for people who have no webhook of their own.
  */
-function webhookTargets(ownUrl) {
+function webhookTargets(ownUrl, extraUrls = []) {
   const n = settings.getSection('notify');
   const list = [];
   if (ownUrl) list.push(ownUrl);
+  // Whoever this visitor type is routed to, through their own chat webhook.
+  extraUrls.filter(Boolean).forEach((url) => list.push(url));
   if (n.global_webhook_url && (n.webhook_channel_always !== false || !ownUrl)) list.push(n.global_webhook_url);
   return [...new Set(list.filter(Boolean))];
 }
 
 /** Post to every destination for this recipient, and report on each. */
-function sendWebhooks({ ownUrl, model, visit_id, delivery_id }) {
-  return Promise.all(webhookTargets(ownUrl).map((url) =>
+function sendWebhooks({ ownUrl, extraUrls, model, visit_id, delivery_id }) {
+  return Promise.all(webhookTargets(ownUrl, extraUrls || []).map((url) =>
     sendWebhook({ url, model, visit_id, delivery_id })));
 }
 
@@ -183,11 +185,47 @@ function typeNotified(visitType) {
   return map[visitType] !== false;
 }
 
-/** Everything the card builder needs that is not on the visit row itself. */
+/**
+ * Who else this kind of visitor concerns.
+ *
+ * A safety officer who wants every contractor, an HR manager who wants every
+ * interview — people with no reason to watch a general channel for the three
+ * arrivals a week that are theirs. They are tagged in the post and, if they
+ * have a chat webhook of their own, sent it directly.
+ *
+ * Inactive staff are dropped: leaving somebody who has left the company
+ * tagged on every contractor arrival is exactly the kind of thing nobody
+ * notices for months.
+ */
+function routedStaff(visitType) {
+  const routing = settings.getSection('notify').type_routing || {};
+  const ids = ((routing[visitType] || {}).staff || [])
+    .map(Number).filter((id) => Number.isInteger(id) && id > 0);
+  if (!ids.length) return [];
+  const rows = all(
+    `SELECT id, name, email, webhook_url FROM hosts WHERE active = 1 AND id IN (${ids.map(() => '?').join(',')})`,
+    ...ids);
+  // Kept in the order the site chose, so the card reads the way it was set up.
+  return ids.map((id) => rows.find((r) => r.id === id)).filter(Boolean);
+}
+
+/**
+ * The board's own address, for a card that offers a link to it.
+ *
+ * Null when the board is off or has no key: a button leading to a 404 is
+ * worse than one fewer button.
+ */
+const boardUrl = () => {
+  const b = settings.getSection('board');
+  return b.enabled && b.key ? `${baseUrl()}/board/${b.key}` : null;
+};
+
+/** Everything the card builder needs that is not on the row itself. */
 const cardContext = (extra) => ({
   org: settings.getSection('org'),
   fmtTime,
   baseUrl: baseUrl(),
+  boardUrl: boardUrl(),
   ...extra
 });
 
@@ -198,12 +236,17 @@ async function notifyArrival(visitId) {
   if (!v) return;
   if (!typeNotified(v.visit_type)) return;
 
-  const model = cards.buildModel(v, n.card, cardContext({
+  const also = routedStaff(v.visit_type);
+  const model = cards.buildModel('signin', v, n, cardContext({
     photoUrl: cardPhotoUrl(v),
+    also,
     fallbackTitle: `${v.full_name} has arrived`
   }));
 
-  await sendWebhooks({ ownUrl: v.host_webhook, model, visit_id: visitId });
+  await sendWebhooks({
+    ownUrl: v.host_webhook, extraUrls: also.map((p) => p.webhook_url),
+    model, visit_id: visitId
+  });
 }
 
 async function notifyDeparture(visitId) {
@@ -212,15 +255,16 @@ async function notifyDeparture(visitId) {
   const v = visitDetail(visitId);
   if (!v) return;
   if (!typeNotified(v.visit_type)) return;
-  const model = cards.plainModel({
-    title: `${v.full_name} has signed out`,
-    lines: [`Signed out: ${fmtTime(v.signed_out_at)}`, v.host_name ? `Staff member: ${v.host_name}` : null].filter(Boolean),
+  const also = routedStaff(v.visit_type);
+  const model = cards.buildModel('signout', v, n, cardContext({
     photoUrl: cardPhotoUrl(v),
-    org: settings.getSection('org'),
-    card: n.card,
-    mention: { name: v.host_name, email: v.host_email }
+    also,
+    fallbackTitle: `${v.full_name} has signed out`
+  }));
+  await sendWebhooks({
+    ownUrl: v.host_webhook, extraUrls: also.map((p) => p.webhook_url),
+    model, visit_id: visitId
   });
-  await sendWebhooks({ ownUrl: v.host_webhook, model, visit_id: visitId });
 }
 
 async function notifyDelivery(deliveryId) {
@@ -229,23 +273,11 @@ async function notifyDelivery(deliveryId) {
   const d = get(`SELECT d.*, h.name AS host_name, h.email AS host_email, h.phone AS host_phone, h.webhook_url AS host_webhook
                  FROM deliveries d LEFT JOIN hosts h ON h.id = d.recipient_host_id WHERE d.id = ?`, deliveryId);
   if (!d) return;
-  const who = d.host_name || d.recipient_text || 'reception';
-  const model = cards.plainModel({
-    title: `Delivery waiting for ${who}`,
-    lines: [
-      `Courier: ${d.courier_name || 'unknown'}${d.courier_company ? ` (${d.courier_company})` : ''}`,
-      `Parcels: ${d.parcel_count}`,
-      d.tracking ? `Tracking: ${d.tracking}` : null,
-      `Received: ${fmtTime(d.received_at)}`,
-      'Collect from reception.'
-    ].filter(Boolean),
+  const model = cards.buildModel('delivery', d, n, cardContext({
     // A parcel photo is a box, not a person, so it is never behind the toggle.
     photoUrl: null,
-    org: settings.getSection('org'),
-    card: n.card,
-    // Whoever the parcel is for, if they are a staff member with an address.
-    mention: { name: d.host_name, email: d.host_email }
-  });
+    fallbackTitle: `Delivery waiting for ${d.host_name || d.recipient_text || 'reception'}`
+  }));
   await sendWebhooks({ ownUrl: d.host_webhook, model, delivery_id: deliveryId });
 }
 
@@ -338,21 +370,21 @@ async function notifyInduction(visitId) {
   if (!n.on_induction) return;
   const v = visitDetail(visitId);
   if (!v || !typeNotified(v.visit_type)) return;
-  const model = cards.plainModel({
-    title: `${v.full_name} has completed the site induction`,
-    lines: [
-      v.company ? `Company: ${v.company}` : null,
-      `Type: ${v.visit_type}`,
-      `Completed: ${fmtTime(nowISO())}`
-    ].filter(Boolean),
+  const also = routedStaff(v.visit_type);
+  const model = cards.buildModel('induction', v, n, cardContext({
     photoUrl: cardPhotoUrl(v),
-    org: settings.getSection('org'),
-    card: n.card,
-    mention: { name: v.host_name, email: v.host_email }
+    also,
+    // The moment it was signed, which is now — the visit row holds when they
+    // arrived, and on a long induction those are not the same thing.
+    now: nowISO(),
+    fallbackTitle: `${v.full_name} has completed the site induction`
+  }));
+  await sendWebhooks({
+    ownUrl: v.host_webhook, extraUrls: also.map((p) => p.webhook_url),
+    model, visit_id: visitId
   });
-  await sendWebhooks({ ownUrl: v.host_webhook, model, visit_id: visitId });
 }
 
 module.exports = { notifyArrival, notifyDeparture, notifyDelivery, notifyInduction,
-  sendWebhook, sendWebhooks, webhookTargets, baseUrl, cardPhotoUrl, cardContext, visitDetail, fmtTime,
-  retryPending, health, RETRY_DELAYS_MS, typeNotified };
+  sendWebhook, sendWebhooks, webhookTargets, baseUrl, boardUrl, cardPhotoUrl, cardContext, visitDetail, fmtTime,
+  retryPending, health, RETRY_DELAYS_MS, typeNotified, routedStaff };

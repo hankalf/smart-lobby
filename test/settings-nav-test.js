@@ -158,12 +158,23 @@ const ok = (n, c, x) => { if (c) { pass++; console.log(`  ok  ${n}`); } else { f
   // The strip and the all-types list are two views of the same thing.
   await page.click('#set-flow .sub-fold > summary');
   await page.waitForTimeout(250);
-  const column = await page.$$eval('[data-flowtype="visitor"] .flow-list li span:first-child', (e) => e.map((x) => x.textContent));
+  /*
+   * The strip shows whichever type the picker is on, which is not necessarily
+   * the first one this site happens to have — comparing against a hardcoded
+   * "visitor" column made this pass or fail depending on what an earlier suite
+   * had left the visitor types looking like.
+   */
+  const flowType = await page.inputValue('#flow-type');
+  const column = await page.$$eval(`[data-flowtype="${flowType}"] .flow-list li span:first-child`,
+    (e) => e.map((x) => x.textContent));
   ok('the side-by-side list agrees with the strip', column.join(',') === order2.join(','),
     `${column.join(',')} vs ${order2.join(',')}`);
 
-  await page.click('#save-settings');
-  await page.waitForTimeout(700);
+  // Nothing to press any more — the page saves itself.
+  await page.waitForFunction(() => {
+    const el = document.querySelector('#save-state');
+    return !el.hidden && /Saved/.test(el.textContent);
+  }, null, { timeout: 10000 }).catch(() => {});
   const savedFlow = await page.evaluate(() => fetch('/api/admin/settings').then((r) => r.json()).then((s) => s.flow.visitor));
   ok('the rearranged flow is saved', Array.isArray(savedFlow) && savedFlow.length === 4, JSON.stringify(savedFlow));
 
@@ -209,14 +220,17 @@ const ok = (n, c, x) => { if (c) { pass++; console.log(`  ok  ${n}`); } else { f
   await page.waitForTimeout(250);
   ok('and opens when asked', await page.isVisible('#wording-type'));
 
-  /* ---- the settings still save ---- */
+  /* ---- the settings still save themselves ---- */
   await page.click('#nav .subnav button[data-section="retention"]');
   await page.waitForTimeout(300);
+  await page.waitForFunction(() => document.querySelector('#save-state').hidden, null, { timeout: 10000 });
   await page.fill('[data-set="privacy.retain_visits_days"]', '400');
-  await page.click('#save-settings');
-  await page.waitForTimeout(600);
+  await page.waitForFunction(() => {
+    const el = document.querySelector('#save-state');
+    return !el.hidden && /Saved/.test(el.textContent);
+  }, null, { timeout: 10000 });
   const saved = await page.evaluate(() => fetch('/api/admin/settings').then((r) => r.json()).then((s) => s.privacy.retain_visits_days));
-  ok('settings still save from inside a folded page', String(saved) === '400', String(saved));
+  ok('settings save themselves from inside a folded page', String(saved) === '400', String(saved));
 
   /* ---- other views are untouched ---- */
   await page.click('#nav > button[data-view="dashboard"]');

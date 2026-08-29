@@ -26,6 +26,7 @@ const teams = http.createServer((q, res) => {
 
 const CHANNEL = 'http://127.0.0.1:2700/webhook.office.com/channel';
 const PERSON  = 'http://127.0.0.1:2700/webhook.office.com/person';
+const SAFETY  = 'http://127.0.0.1:2700/webhook.office.com/safety';
 const cardText = (p) => JSON.stringify(p.body);
 
 (async () => {
@@ -72,6 +73,57 @@ const cardText = (p) => JSON.stringify(p.body);
   const webhookSent = rows.filter((x) => x.channel === 'webhook' && x.status === 'sent').length;
   ok('activity log records the Teams posts', webhookSent >= 2, `${webhookSent} sent`);
   ok('no email rows are produced any more', !rows.some((x) => x.channel === 'email' && x.created_at > new Date(Date.now() - 60000).toISOString()));
+
+  /* ---- a visitor type routed to somebody who is not the host ---- */
+  r = await req('POST', '/api/admin/staff', {
+    name: 'Hank Alfred', email: 'safety@x.test', webhook_url: SAFETY, active: 1 });
+  const officer = r.data;
+  ok('a safety officer with their own Teams link exists', !!officer.id);
+
+  await req('PUT', '/api/admin/settings', {
+    notify: { type_routing: { contractor: { staff: [officer.id] } } } });
+
+  posts.length = 0;
+  r = await req('POST', '/api/kiosk/signin', { full_name: 'Hank Alfred 20', company: 'Teams Co', phone: '415-268-0701',
+    visit_type: 'contractor', project_id: 1, host_id: host.id, client_ref: 'route-' + Date.now() });
+  ok('a routed contractor signs in', r.status === 200, JSON.stringify(r.data).slice(0, 90));
+  await new Promise((r2) => setTimeout(r2, 1400));
+
+  const toSafety = posts.find((p) => p.path.endsWith('/safety'));
+  ok('the routed person is messaged directly', !!toSafety, JSON.stringify(posts.map((p) => p.path)));
+  ok('the person being visited still is', !!posts.find((p) => p.path.endsWith('/person')));
+  ok('and the channel still is', !!posts.find((p) => p.path.endsWith('/channel')));
+
+  const channelCard = posts.find((p) => p.path.endsWith('/channel'));
+  const entities = channelCard.body.attachments[0].content.msteams.entities;
+  ok('the channel post tags both of them', entities.length === 2,
+    JSON.stringify(entities.map((e) => e.mentioned.id)));
+  ok('…the host and the routed person', 
+    entities.map((e) => e.mentioned.id).sort().join(',') === 'dana@x.test,safety@x.test',
+    entities.map((e) => e.mentioned.id).join(','));
+  ok('every tag in the text is one Teams was told about',
+    entities.every((e) => cardText(channelCard).includes(e.text.replace(/"/g, '\\"'))
+      || JSON.stringify(channelCard.body.attachments[0].content.body).includes(e.text)),
+    JSON.stringify(channelCard.body.attachments[0].content.body).slice(0, 250));
+
+  /* a visitor of another type is not routed to them */
+  posts.length = 0;
+  r = await req('POST', '/api/kiosk/signin', { full_name: 'Hank Alfred 21', company: 'Teams Co', phone: '415-268-0702',
+    visit_type: 'visitor', host_id: host.id, client_ref: 'noroute-' + Date.now() });
+  await new Promise((r2) => setTimeout(r2, 1400));
+  ok('a type with no routing does not reach them',
+    !posts.find((p) => p.path.endsWith('/safety')), JSON.stringify(posts.map((p) => p.path)));
+
+  /* somebody who has left the company stops being tagged */
+  await req('PATCH', `/api/admin/staff/${officer.id}`, { active: 0 });
+  posts.length = 0;
+  r = await req('POST', '/api/kiosk/signin', { full_name: 'Hank Alfred 22', company: 'Teams Co', phone: '415-268-0703',
+    visit_type: 'contractor', project_id: 1, host_id: host.id, client_ref: 'gone-' + Date.now() });
+  await new Promise((r2) => setTimeout(r2, 1400));
+  ok('a routed person who has left is dropped, not left tagged forever',
+    !posts.find((p) => p.path.endsWith('/safety')), JSON.stringify(posts.map((p) => p.path)));
+
+  await req('PUT', '/api/admin/settings', { notify: { type_routing: {} } });
 
   /* a refused flow is reported, not swallowed */
   mode = 'refuse';

@@ -42,6 +42,101 @@
     toast._t = setTimeout(() => t.classList.add('hidden'), ms);
   }
 
+  /* ------------------------------------------------------------ auto-save */
+
+  /**
+   * Saving as you go, and saying so.
+   *
+   * A Save button at the bottom of a page you have to scroll is a way to lose
+   * work: change a toggle near the top, wander off, and nothing was kept. The
+   * pages that edit settings in place now save themselves, and the pill says
+   * which of the three states it is in — working, saved, or not saved and why.
+   *
+   * Two things this must not do. It must not fire on every keystroke, so a
+   * pause is waited for. And it must not overlap itself: two saves in flight
+   * against the same settings could land in either order, so a save that
+   * arrives while one is running is queued behind it rather than raced.
+   */
+  const saveState = {
+    show(text, kind) {
+      const el = $('#save-state');
+      clearTimeout(saveState._hide);
+      el.hidden = false;
+      el.className = `save-state${kind === 'working' ? ' working' : ''}${kind === 'problem' ? ' problem' : ''}`;
+      el.innerHTML = `<span class="dot"></span><span>${esc(text)}</span>`;
+      if (kind === 'done') {
+        // Long enough to read, short enough not to sit there all day.
+        saveState._hide = setTimeout(() => {
+          el.classList.add('fading');
+          saveState._hide = setTimeout(() => saveState.clear(), 250);
+        }, 1600);
+      }
+    },
+    clear() {
+      clearTimeout(saveState._hide);
+      const el = $('#save-state');
+      if (!el) return;
+      el.hidden = true;
+      el.classList.remove('fading');
+      // Emptied, not just hidden: a stale "Saved" left lying about is a lie
+      // the next time anything reads it, screen reader or test alike.
+      el.textContent = '';
+    }
+  };
+
+  /**
+   * @param {() => Promise<void>} write  performs the save
+   * @param {() => string|null} check    a reason not to save yet, or null
+   * @returns {{ soon: () => void, now: () => Promise<void> }}
+   */
+  function autoSave(write, check = () => null) {
+    let timer = null;
+    let running = null;
+    let again = false;
+
+    async function run() {
+      const blocked = check();
+      if (blocked) return saveState.show(blocked, 'problem');
+      if (running) { again = true; return running; }
+      saveState.show('Saving…', 'working');
+      running = (async () => {
+        try {
+          await write();
+          saveState.show('Saved', 'done');
+        } catch (err) {
+          if (err.message === 'unauthenticated') return saveState.clear();
+          saveState.show((err.data && err.data.message) || 'Not saved — try again', 'problem');
+        } finally {
+          running = null;
+          // Anything that changed while that was in flight goes next.
+          if (again) { again = false; run(); }
+        }
+      })();
+      return running;
+    }
+
+    return {
+      soon() { clearTimeout(timer); timer = setTimeout(run, 700); },
+      now() { clearTimeout(timer); return run(); }
+    };
+  }
+
+  /**
+   * Wire the fields that belong to a saver, and only those.
+   *
+   * Deliberately not every input under the page: the settings page also holds
+   * a password form, a restore upload and a camera-test box, and flashing
+   * "Saving…" while somebody types a new password would be both wrong and
+   * alarming.
+   */
+  function autoSaveOn(root, saver, selector = '[data-set]') {
+    $$(selector, root).forEach((el) => {
+      // A checkbox or a picker is a finished decision; typing is not.
+      const immediate = el.type === 'checkbox' || el.type === 'radio' || el.tagName === 'SELECT';
+      el.addEventListener(immediate ? 'change' : 'input', () => saver.soon());
+    });
+  }
+
   /** The same, with a way back from what just happened. */
   function toastUndo(msg, undo, ms = 8000) {
     const t = $('#toast');
@@ -105,6 +200,60 @@
       });
     }
     return { bg, close };
+  }
+
+  /**
+   * The emoji worth putting on a kiosk card, grouped by what they are for.
+   *
+   * Deliberately a curated list rather than every emoji there is: the job is
+   * "pick something that reads as a delivery driver from six feet away", and
+   * a full picker with a search box makes that harder, not easier. Anything
+   * not here can still be pasted in, so nothing is actually shut out.
+   */
+  const EMOJI = [
+    ['People', ['👤', '👥', '🧑', '👷', '🧑‍💼', '🧑‍🔧', '🧑‍🏭', '🧑‍⚕️', '🧑‍🚒', '👮', '🕵️', '🧑‍🍳',
+      '🧑‍🌾', '🧑‍🎓', '🧑‍🏫', '🧑‍💻', '🤝', '👋', '🙋']],
+    ['Trades & site', ['🪛', '🔧', '🔨', '🪚', '🧰', '⚙️', '🪜', '🧱', '🏗️', '🚧', '⛑️', '🦺',
+      '🔩', '🪝', '🧪', '⚡', '🔌', '🚿', '🌡️']],
+    ['Vehicles', ['🚚', '🚛', '🚐', '🚗', '🚕', '🛻', '🚜', '🏍️', '🚲', '🚨', '🚑', '🚒', '🛵']],
+    ['Deliveries', ['📦', '📮', '📬', '🚚', '🧾', '📋', '🏷️', '📥', '🗳️']],
+    ['Places & doors', ['🚪', '🏢', '🏭', '🏠', '🏬', '🛗', '🔓', '🔒', '🗝️', '🛡️', '🅿️', '🚻']],
+    ['Papers & badges', ['🪪', '📄', '📝', '✍️', '📑', '🗂️', '📊', '📅', '⏱️', '✅', '❗', '⭐']]
+  ];
+
+  /**
+   * Choose an emoji, or type one in.
+   *
+   * @param {string} current  what is on the card now, so it can be shown chosen
+   * @param {function} onPick called with the new emoji
+   */
+  function pickEmoji(current, onPick) {
+    const body = `
+      <p class="muted" style="margin-top:0">Tap one to use it. Anything else can be pasted into the box at the
+        bottom — a kiosk shows whatever emoji the tablet has a picture for.</p>
+      <div class="emoji-pick">
+        ${EMOJI.map(([group, list]) => `<div class="emoji-group">
+          <div class="muted emoji-group-name">${esc(group)}</div>
+          <div class="emoji-grid">${list.map((e) => `<button class="emoji${e === current ? ' on' : ''}"
+            type="button" data-emoji="${esc(e)}" title="${esc(e)}">${esc(e)}</button>`).join('')}</div>
+        </div>`).join('')}
+      </div>
+      <label class="field" style="margin-top:.75rem"><span>Or paste your own</span>
+        <input class="input" id="emoji-own" maxlength="8" style="max-width:8rem;text-align:center"
+          value="${esc(current)}"></label>`;
+
+    const { bg, close } = modal('Choose an icon', body, (_, done) => {
+      const own = $('#emoji-own', bg).value.trim();
+      if (own) onPick(own);
+      done();
+    }, 'Use this');
+
+    $$('[data-emoji]', bg).forEach((b) => b.addEventListener('click', () => {
+      // A tap on a grid emoji is the whole decision — making somebody then
+      // press Save as well is a step for nothing.
+      onPick(b.dataset.emoji);
+      close();
+    }));
   }
 
   /**
@@ -1501,8 +1650,8 @@
         <div class="badge-preview-wrap">
           <div class="badge-preview" id="badge-preview"></div>
           <div>
-            <div class="row"><button class="btn" id="badge-save">Save badge settings</button>
-              <button class="btn subtle" id="badge-test">Print a test badge</button></div>
+            <div class="row"><button class="btn subtle" id="badge-test">Print a test badge</button>
+              <span class="muted">The design saves itself as you change it.</span></div>
             <p class="muted" style="max-width:32rem">Connect the label printer to the device showing the kiosk and make
               it the default printer. In Chrome or Edge set margins to <b>None</b>, turn headers and footers off and
               background graphics on. On iPad, AirPrint remembers the printer you pick. Print a test badge and adjust the
@@ -1557,7 +1706,7 @@
     }));
 
     $('#badge-test').addEventListener('click', printTestBadge);
-    $('#badge-save').addEventListener('click', async () => {
+    const saveBadge = autoSave(async () => {
       const patch = {};
       $$('[data-set^="badge."]').forEach((input) => {
         const value = input.type === 'checkbox' ? input.checked
@@ -1566,8 +1715,8 @@
         setPath(patch, input.dataset.set, value);
       });
       SETTINGS = await api('/settings', { method: 'PUT', body: patch });
-      toast('Badge settings saved');
     });
+    autoSaveOn(root, saveBadge, '[data-set^="badge."]');
 
     drawBadgePreview();
   };
@@ -2306,7 +2455,7 @@
         <div id="vt-list"></div>
         <div class="row" style="margin-top:1rem">
           <button class="btn subtle" id="vt-add" type="button">Add a visitor type</button>
-          <button class="btn" id="vt-save" type="button">Save visitor types</button>
+          <span class="muted">Changes save themselves; kiosks pick them up within a few seconds.</span>
         </div>
         <p class="muted">A hidden type keeps its history and settings — hide a type rather than deleting it once it has
           been used. The Spanish boxes are shown when the kiosk is switched to Spanish; empty ones fall back to English.</p>
@@ -2332,9 +2481,20 @@
       return previewLang() === 'es' && es ? es : (ty[field] || '');
     };
 
-    const tile = (icon, label, sub) => `<button class="tile" type="button" tabindex="-1">
+    /*
+     * `at` is the type's index in the list below when this tile stands for a
+     * type, and null for the fixed cards. It is what makes the tile draggable
+     * and what a drop reorders — the kiosk shows types in list order, so
+     * moving a tile here is the same edit as pressing ↑ down there, done
+     * where you can actually see the result.
+     */
+    const tile = (icon, label, sub, at = null) => `<button class="tile${at == null ? '' : ' movable'}"
+      type="button" tabindex="-1" ${at == null ? '' : `draggable="true" data-vtat="${at}" title="Drag to reorder"`}>
       <span class="tile-icon">${esc(icon)}</span><span>${esc(label)}</span>
       ${sub ? `<small>${esc(sub)}</small>` : ''}</button>`;
+
+    const typeTile = (ty, withSub) =>
+      tile(ty.icon || '👤', word(ty, 'label') || '(no name yet)', withSub ? word(ty, 'sub') : '', types.indexOf(ty));
 
     function drawPreview() {
       const es = previewLang() === 'es';
@@ -2346,7 +2506,7 @@
         // The general Sign in card only exists while something sits behind it.
         ...(behind.length ? [tile('👋', es ? 'Iniciar sesión' : 'Sign in', es ? 'Visitantes y contratistas' : 'Visitors & contractors')] : []),
         tile('🚪', es ? 'Salir' : 'Sign out', es ? 'Saliendo del sitio' : 'Leaving site'),
-        ...onCards.map((ty) => tile(ty.icon || '👤', word(ty, 'label') || '(no name yet)', word(ty, 'sub'))),
+        ...onCards.map((ty) => typeTile(ty, true)),
         ...(s.kiosk.show_delivery_button && s.deliveries.enabled
           ? [tile('📦', es ? 'Entrega' : 'Delivery', es ? 'Entrega de mensajería' : 'Courier drop-off')] : []),
         ...(s.access.enabled && s.access.unlock_button_on_kiosk
@@ -2356,23 +2516,85 @@
       $('#vt-preview').innerHTML = `
         <div class="kiosk-preview">
           <div class="kp-label">Home screen</div>
-          <div class="kp-screen"><div class="tiles">${home.join('')}</div></div>
+          <div class="kp-screen"><div class="tiles" data-vtdrop>${home.join('')}</div></div>
         </div>
         ${behind.length ? `<div class="kiosk-preview">
           <div class="kp-label">After tapping <b>Sign in</b> — “${es ? '¿Qué le trae hoy?' : 'What brings you here today?'}”</div>
-          <div class="kp-screen"><div class="tiles">${behind.map((ty) =>
-            tile(ty.icon || '👤', word(ty, 'label') || '(no name yet)')).join('')}</div></div>
+          <div class="kp-screen"><div class="tiles" data-vtdrop>${behind.map((ty) => typeTile(ty, false)).join('')}</div></div>
         </div>`
         : '<p class="muted">Nothing sits behind a Sign in card, so the kiosk drops it and shows only the cards above.</p>'}
-        ${shown.length ? '' : '<p class="muted">Every type is hidden, so a visitor can only sign out.</p>'}`;
+        ${shown.length ? '' : '<p class="muted">Every type is hidden, so a visitor can only sign out.</p>'}
+        ${shown.length > 1 ? '<p class="muted">Drag a card to change the order they appear in on the kiosk. The fixed '
+          + 'cards — Sign in, Sign out, Delivery — keep their places.</p>' : ''}`;
+
+      wirePreviewDrag();
+    }
+
+    /**
+     * Dragging a card in the preview reorders the types.
+     *
+     * The order is worked out from where the tile was dropped relative to the
+     * other *type* tiles, not from raw DOM position: the fixed cards are
+     * interleaved with them and are not part of the list being reordered, so
+     * counting them would move things by the wrong amount.
+     */
+    function wirePreviewDrag() {
+      let dragging = null;
+      $$('#vt-preview .tile.movable').forEach((el) => {
+        el.addEventListener('dragstart', (e) => {
+          dragging = el;
+          el.classList.add('dragging');
+          // Firefox will not start a drag without something on the transfer.
+          if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', el.dataset.vtat); }
+        });
+        el.addEventListener('dragend', () => { el.classList.remove('dragging'); dragging = null; });
+      });
+
+      $$('#vt-preview [data-vtdrop]').forEach((zone) => {
+        zone.addEventListener('dragover', (e) => {
+          if (!dragging || !zone.contains(dragging)) return;
+          e.preventDefault();
+          /*
+           * The first tile that reads as coming after the pointer, in reading
+           * order. Comparing x alone breaks the moment the tiles wrap onto a
+           * second row — everything below counts as being to the left.
+           */
+          const after = $$('.tile.movable:not(.dragging)', zone).find((other) => {
+            const box = other.getBoundingClientRect();
+            return e.clientY < box.top
+              || (e.clientY <= box.bottom && e.clientX < box.left + box.width / 2);
+          });
+          if (after) zone.insertBefore(dragging, after);
+          else zone.append(dragging);
+        });
+        zone.addEventListener('drop', (e) => {
+          if (!dragging || !zone.contains(dragging)) return;
+          e.preventDefault();
+          applyPreviewOrder(zone);
+        });
+      });
+    }
+
+    /** Read one preview row back into the list, and save. */
+    function applyPreviewOrder(zone) {
+      sync();
+      const dropped = $$('.tile.movable', zone).map((el) => types[Number(el.dataset.vtat)]);
+      // Where each of those types sat in the full list, so the ones this row
+      // does not show — hidden types, and types on the other surface — keep
+      // their places instead of being shuffled to the end.
+      const slots = types.map((ty, i) => (dropped.includes(ty) ? i : null)).filter((i) => i !== null);
+      slots.forEach((slot, i) => { types[slot] = dropped[i]; });
+      draw();
+      saveTypes.soon();
     }
 
     const draw = () => {
       list.innerHTML = types.map((ty, i) => `
         <div class="q-row" data-i="${i}">
           <div class="q-row-top">
-            <input class="input" data-vticon="${i}" title="Icon (emoji)" style="max-width:4.5rem;text-align:center"
-              value="${esc(ty.icon || '👤')}">
+            <button class="btn ghost icon-pick" type="button" data-vtpick="${i}"
+              title="Choose the icon">${esc(ty.icon || '👤')}</button>
+            <input class="input hidden" data-vticon="${i}" value="${esc(ty.icon || '👤')}">
             <input class="input" data-vtlabel="${i}" placeholder="Card name — e.g. Cleaner" value="${esc(ty.label || '')}">
             <select class="input" data-vtmode="${i}">
               ${MODES.map(([v, l]) => `<option value="${v}" ${ty.mode === v ? 'selected' : ''}>${l}</option>`).join('')}
@@ -2392,20 +2614,32 @@
           </div>
         </div>`).join('');
 
+      $$('[data-vtpick]', list).forEach((b) => b.addEventListener('click', () => {
+        const i = Number(b.dataset.vtpick);
+        pickEmoji(types[i].icon || '👤', (chosen) => {
+          sync();
+          types[i].icon = chosen;
+          draw();
+          saveTypes.soon();
+        });
+      }));
+
       $$('[data-vtdel]', list).forEach((b) => b.addEventListener('click', () => {
-        sync(); types.splice(Number(b.dataset.vtdel), 1); draw();
+        sync(); types.splice(Number(b.dataset.vtdel), 1); draw(); saveTypes.soon();
       }));
       $$('[data-vtup]', list).forEach((b) => b.addEventListener('click', () => {
         sync(); const i = Number(b.dataset.vtup);
-        [types[i - 1], types[i]] = [types[i], types[i - 1]]; draw();
+        [types[i - 1], types[i]] = [types[i], types[i - 1]]; draw(); saveTypes.soon();
       }));
       $$('[data-vtdown]', list).forEach((b) => b.addEventListener('click', () => {
         sync(); const i = Number(b.dataset.vtdown);
-        [types[i + 1], types[i]] = [types[i], types[i + 1]]; draw();
+        [types[i + 1], types[i]] = [types[i], types[i + 1]]; draw(); saveTypes.soon();
       }));
 
       // The preview follows the typing, which is the point of having one.
-      $$('input, select', list).forEach((el) => el.addEventListener('input', () => { sync(); drawPreview(); }));
+      $$('input, select', list).forEach((el) => el.addEventListener('input', () => {
+        sync(); drawPreview(); saveTypes.soon();
+      }));
       drawPreview();
     };
 
@@ -2436,16 +2670,26 @@
       if (inputs.length) inputs[inputs.length - 1].focus();
     });
 
-    $('#vt-save').addEventListener('click', async () => {
+    /*
+     * Saving is held back while any card has no name.
+     *
+     * A save drops nameless types — that is how a half-added one is discarded
+     * — so auto-saving mid-rename, in the moment after the old name is cleared
+     * and before the new one is typed, would delete the card. The pill says
+     * why nothing is being saved rather than leaving it a mystery.
+     */
+    const saveTypes = autoSave(async () => {
       sync();
       const named = types.filter((ty) => String(ty.label || '').trim());
-      if (!named.length) return toast('Keep at least one visitor type');
-      if (!named.some((ty) => ty.mode !== 'off')) return toast('Every type is hidden — nobody could sign in');
       named.forEach((ty) => { if (!ty.key) ty.key = keyFor(ty.label); });
       SETTINGS = await api('/settings', { method: 'PUT', body: { types: named } });
       if (SETTINGS.warnings && SETTINGS.warnings.length) toast(SETTINGS.warnings.join(' '), 7000);
-      else toast('Visitor types saved — kiosks update within a few seconds');
-      render('vtypes');
+    }, () => {
+      sync();
+      if (types.some((ty) => !String(ty.label || '').trim())) return 'Not saved — every card needs a name';
+      if (!types.length) return 'Not saved — keep at least one visitor type';
+      if (!types.some((ty) => ty.mode !== 'off')) return 'Not saved — every type is hidden, nobody could sign in';
+      return null;
     });
 
     const langPicker = $('#vt-lang');
@@ -2805,6 +3049,8 @@
   VIEWS.settings = async (root) => {
     SETTINGS = await api('/settings');
     const users = await api('/users');
+    // For routing a visitor type to somebody beyond the person being visited.
+    const staff = (await api('/staff').catch(() => [])).filter((h) => h.active !== 0);
     const s = SETTINGS;
     const chk = (path, label, help) => `<label class="check"><input type="checkbox" data-set="${path}"
       ${getPath(s, path) ? 'checked' : ''}> <span>${label}${help ? `<br><span class="muted">${help}</span>` : ''}</span></label>`;
@@ -3071,8 +3317,12 @@
         </details>
 
         <h3>What the message looks like</h3>
-        <p class="muted" style="margin-top:0">The preview is built by the same code that sends the real thing, so what
-          you see here is what lands in the channel.</p>
+        <p class="muted" style="margin-top:0">Four different things get announced, and they are not the same kind of
+          message — an arrival wants a face and a project, a sign-out wants a time, a parcel has no visitor on it at
+          all. Each gets its own design. The preview is built by the same code that sends the real thing, so what you
+          see here is what lands in the channel.</p>
+        <div class="tabs" id="cd-events"></div>
+        <p class="muted" id="cd-event-hint" style="margin:.25rem 0 .75rem"></p>
         <div class="card-design">
           <div>
             <div class="form-grid">
@@ -3094,24 +3344,23 @@
               <label class="field"><span>Under the heading</span><input class="input" id="cd-subtitle"></label>
               <label class="field"><span>Footer</span><input class="input" id="cd-footer"></label>
             </div>
-            <p class="muted" style="margin:.35rem 0 0">You can use
-              <code>{name}</code> <code>{company}</code> <code>{host}</code> <code>{type}</code>
-              <code>{project}</code> <code>{site}</code> <code>{org}</code>. Anything empty disappears
-              along with the spacing around it.</p>
+            <p class="muted" style="margin:.35rem 0 0" id="cd-tokens"></p>
 
-            <h4>Photo</h4>
-            <label class="check"><input type="checkbox" id="cd-photo"> <span>Show the visitor's photo</span></label>
-            <div class="form-grid">
-              <label class="field"><span>Where</span>
-                <select class="input" id="cd-photo-place">
-                  <option value="left">Beside the details</option>
-                  <option value="top">Above the details</option>
-                </select></label>
-              <label class="field"><span>Shape</span>
-                <select class="input" id="cd-photo-shape">
-                  <option value="person">Circle</option>
-                  <option value="square">Square</option>
-                </select></label>
+            <div id="cd-photo-block">
+              <h4>Photo</h4>
+              <label class="check"><input type="checkbox" id="cd-photo"> <span>Show the visitor's photo</span></label>
+              <div class="form-grid">
+                <label class="field"><span>Where</span>
+                  <select class="input" id="cd-photo-place">
+                    <option value="left">Beside the details</option>
+                    <option value="top">Above the details</option>
+                  </select></label>
+                <label class="field"><span>Shape</span>
+                  <select class="input" id="cd-photo-shape">
+                    <option value="person">Circle</option>
+                    <option value="square">Square</option>
+                  </select></label>
+              </div>
             </div>
             <div id="cd-photo-warning"></div>
 
@@ -3122,16 +3371,29 @@
             <p class="muted" style="margin:.6rem 0 .3rem">Not shown</p>
             <div class="section-order" id="cd-rest"></div>
 
-            <h4>Tagging the host</h4>
+            <h4>Tagging</h4>
             <label class="check"><input type="checkbox" id="cd-mention">
-              <span>Tag the person being visited in the channel post<br>
+              <span>Tag the person concerned in the channel post<br>
               <span class="muted">Uses the email on their <b>Staff</b> record, so the one person who needs to know
                 gets a Teams notification without setting up a link of their own. Somebody with no email on file is
                 simply not tagged.</span></span></label>
+            <label class="field"><span>What the tag line says</span>
+              <input class="input" id="cd-mention-line">
+              <span class="muted"><code>{host}</code> becomes the tag itself. Worth reading twice per event —
+                “your visitor is here” on a sign-out sends somebody down to reception for a person who has
+                just left.</span></label>
+            <label class="field"><span>And for anyone the visitor type is routed to</span>
+              <input class="input" id="cd-also-line">
+              <span class="muted"><code>{who}</code> becomes their tags. Only appears when a visitor type has
+                somebody in its <b>Also tell</b> list, below.</span></label>
 
-            <h4>Button</h4>
-            <label class="check"><input type="checkbox" id="cd-button"> <span>Add a button that opens the dashboard</span></label>
-            <label class="field"><span>Button wording</span><input class="input" id="cd-button-label"></label>
+            <h4>Quick links</h4>
+            <p class="muted" style="margin-top:0">Buttons along the bottom of the card, so whoever reads it can open
+              the thing it is about without hunting for a bookmark. Up to four — Teams hides the rest behind a
+              menu.</p>
+            <div class="section-order" id="cd-links"></div>
+            <p class="muted" style="margin:.6rem 0 .3rem">Not on the card</p>
+            <div class="section-order" id="cd-links-rest"></div>
           </div>
 
           <div class="card-preview-col">
@@ -3164,15 +3426,30 @@
           ${chk('notify.on_delivery', 'A parcel arrives')}
         </div>
 
-        <h4>Who to post about</h4>
+        <h4>Who to post about, and who to tell</h4>
         <p class="muted" style="margin-top:0">Applies to signing in, signing out and the induction. A type added later
           on the <b>Visitor types</b> tab starts switched on, so a new one is never silently ignored.</p>
+        <p class="muted" style="margin-top:0">The person being visited is always tagged. <b>Also tell</b> is for
+          somebody who wants a whole kind of visitor regardless of who they came to see — a safety officer who wants
+          every contractor, an HR manager who wants every interview. They are tagged in the channel post, and if they
+          have a chat webhook on their <b>Staff</b> record they get it as a direct message too.</p>
         <div class="section-order">
-          ${detailTypes().map(([type, label]) => `<div class="section-row">
-            <span>${esc(label)}</span>
-            <label class="check"><input type="checkbox" data-notifytype="${esc(type)}"
-              ${(s.notify.types_notified || {})[type] === false ? '' : 'checked'}> <span>Post</span></label>
-          </div>`).join('') || '<div class="section-row off"><span>No visitor types yet.</span></div>'}
+          ${detailTypes().map(([type, label]) => {
+            const routed = ((s.notify.type_routing || {})[type] || {}).staff || [];
+            return `<div class="section-row route-row">
+              <span class="route-name">${esc(label)}</span>
+              <label class="check"><input type="checkbox" data-notifytype="${esc(type)}"
+                ${(s.notify.types_notified || {})[type] === false ? '' : 'checked'}> <span>Post</span></label>
+              <span class="route-also">
+                <span class="muted">Also tell</span>
+                ${staff.length ? `<select class="input" multiple size="${Math.min(5, Math.max(2, staff.length))}"
+                  data-routetype="${esc(type)}">
+                  ${staff.map((h) => `<option value="${h.id}" ${routed.map(Number).includes(h.id) ? 'selected' : ''}
+                    ${h.email ? '' : 'disabled'}>${esc(h.name)}${h.email ? '' : ' — no email, cannot be tagged'}</option>`).join('')}
+                </select>` : '<span class="muted">Nobody on the Staff tab yet.</span>'}
+              </span>
+            </div>`;
+          }).join('') || '<div class="section-row off"><span>No visitor types yet.</span></div>'}
         </div>
 
         <div class="row" style="margin-top:1rem"><button class="btn subtle" id="test-hook">Send test to Teams</button></div>
@@ -3375,37 +3652,101 @@
         <div id="audit-list" class="scroll-10"><p class="empty">Loading…</p></div>
       </div>
 
-      <div class="row"><button class="btn" id="save-settings">Save settings</button></div>`;
+      <p class="muted">Everything here saves itself as you change it.</p>`;
 
     collapseSections(root);
+
+    const saveSettings = autoSave(async () => {
+      const patch = {};
+      $$('[data-set]').forEach((input) => {
+        const value = input.type === 'checkbox' ? input.checked
+          : (input.type === 'number' || input.type === 'range') ? Number(input.value)
+          : input.value;
+        setPath(patch, input.dataset.set, value);
+      });
+      patch.kiosk = patch.kiosk || {};
+      if (VIEWS.settings.collectFlow) patch.flow = VIEWS.settings.collectFlow();
+      if (VIEWS.settings.collectWording) patch.wording = VIEWS.settings.collectWording();
+      // Null when the designer has not loaded its catalogue yet; sending it
+      // would clear the design rather than leave it alone.
+      const designs = VIEWS.settings.collectCards && VIEWS.settings.collectCards();
+      if (designs) {
+        setPath(patch, 'notify.cards', designs);
+        setPath(patch, 'notify.card', designs.signin);
+      }
+      if (VIEWS.settings.collectNotifyTypes) setPath(patch, 'notify.types_notified', VIEWS.settings.collectNotifyTypes());
+      if (VIEWS.settings.collectRouting) setPath(patch, 'notify.type_routing', VIEWS.settings.collectRouting());
+      SETTINGS = await api('/settings', { method: 'PUT', body: patch });
+      // A rejected value — a time zone Intl cannot parse — is worth interrupting
+      // for, because it was not saved and nothing else on screen would say so.
+      if (SETTINGS.warnings && SETTINGS.warnings.length) toast(SETTINGS.warnings.join(' '), 7000);
+      applyBranding();
+      document.documentElement.style.setProperty('--brand', SETTINGS.org.primary_color || '#2f7d5d');
+      document.documentElement.style.setProperty('--brand-dark', SETTINGS.org.accent_color || '#123a2c');
+    });
+    VIEWS.settings.save = saveSettings;
+    autoSaveOn(root, saveSettings);
     $('#sec-expand').addEventListener('click', () => setAllSections(root, true));
     $('#sec-collapse').addEventListener('click', () => setAllSections(root, false));
 
-    /* --------------------------------------------- the notification card */
+    /* --------------------------------------------- the notification cards */
 
     /*
-     * Held here and sent whole on save, like the wording and the step order,
-     * so switching between the controls never loses an edit. The preview is
-     * drawn by the server from this same object — there is no second copy of
-     * the layout rules in the browser to drift out of step with what sends.
+     * One design per event, held here and sent whole on save — like the
+     * wording and the step order — so switching between events or controls
+     * never loses an edit. The preview is drawn by the server from these same
+     * objects: there is no second copy of the layout rules in the browser to
+     * drift out of step with what actually sends.
      */
-    const card = { ...(s.notify && s.notify.card) };
-    let CARD_FIELDS = [];
+    let CD = null;              // the catalogue: events, their fields, the links
+    const cards = {};           // event id -> the design being edited
+    let cdEvent = 'signin';
+
+    const cdEventDef = () => (CD ? CD.events.find((e) => e.id === cdEvent) : null);
 
     const cdSet = (id, value) => { const el = $(id); if (el) el.value = value ?? ''; };
-    cdSet('#cd-header', card.header_style || 'accent');
-    cdSet('#cd-details', card.details_style || 'facts');
-    cdSet('#cd-title', card.title_template);
-    cdSet('#cd-subtitle', card.subtitle_template);
-    cdSet('#cd-footer', card.footer_template);
-    cdSet('#cd-photo-place', card.photo_placement || 'left');
-    cdSet('#cd-photo-shape', card.photo_shape || 'person');
-    cdSet('#cd-button-label', card.button_label);
-    $('#cd-photo').checked = card.show_photo !== false;
-    $('#cd-button').checked = !!card.show_button;
-    $('#cd-mention').checked = card.mention_host !== false;
 
+    /** Put one event's design into the controls. */
+    function showCard() {
+      const def = cdEventDef();
+      const card = cards[cdEvent];
+      if (!def || !card) return;
+
+      $('#cd-events').innerHTML = CD.events.map((e) => `<button class="tab${e.id === cdEvent ? ' on' : ''}"
+        data-cdevent="${e.id}">${esc(e.label)}</button>`).join('');
+      $$('[data-cdevent]').forEach((b) => b.addEventListener('click', () => {
+        cdEvent = b.dataset.cdevent;
+        showCard();
+        drawCardPreview();
+      }));
+      $('#cd-event-hint').textContent = def.hint;
+      $('#cd-tokens').innerHTML = 'You can use '
+        + def.tokens.map(([t, what]) => `<code title="${esc(what)}">{${esc(t)}}</code>`).join(' ')
+        + '. Anything empty disappears along with the spacing around it.';
+
+      cdSet('#cd-header', card.header_style || 'accent');
+      cdSet('#cd-details', card.details_style || 'facts');
+      cdSet('#cd-title', card.title_template);
+      cdSet('#cd-subtitle', card.subtitle_template);
+      cdSet('#cd-footer', card.footer_template);
+      cdSet('#cd-photo-place', card.photo_placement || 'left');
+      cdSet('#cd-photo-shape', card.photo_shape || 'person');
+      cdSet('#cd-mention-line', card.mention_template || def.defaults.mention_template);
+      cdSet('#cd-also-line', card.also_template);
+      $('#cd-photo').checked = card.show_photo !== false;
+      $('#cd-mention').checked = card.mention_host !== false;
+
+      // A parcel has no face to show, so offering to put one on is a lie.
+      $('#cd-photo').closest('.card-design').classList.toggle('no-photo', def.subject === 'delivery');
+
+      drawCardFields();
+      drawCardLinks();
+    }
+
+    /** Read the controls back into the design for the event being edited. */
     function readCard() {
+      const card = cards[cdEvent];
+      if (!card) return {};
       card.header_style = $('#cd-header').value;
       card.details_style = $('#cd-details').value;
       card.title_template = $('#cd-title').value;
@@ -3414,12 +3755,25 @@
       card.show_photo = $('#cd-photo').checked;
       card.photo_placement = $('#cd-photo-place').value;
       card.photo_shape = $('#cd-photo-shape').value;
-      card.show_button = $('#cd-button').checked;
-      card.button_label = $('#cd-button-label').value;
       card.mention_host = $('#cd-mention').checked;
+      card.mention_template = $('#cd-mention-line').value;
+      card.also_template = $('#cd-also-line').value;
       return card;
     }
-    VIEWS.settings.collectCard = () => readCard();
+
+    /*
+     * Every design goes up on every save. `card` keeps the old single-design
+     * key in step with sign-ins so nothing that still reads it — an older
+     * server mid-deploy, a restored backup — suddenly has no design at all.
+     */
+    VIEWS.settings.collectCards = () => {
+      if (!CD) return null;
+      readCard();
+      return { ...cards };
+    };
+    VIEWS.settings.collectCard = () => (CD ? { ...cards.signin } : null);
+    /** The design the designer is showing right now, for the test post. */
+    VIEWS.settings.collectCurrent = () => (CD ? { event: cdEvent, card: readCard() } : null);
 
     /*
      * Stored as "false means no", so a visitor type created after this was
@@ -3432,15 +3786,26 @@
       return out;
     };
 
-    const FIELD_LABEL = (id) => (CARD_FIELDS.find((f) => f.id === id) || {}).label || id;
-    const FIELD_SENSITIVE = (id) => !!(CARD_FIELDS.find((f) => f.id === id) || {}).sensitive;
+    /** Who each visitor type is routed to, beyond the person being visited. */
+    VIEWS.settings.collectRouting = () => {
+      const out = {};
+      $$('[data-routetype]').forEach((el) => {
+        out[el.dataset.routetype] = { staff: $$('option:checked', el).map((o) => Number(o.value)) };
+      });
+      return out;
+    };
+
+    const fieldDef = (id) => (cdEventDef().fields.find((f) => f.id === id) || { id, label: id });
+    const SENSITIVE_NOTE = ' <span class="muted">— everyone in the channel can read this</span>';
 
     function drawCardFields() {
-      const chosen = card.fields || [];
-      const rest = CARD_FIELDS.filter((f) => !chosen.includes(f.id));
+      const card = cards[cdEvent];
+      const all = cdEventDef().fields;
+      const chosen = (card.fields || []).filter((id) => all.some((f) => f.id === id));
+      const rest = all.filter((f) => !chosen.includes(f.id));
+
       $('#cd-chosen').innerHTML = chosen.length ? chosen.map((id, i) => `<div class="section-row">
-        <span>${esc(FIELD_LABEL(id))}${FIELD_SENSITIVE(id)
-          ? ' <span class="muted">— everyone in the channel can read this</span>' : ''}</span>
+        <span>${esc(fieldDef(id).label)}${fieldDef(id).sensitive ? SENSITIVE_NOTE : ''}</span>
         <span class="flow-moves">
           <button class="btn ghost" data-cdup="${i}" ${i === 0 ? 'disabled' : ''} title="Move up">↑</button>
           <button class="btn ghost" data-cddown="${i}" ${i === chosen.length - 1 ? 'disabled' : ''} title="Move down">↓</button>
@@ -3449,7 +3814,7 @@
         : '<div class="section-row off"><span>Nothing but the heading.</span></div>';
 
       $('#cd-rest').innerHTML = rest.length ? rest.map((f) => `<div class="section-row off">
-        <span>${esc(f.label)}${f.sensitive ? ' <span class="muted">— everyone in the channel can read this</span>' : ''}</span>
+        <span>${esc(f.label)}${f.sensitive ? SENSITIVE_NOTE : ''}</span>
         <span class="flow-moves"><button class="btn ghost" data-cdin="${f.id}">Add</button></span></div>`).join('')
         : '<div class="section-row off"><span>Everything is shown.</span></div>';
 
@@ -3460,16 +3825,62 @@
         drawCardFields();
         drawCardPreview();
       };
-      $$('[data-cdup]').forEach((b) => b.addEventListener('click', () => move(Number(b.dataset.cdup), Number(b.dataset.cdup) - 1)));
-      $$('[data-cddown]').forEach((b) => b.addEventListener('click', () => move(Number(b.dataset.cddown), Number(b.dataset.cddown) + 1)));
-      $$('[data-cdout]').forEach((b) => b.addEventListener('click', () => {
-        card.fields = card.fields.filter((id) => id !== b.dataset.cdout);
+      const alsoSave = (fn) => () => { fn(); saveSettings.soon(); };
+      $$('[data-cdup]').forEach((b) => b.addEventListener('click', alsoSave(() => move(Number(b.dataset.cdup), Number(b.dataset.cdup) - 1))));
+      $$('[data-cddown]').forEach((b) => b.addEventListener('click', alsoSave(() => move(Number(b.dataset.cddown), Number(b.dataset.cddown) + 1))));
+      $$('[data-cdout]').forEach((b) => b.addEventListener('click', alsoSave(() => {
+        card.fields = chosen.filter((id) => id !== b.dataset.cdout);
         drawCardFields(); drawCardPreview();
-      }));
-      $$('[data-cdin]').forEach((b) => b.addEventListener('click', () => {
-        card.fields = [...(card.fields || []), b.dataset.cdin];
+      })));
+      $$('[data-cdin]').forEach((b) => b.addEventListener('click', alsoSave(() => {
+        card.fields = [...chosen, b.dataset.cdin];
         drawCardFields(); drawCardPreview();
-      }));
+      })));
+    }
+
+    /** The same list-with-arrows idea, for the buttons along the bottom. */
+    function drawCardLinks() {
+      const card = cards[cdEvent];
+      const all = CD.links;
+      const chosen = (card.links || []).filter((id) => all.some((l) => l.id === id));
+      const rest = all.filter((l) => !chosen.includes(l.id));
+      const full = chosen.length >= CD.links_max;
+      const label = (id) => (all.find((l) => l.id === id) || { label: id }).label;
+
+      $('#cd-links').innerHTML = chosen.length ? chosen.map((id, i) => `<div class="section-row">
+        <span>${esc(label(id))}</span>
+        <span class="flow-moves">
+          <button class="btn ghost" data-clup="${i}" ${i === 0 ? 'disabled' : ''} title="Move left">←</button>
+          <button class="btn ghost" data-cldown="${i}" ${i === chosen.length - 1 ? 'disabled' : ''} title="Move right">→</button>
+          <button class="btn ghost" data-clout="${id}">Remove</button>
+        </span></div>`).join('')
+        : '<div class="section-row off"><span>No buttons — just the message.</span></div>';
+
+      $('#cd-links-rest').innerHTML = rest.map((l) => `<div class="section-row off">
+        <span>${esc(l.label)}${l.needs && !CD.board_url && l.id === 'board'
+          ? ` <span class="muted">— needs ${esc(l.needs)}, so it will be left off until then</span>` : ''}</span>
+        <span class="flow-moves"><button class="btn ghost" data-clin="${l.id}" ${full ? 'disabled' : ''}>Add</button></span>
+      </div>`).join('') || '<div class="section-row off"><span>Every link is on the card.</span></div>';
+
+      const move = (from, to) => {
+        if (to < 0 || to >= chosen.length) return;
+        const next = [...chosen];
+        const [item] = next.splice(from, 1);
+        next.splice(to, 0, item);
+        card.links = next;
+        drawCardLinks(); drawCardPreview();
+      };
+      const alsoSave = (fn) => () => { fn(); saveSettings.soon(); };
+      $$('[data-clup]').forEach((b) => b.addEventListener('click', alsoSave(() => move(Number(b.dataset.clup), Number(b.dataset.clup) - 1))));
+      $$('[data-cldown]').forEach((b) => b.addEventListener('click', alsoSave(() => move(Number(b.dataset.cldown), Number(b.dataset.cldown) + 1))));
+      $$('[data-clout]').forEach((b) => b.addEventListener('click', alsoSave(() => {
+        card.links = chosen.filter((id) => id !== b.dataset.clout);
+        drawCardLinks(); drawCardPreview();
+      })));
+      $$('[data-clin]').forEach((b) => b.addEventListener('click', alsoSave(() => {
+        card.links = [...chosen, b.dataset.clin].slice(0, CD.links_max);
+        drawCardLinks(); drawCardPreview();
+      })));
     }
 
     // One request per pause in typing, not one per keystroke.
@@ -3479,25 +3890,42 @@
       previewTimer = setTimeout(loadCardPreview, 250);
     };
 
+    /** The catalogue and the saved designs, fetched once when the panel opens. */
+    async function loadCatalogue() {
+      if (CD) return true;
+      try { CD = await api('/notify/catalogue'); }
+      catch (err) {
+        if (err.message === 'unauthenticated') return false;
+        $('#cd-preview').innerHTML = `<p class="empty">Could not load the designer: ${esc(err.message)}</p>`;
+        return false;
+      }
+      CD.events.forEach((e) => { cards[e.id] = { ...e.defaults, ...(CD.cards[e.id] || {}) }; });
+      showCard();
+      return true;
+    }
+
     async function loadCardPreview() {
+      if (!(await loadCatalogue())) return;
       let data;
-      try { data = await api('/notify/preview', { method: 'POST', body: { card: readCard() } }); }
+      try { data = await api('/notify/preview', { method: 'POST', body: { event: cdEvent, card: readCard() } }); }
       catch (err) {
         if (err.message === 'unauthenticated') return;
         $('#cd-preview').innerHTML = `<p class="empty">Could not draw the preview: ${esc(err.message)}</p>`;
         return;
       }
-      if (!CARD_FIELDS.length) { CARD_FIELDS = data.fields; drawCardFields(); }
+      // A slow request for an event nobody is looking at any more.
+      if (data.event !== cdEvent) return;
+
       $('#cd-preview').innerHTML = teamsPreviewHtml(data.model);
       const dump = $('#cd-json');
       if (dump) dump.textContent = JSON.stringify(data.teams, null, 2);
       $('#cd-sample').textContent = data.sample
-        ? 'Nobody has signed in yet, so this shows made-up details.'
-        : 'Shown with your most recent arrival.';
+        ? 'Nothing of this kind has happened yet, so this shows made-up details.'
+        : 'Shown with the most recent real one.';
 
       // A photo Teams cannot reach is the one failure that looks like nothing.
       const warn = $('#cd-photo-warning');
-      warn.innerHTML = (card.show_photo && !data.public_url_reachable)
+      warn.innerHTML = (cards[cdEvent].show_photo && !data.public_url_reachable)
         ? `<div class="notice error">Teams fetches the photo from
              <b>${esc(data.public_url)}</b>, which it cannot reach from outside. Set the public address below —
              or the PUBLIC_URL variable on the server — or the card will arrive with a blank space where the face
@@ -3510,10 +3938,28 @@
       const photo = m.photoUrl
         ? `<img class="tp-photo ${m.photoShape === 'person' ? 'round' : ''}" src="${esc(m.photoUrl)}" alt="">`
         : '';
+      /*
+       * The tag line is a template with {host} in it, exactly as it is on the
+       * card — rendering it any other way here would show wording that is not
+       * what sends, which is the one thing a preview must never do.
+       */
+      const mentionHtml = (m.mention && m.mentionTemplate)
+        // Escaped first, then the placeholder swapped for the tag, so a name
+        // or a template with a < in it cannot open a tag of its own.
+        ? `<div class="tp-mention">${esc(String(m.mentionTemplate)).split('{host}')
+            .join(`<span class="tp-at">@${esc(m.mention.name)}</span>`)}</div>`
+        : '';
+      const tag = (name) => `<span class="tp-at">@${esc(name)}</span>`;
+      const names = (m.alsoMention || []).map((p) => tag(p.name));
+      const alsoHtml = (names.length && m.alsoTemplate)
+        ? `<div class="tp-mention tp-also">${esc(String(m.alsoTemplate)).split('{who}')
+            .join(names.length > 1
+              ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+              : names[0])}</div>`
+        : '';
       const heading = `<div class="tp-title tp-${esc(m.headerStyle)}">${esc(m.title)}</div>
         ${m.subtitle ? `<div class="tp-sub">${esc(m.subtitle)}</div>` : ''}
-        ${m.mention ? `<div class="tp-mention"><span class="tp-at">@${esc(m.mention.name)}</span>
-           — your visitor is here.</div>` : ''}`;
+        ${mentionHtml}${alsoHtml}`;
       const details = m.fields.length
         ? (m.detailsStyle === 'facts'
           ? `<div class="tp-facts">${m.fields.map((f) => `<div class="tp-fact-l">${esc(f.label)}</div>
@@ -3524,16 +3970,31 @@
       const main = (photo && m.photoPlacement === 'left')
         ? `<div class="tp-row">${photo}<div class="tp-main">${heading}${details}</div></div>`
         : `${photo}${heading}${details}`;
+      const links = m.links || [];
       return `<div class="tp-card">
         <div class="tp-band tp-band-${esc(m.headerStyle)}">${main}</div>
         ${m.footer ? `<div class="tp-footer">${esc(m.footer)}</div>` : ''}
-        ${m.action ? `<div class="tp-actions"><span class="tp-btn">${esc(m.action.label)}</span></div>` : ''}
+        ${links.length ? `<div class="tp-actions">${links.map((l) =>
+          `<span class="tp-btn">${esc(l.label)}</span>`).join('')}</div>` : ''}
       </div>`;
     }
 
+    // The card designer's own controls carry no data-set, so they ask here.
     ['#cd-header', '#cd-details', '#cd-title', '#cd-subtitle', '#cd-footer', '#cd-photo',
-      '#cd-photo-place', '#cd-photo-shape', '#cd-button', '#cd-button-label', '#cd-mention']
-      .forEach((sel) => { const el = $(sel); if (el) el.addEventListener('input', drawCardPreview); });
+      '#cd-photo-place', '#cd-photo-shape', '#cd-mention', '#cd-mention-line', '#cd-also-line']
+      .forEach((sel) => {
+        const el = $(sel);
+        if (el) el.addEventListener('input', () => { drawCardPreview(); saveSettings.soon(); });
+      });
+    $$('[data-notifytype]').forEach((el) => el.addEventListener('change', () => saveSettings.soon()));
+    $$('[data-routetype]').forEach((el) => el.addEventListener('change', () => {
+      /*
+       * Saved at once rather than after the usual pause: the preview's extra
+       * tag line is built from the routing the *server* holds, so redrawing
+       * before the save lands would show the previous selection.
+       */
+      Promise.resolve(saveSettings.now()).then(loadCardPreview);
+    }));
 
     // Drawn as soon as the panel is opened, not on a settings page nobody expanded.
     onSectionOpen('set-notifications', loadCardPreview);
@@ -3910,7 +4371,10 @@
       };
       // Edits are captured as they are typed, against the type being shown at the
       // time; switching type only redraws, or the new type would inherit them.
-      $$('[data-wlabel], [data-wdesc], [data-wlabeles], [data-wdesces]').forEach((i) => i.addEventListener('input', capture));
+      $$('[data-wlabel], [data-wdesc], [data-wlabeles], [data-wdesces]').forEach((i) => i.addEventListener('input', () => {
+        capture();
+        saveSettings.soon();
+      }));
       $('#wording-type').onchange = drawWording;
     };
     drawWording();
@@ -3997,6 +4461,7 @@
 
     function drawFlow() {
       drawStrip();
+      if (root.dataset.flowReady) saveSettings.soon();
       detailTypes().forEach(([type]) => {
         const list = $(`[data-flowtype="${type}"] .flow-list`);
         if (!list) return;
@@ -4043,26 +4508,6 @@
       if (input.dataset.set.startsWith('badge.')) drawBadgePreview();
     }));
 
-    $('#save-settings').addEventListener('click', async () => {
-      const patch = {};
-      $$('[data-set]').forEach((input) => {
-        const value = input.type === 'checkbox' ? input.checked
-          : (input.type === 'number' || input.type === 'range') ? Number(input.value)
-          : input.value;
-        setPath(patch, input.dataset.set, value);
-      });
-      patch.kiosk = patch.kiosk || {};
-      if (VIEWS.settings.collectFlow) patch.flow = VIEWS.settings.collectFlow();
-      if (VIEWS.settings.collectWording) patch.wording = VIEWS.settings.collectWording();
-      if (VIEWS.settings.collectCard) setPath(patch, 'notify.card', VIEWS.settings.collectCard());
-      if (VIEWS.settings.collectNotifyTypes) setPath(patch, 'notify.types_notified', VIEWS.settings.collectNotifyTypes());
-      SETTINGS = await api('/settings', { method: 'PUT', body: patch });
-      if (SETTINGS.warnings && SETTINGS.warnings.length) toast(SETTINGS.warnings.join(' '), 7000);
-      else toast('Settings saved');
-      applyBranding();
-      document.documentElement.style.setProperty('--brand', SETTINGS.org.primary_color || '#2f7d5d');
-      document.documentElement.style.setProperty('--brand-dark', SETTINGS.org.accent_color || '#123a2c');
-    });
 
     $('#logo-file').addEventListener('change', async (e) => {
       if (!e.target.files[0]) return;
@@ -4192,8 +4637,15 @@
           : input.value;
         setPath(patch, input.dataset.set, value);
       });
-      if (VIEWS.settings.collectCard) setPath(patch, 'notify.card', VIEWS.settings.collectCard());
+      // Null when the designer has not loaded its catalogue yet; sending it
+      // would clear the design rather than leave it alone.
+      const designs = VIEWS.settings.collectCards && VIEWS.settings.collectCards();
+      if (designs) {
+        setPath(patch, 'notify.cards', designs);
+        setPath(patch, 'notify.card', designs.signin);
+      }
       if (VIEWS.settings.collectNotifyTypes) setPath(patch, 'notify.types_notified', VIEWS.settings.collectNotifyTypes());
+      if (VIEWS.settings.collectRouting) setPath(patch, 'notify.type_routing', VIEWS.settings.collectRouting());
       SETTINGS = await api('/settings', { method: 'PUT', body: patch });
     }
 
@@ -4207,8 +4659,10 @@
       try {
         // Test what is on screen, not whatever was saved last.
         await saveNotifySettings();
-        const r = await api('/settings/test-webhook', {
-          method: 'POST', body: { url, card: VIEWS.settings.collectCard ? VIEWS.settings.collectCard() : undefined } });
+        // Whichever event's design is on screen — testing a sign-out card by
+        // posting an arrival would tell you nothing about the one you edited.
+        const editing = VIEWS.settings.collectCurrent && VIEWS.settings.collectCurrent();
+        const r = await api('/settings/test-webhook', { method: 'POST', body: { url, ...(editing || {}) } });
         const photoNote = !r.photo_included
           ? ' No photo went with it — either the photo is switched off, or nobody on file has one yet.'
           : !r.public_url_reachable
