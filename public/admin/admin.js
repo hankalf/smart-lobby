@@ -2278,6 +2278,7 @@
 
   VIEWS.vtypes = async (root) => {
     SETTINGS = await api('/settings');
+    const s = SETTINGS;
     // Edited as a local copy; nothing reaches the kiosk until Save.
     const types = (SETTINGS.types || []).map((ty) => ({ ...ty }));
     const MODES = [['card', 'Own card on the home screen'], ['picker', 'Behind the Sign in card'],
@@ -2290,6 +2291,18 @@
         everywhere a type can be chosen: the “Your details” form settings, document and deck assignment, and the
         per-device card list.</p>
       <div class="card section">
+        <div class="row between" style="margin-bottom:.5rem">
+          <h2 style="margin:0">On the kiosk</h2>
+          <div class="row" style="margin:0">
+            <span class="muted">As it looks right now, before saving</span>
+            ${s.kiosk.spanish_enabled ? `<select class="input" id="vt-lang" style="max-width:9rem">
+              <option value="en">English</option><option value="es">Español</option></select>` : ''}
+          </div>
+        </div>
+        <div id="vt-preview"></div>
+      </div>
+
+      <div class="card section">
         <div id="vt-list"></div>
         <div class="row" style="margin-top:1rem">
           <button class="btn subtle" id="vt-add" type="button">Add a visitor type</button>
@@ -2300,6 +2313,59 @@
       </div>`;
 
     const list = $('#vt-list');
+
+    /*
+     * The kiosk, as these settings would make it.
+     *
+     * The tile markup and class names are the kiosk's own, so this is not a
+     * drawing of the home screen that has to be kept in step by hand — it is
+     * the same structure under a copy of the same rules. Where a type appears
+     * is the thing that is hard to picture from a dropdown reading "Behind the
+     * Sign in card", so both surfaces are shown: the home screen, and the list
+     * that opens when somebody taps Sign in.
+     */
+    const previewLang = () => ($('#vt-lang') ? $('#vt-lang').value : 'en');
+
+    // Matches the kiosk: a Spanish wording wins when there is one, else English.
+    const word = (ty, field) => {
+      const es = (ty[`${field}_es`] || '').trim();
+      return previewLang() === 'es' && es ? es : (ty[field] || '');
+    };
+
+    const tile = (icon, label, sub) => `<button class="tile" type="button" tabindex="-1">
+      <span class="tile-icon">${esc(icon)}</span><span>${esc(label)}</span>
+      ${sub ? `<small>${esc(sub)}</small>` : ''}</button>`;
+
+    function drawPreview() {
+      const es = previewLang() === 'es';
+      const shown = types.filter((ty) => ty.mode !== 'off');
+      const onCards = shown.filter((ty) => ty.mode === 'card' || ty.mode === 'both');
+      const behind = shown.filter((ty) => ty.mode === 'picker' || ty.mode === 'both');
+
+      const home = [
+        // The general Sign in card only exists while something sits behind it.
+        ...(behind.length ? [tile('👋', es ? 'Iniciar sesión' : 'Sign in', es ? 'Visitantes y contratistas' : 'Visitors & contractors')] : []),
+        tile('🚪', es ? 'Salir' : 'Sign out', es ? 'Saliendo del sitio' : 'Leaving site'),
+        ...onCards.map((ty) => tile(ty.icon || '👤', word(ty, 'label') || '(no name yet)', word(ty, 'sub'))),
+        ...(s.kiosk.show_delivery_button && s.deliveries.enabled
+          ? [tile('📦', es ? 'Entrega' : 'Delivery', es ? 'Entrega de mensajería' : 'Courier drop-off')] : []),
+        ...(s.access.enabled && s.access.unlock_button_on_kiosk
+          ? [tile('🔓', es ? 'Solicitar entrada' : 'Request entry', es ? 'Abrir la puerta' : 'Unlock the door')] : [])
+      ];
+
+      $('#vt-preview').innerHTML = `
+        <div class="kiosk-preview">
+          <div class="kp-label">Home screen</div>
+          <div class="kp-screen"><div class="tiles">${home.join('')}</div></div>
+        </div>
+        ${behind.length ? `<div class="kiosk-preview">
+          <div class="kp-label">After tapping <b>Sign in</b> — “${es ? '¿Qué le trae hoy?' : 'What brings you here today?'}”</div>
+          <div class="kp-screen"><div class="tiles">${behind.map((ty) =>
+            tile(ty.icon || '👤', word(ty, 'label') || '(no name yet)')).join('')}</div></div>
+        </div>`
+        : '<p class="muted">Nothing sits behind a Sign in card, so the kiosk drops it and shows only the cards above.</p>'}
+        ${shown.length ? '' : '<p class="muted">Every type is hidden, so a visitor can only sign out.</p>'}`;
+    }
 
     const draw = () => {
       list.innerHTML = types.map((ty, i) => `
@@ -2337,6 +2403,10 @@
         sync(); const i = Number(b.dataset.vtdown);
         [types[i + 1], types[i]] = [types[i], types[i + 1]]; draw();
       }));
+
+      // The preview follows the typing, which is the point of having one.
+      $$('input, select', list).forEach((el) => el.addEventListener('input', () => { sync(); drawPreview(); }));
+      drawPreview();
     };
 
     const sync = () => {
@@ -2377,6 +2447,9 @@
       else toast('Visitor types saved — kiosks update within a few seconds');
       render('vtypes');
     });
+
+    const langPicker = $('#vt-lang');
+    if (langPicker) langPicker.addEventListener('change', drawPreview);
 
     draw();
   };

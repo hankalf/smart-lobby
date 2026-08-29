@@ -53,6 +53,7 @@ const SUITES = [
   { name: 'backup', file: 'backup-test.js' },
   { name: 'roles', file: 'roles-test.js' },
   { name: 'roles-ui', file: 'roles-ui-test.js', browser: true },
+  { name: 'vtypes', file: 'vtypes-test.js', browser: true },
   { name: 'xss', file: 'xss-test.js', browser: true },
   { name: 'attack', file: 'attack-test.js' },
   { name: 'admin-smoke', file: 'admin-smoke.js', browser: true },
