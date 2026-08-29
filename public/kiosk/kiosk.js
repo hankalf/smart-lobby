@@ -27,6 +27,7 @@
     deckStart: null,
     inductionDone: false,
     inductionSignature: null,
+    idScan: null,
     deckWatched: null,
     flow: [],
     flowIndex: -1,
@@ -108,6 +109,26 @@
     'Site rules': 'Reglas del sitio',
     'Please sign below': 'Firme a continuación, por favor',
     'Clear': 'Borrar',
+    // Driver's licence scanning
+    "Driver's licence": 'Licencia de conducir',
+    'Scan my licence': 'Escanear mi licencia',
+    'Hold the barcode on the back of the card up to the camera.':
+      'Muestre el código de barras del reverso de la tarjeta a la cámara.',
+    'Hold the barcode on the back of your licence up to the camera.':
+      'Muestre a la cámara el código de barras del reverso de su licencia.',
+    'Still looking — hold the card flat, about a hand\u2019s width away.':
+      'Seguimos buscando: sostenga la tarjeta plana, a un palmo de distancia.',
+    'That barcode is not a driver\u2019s licence. Try the other side of the card.':
+      'Ese código no es de una licencia de conducir. Pruebe con el otro lado de la tarjeta.',
+    'The licence scanner could not load. Please type the details instead.':
+      'No se pudo cargar el escáner de licencias. Escriba los datos, por favor.',
+    'Please type the details instead.': 'Escriba los datos, por favor.',
+    'Please scan your driver\u2019s licence.': 'Escanee su licencia de conducir, por favor.',
+    'Read from the licence': 'Leído de la licencia',
+    'Name': 'Nombre',
+    'Licence number': 'Número de licencia',
+    'Issuing state': 'Estado emisor',
+    'Scan again': 'Escanear de nuevo',
     'I agree & continue': 'Acepto y continúo',
     'I agree — next document': 'Acepto — siguiente documento',
     'Next': 'Siguiente',
@@ -234,6 +255,7 @@
     '[data-screen="photo"] .bar h2', '[data-screen="photo"] .bar button',
     '#btn-capture', '#btn-retake', '#btn-photo-continue', '#btn-photo-skip',
     '[data-screen="agreement"] .bar button', '.sig-label', '#sig-clear', '#ack-sig-clear',
+    '#w-id-scan > span', '#id-scan-open', '#id-scan-hint', '#id-scan-cancel', '#id-scan-retry',
     '#deck-prev', '#deck-next',
     '[data-screen="ack"] h2', '#ack-replay', '#ack-confirm',
     '#btn-print-badge', '[data-screen="done"] [data-go="idle"]',
@@ -446,6 +468,7 @@
     $$('.screen').forEach((s) => { s.hidden = s.dataset.screen !== name; });
     updateBackdrop();
     if (name !== 'photo' && name !== 'delivery') stopCamera();
+    if (name !== 'details') stopIdScan();
     if (name !== 'signout' && scanStream) stopScanner();
     // The scanner opens with the screen, so a badge can simply be held up.
     if (name === 'signout' && state.cfg && state.cfg.kiosk.qr_signout_enabled && !scannerDismissed) startScanner();
@@ -507,6 +530,8 @@
     state.deckIndex = 0;
     state.inductionDone = false;
     state.inductionSignature = null;
+    // Nothing off the last person's licence survives into the next sign-in.
+    resetIdScan();
     state.deckWatched = null;
     // A countdown left ticking by an abandoned visit must not unlock anything
     // for the next person.
@@ -1124,7 +1149,8 @@
   const DETAIL_WIDGETS = {
     company: '#w-company', phone: '#w-phone', email: '#w-email',
     staff: '#w-host', purpose: '#w-purpose', vehicle: '#w-vehicle',
-    reference: '#w-reference', movement: '#w-movement', project: '#w-project'
+    reference: '#w-reference', movement: '#w-movement', project: '#w-project',
+    id_scan: '#w-id-scan'
   };
 
   function detailFields() {
@@ -1211,6 +1237,7 @@
     if (fields.reference === 'required' && !$('#f-reference').value.trim()) return fail(t('Please enter your load or order reference.'));
     if (fields.movement === 'required' && !$('#f-movement').value) return fail(t('Please choose whether this is a pick-up or a delivery.'));
     if (fields.project === 'required' && !$('#f-project').value) return fail(t('Please choose your project.'));
+    if (fields.id_scan === 'required' && !state.idScan) return fail(t('Please scan your driver’s licence.'));
     show(err, false);
 
     if (!state.visitor) {
@@ -1962,6 +1989,9 @@
       movement: $('#f-movement').value,
       project_id: $('#f-project').value || null,
       language: state.lang,
+      id_name: state.idScan ? state.idScan.name : null,
+      id_number: state.idScan ? state.idScan.number : null,
+      id_state: state.idScan ? state.idScan.state : null,
       photo: state.photo,
       documents: state.signedDocs,
       device_id: state.deviceId,
@@ -2136,6 +2166,162 @@
   });
 
   /* --------------------------------------------------------- badge scanner */
+
+  /* ------------------------------------------------- driver's licence scan */
+
+  /*
+   * Reading the PDF417 barcode on the back of a driver's licence. Only three
+   * things are taken from it — the name, the licence number and the issuing
+   * state — and the visitor sees exactly what was read before continuing.
+   *
+   * The decoder is a large file, so it is fetched the first time somebody
+   * presses the button rather than on every page load, exactly as the badge
+   * scanner does. Once fetched it is cached, so a tablet that has scanned once
+   * can scan again with no connection.
+   */
+  let idStream = null;
+  let idTimer = null;
+  let idReader = null;
+  let zxingLoading = null;
+
+  function loadZxing() {
+    if (window.ZXing) return Promise.resolve(window.ZXing);
+    if (zxingLoading) return zxingLoading;
+    zxingLoading = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'vendor/zxing.min.js';
+      script.onload = () => resolve(window.ZXing);
+      script.onerror = () => reject(new Error('zxing_failed'));
+      document.head.appendChild(script);
+    });
+    return zxingLoading;
+  }
+
+  const idStatus = (msg) => {
+    const el = $('#id-scan-status');
+    el.textContent = msg;
+    show(el, !!msg);
+  };
+
+  function stopIdScan() {
+    clearInterval(idTimer);
+    idTimer = null;
+    if (idStream) { idStream.getTracks().forEach((tr) => tr.stop()); idStream = null; }
+    show($('#id-scan-cam-wrap'), false);
+  }
+
+  /** Put the screen back to "not scanned yet", keeping nothing. */
+  function resetIdScan() {
+    stopIdScan();
+    state.idScan = null;
+    show($('#id-scan-idle'), true);
+    show($('#id-scan-result'), false);
+    show($('#id-scan-actions'), false);
+    idStatus('');
+  }
+
+  async function startIdScan() {
+    show($('#id-scan-idle'), false);
+    show($('#id-scan-result'), false);
+    show($('#id-scan-actions'), true);
+    idStatus(t('Starting the camera…'));
+
+    try {
+      await loadZxing();
+      // The core reader, fed a bitmap built from our own canvas each frame:
+      // the browser wrapper owns its capture loop, and this needs to sit
+      // inside the one already driving the camera preview.
+      idReader = new window.ZXing.PDF417Reader();
+    } catch {
+      idStatus(t('The licence scanner could not load. Please type the details instead.'));
+      show($('#id-scan-idle'), true);
+      show($('#id-scan-actions'), false);
+      return;
+    }
+
+    try {
+      /*
+       * A licence barcode is dense, so it needs the back camera and as much
+       * resolution as the tablet will give — the front camera on an iPad
+       * cannot resolve it at any reasonable distance.
+       */
+      idStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false
+      });
+    } catch (err) {
+      stopIdScan();
+      show($('#id-scan-idle'), true);
+      show($('#id-scan-actions'), false);
+      idStatus(`${cameraProblem(err)} ${t('Please type the details instead.')}`);
+      return;
+    }
+
+    show($('#id-scan-cam-wrap'), true);
+    const video = $('#id-scan-cam');
+    video.srcObject = idStream;
+    await playVideo(video);
+    idStatus(t('Hold the barcode on the back of your licence up to the camera.'));
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    let tries = 0;
+    idTimer = setInterval(() => {
+      if (!video.videoWidth) return;
+      tries += 1;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      let text = null;
+      try {
+        const Z = window.ZXing;
+        const bitmap = new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(canvas)));
+        text = idReader.decode(bitmap).getText();
+      } catch {
+        // No barcode in this frame, which is the usual case while aiming.
+        if (tries === 40) idStatus(t('Still looking — hold the card flat, about a hand’s width away.'));
+        return;
+      }
+      const read = window.AAMVA.parse(text);
+      if (!read.ok) {
+        idStatus(t('That barcode is not a driver’s licence. Try the other side of the card.'));
+        return;
+      }
+      stopIdScan();
+      state.idScan = { name: read.name, number: read.number, state: read.state };
+      showIdResult(read);
+    }, 250);
+  }
+
+  function showIdResult(read) {
+    idStatus('');
+    const box = $('#id-scan-result');
+    // Built as nodes rather than markup: this text came off a stranger's card.
+    box.textContent = '';
+    const line = (label, value) => {
+      const row = document.createElement('div');
+      row.appendChild(document.createTextNode(`${label}: `));
+      const b = document.createElement('b');
+      b.textContent = value;
+      row.appendChild(b);
+      box.appendChild(row);
+    };
+    const head = document.createElement('div');
+    head.textContent = `${t('Read from the licence')}:`;
+    box.appendChild(head);
+    line(t('Name'), read.name);
+    line(t('Licence number'), read.number);
+    if (read.state) line(t('Issuing state'), read.state);
+    show(box, true);
+    show($('#id-scan-actions'), true);
+    // The name on the card is usually the one they would have typed.
+    const nameBox = $('#f-name');
+    if (nameBox && !nameBox.value.trim()) nameBox.value = read.name;
+  }
+
+  $('#id-scan-open').addEventListener('click', startIdScan);
+  $('#id-scan-retry').addEventListener('click', startIdScan);
+  $('#id-scan-cancel').addEventListener('click', resetIdScan);
 
   /*
    * Scanning the QR code on a printed badge to sign out. Chrome has a native

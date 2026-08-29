@@ -29,14 +29,14 @@ const DEFAULTS = {
   // What the "Your details" form asks, per visitor type. Each field is
   // off / optional / required, so an interview need not ask why they are here.
   details: {
-    visitor: { photo: 'required', company: 'optional', phone: 'required', email: 'off', staff: 'required', purpose: 'optional', vehicle: 'off', reference: 'off', movement: 'off', project: 'off' },
+    visitor: { photo: 'required', company: 'optional', phone: 'required', email: 'off', staff: 'required', purpose: 'optional', vehicle: 'off', reference: 'off', movement: 'off', project: 'off', id_scan: 'off' },
     // A contractor is here for a job, not a person: the project they are working
     // on is what matters, and no vehicle is asked for.
-    contractor: { photo: 'required', company: 'required', phone: 'required', email: 'off', staff: 'off', purpose: 'off', vehicle: 'off', reference: 'off', movement: 'off', project: 'required' },
-    interview: { photo: 'required', company: 'off', phone: 'required', email: 'optional', staff: 'required', purpose: 'off', vehicle: 'off', reference: 'off', movement: 'off', project: 'off' },
+    contractor: { photo: 'required', company: 'required', phone: 'required', email: 'off', staff: 'off', purpose: 'off', vehicle: 'off', reference: 'off', movement: 'off', project: 'required', id_scan: 'off' },
+    interview: { photo: 'required', company: 'off', phone: 'required', email: 'optional', staff: 'required', purpose: 'off', vehicle: 'off', reference: 'off', movement: 'off', project: 'off', id_scan: 'off' },
     // A driver at a warehouse gate: the haulier, the vehicle and the paperwork
     // matter; who they are visiting usually does not.
-    driver: { photo: 'optional', company: 'required', phone: 'required', email: 'off', staff: 'off', purpose: 'off', vehicle: 'required', reference: 'required', movement: 'required', project: 'off' }
+    driver: { photo: 'optional', company: 'required', phone: 'required', email: 'off', staff: 'off', purpose: 'off', vehicle: 'required', reference: 'required', movement: 'required', project: 'off', id_scan: 'off' }
   },
   /*
    * The order the sign-in steps are asked in, per visitor type. Finding the
@@ -184,7 +184,8 @@ const DETAIL_FIELDS = [
   ['vehicle', 'Vehicle registration'],
   ['reference', 'Load or order reference'],
   ['movement', 'Pick-Up or Delivery'],
-  ['project', 'Project']
+  ['project', 'Project'],
+  ['id_scan', "Scan a driver's licence"]
 ];
 
 /** The languages the kiosk can be shown in. */

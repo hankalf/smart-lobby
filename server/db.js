@@ -393,6 +393,14 @@ function migrate() {
    */
   addColumn('agreements', 'repeat_after_days', 'INTEGER');
   /*
+   * What was read off a scanned driver's licence: the three things asked for
+   * and nothing else. The card carries a date of birth, an address, a height
+   * and more; none of it is parsed into here, so none of it can be stored.
+   */
+  addColumn('visits', 'id_name', 'TEXT');
+  addColumn('visits', 'id_number', 'TEXT');
+  addColumn('visits', 'id_state', 'TEXT');
+  /*
    * Each tablet's own address: /kiosk/north-gate rather than a shared page with
    * a ?token= parameter. See server/devices.js for why the path, and not a
    * query parameter, is what survives "Add to Home Screen" on an iPad.

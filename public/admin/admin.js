@@ -353,6 +353,7 @@
           ${v.project_name ? `Project: ${esc(v.project_name)}<br>` : ''}
           Staff member: ${esc(v.host_name || '—')} · Badge: ${esc(v.badge_no || '—')} ${v.vehicle_reg ? '· Vehicle: ' + esc(v.vehicle_reg) : ''}<br>
           ${v.reference ? `Reference: ${esc(v.reference)}${v.movement ? ' · ' + esc(v.movement) : ''}<br>` : ''}
+          ${v.id_number ? `Licence: ${esc(v.id_name || '')} · ${esc(v.id_number)}${v.id_state ? ' · ' + esc(v.id_state) : ''}<br>` : ''}
           ${v.location_name ? `Signed in at: ${esc(v.location_name)}${v.device_name ? ` (${esc(v.device_name)})` : ''}<br>` : ''}
           In: ${fmtDate(v.signed_in_at)} · Out: ${fmtDate(v.signed_out_at)}</p>
         </div>
@@ -2381,7 +2382,10 @@
     ['vehicle', 'Vehicle registration', ''],
     ['reference', 'Load or order reference', 'Order, docket or PO number'],
     ['movement', 'Pick-Up or Delivery', ''],
-    ['project', 'Project', 'Picked from the list on the Projects tab']
+    ['project', 'Project', 'Picked from the list on the Projects tab'],
+    ['id_scan', "Scan a driver's licence",
+      'Reads the barcode on the back of a US or Canadian licence and records the name, licence number and issuing '
+      + 'state — nothing else off the card. Needs https:// and a rear camera.']
   ];
   // One column per visitor type, straight from the Visitor types tab.
   const DETAIL_TYPES = null; // replaced by detailTypes() — kept null so stale references fail loudly

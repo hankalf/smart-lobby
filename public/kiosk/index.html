@@ -101,6 +101,23 @@
           <option value="Delivery">Delivery</option>
           <option value="Both">Both</option>
         </select></label>
+      <!-- Driver's licence. The camera only opens when the button is pressed,
+           and only the three read fields are ever kept. -->
+      <div class="field" id="w-id-scan"><span>Driver's licence</span>
+        <div id="id-scan-idle">
+          <button class="btn subtle" type="button" id="id-scan-open">Scan my licence</button>
+          <span class="field-help" id="id-scan-hint">Hold the barcode on the back of the card up to the camera.</span>
+        </div>
+        <div id="id-scan-cam-wrap" class="camera-wrap hidden">
+          <video id="id-scan-cam" playsinline muted autoplay></video>
+        </div>
+        <p class="muted hidden" id="id-scan-status"></p>
+        <div id="id-scan-result" class="notice hidden"></div>
+        <div class="actions hidden" id="id-scan-actions">
+          <button class="btn ghost" type="button" id="id-scan-cancel">Cancel</button>
+          <button class="btn ghost" type="button" id="id-scan-retry">Scan again</button>
+        </div>
+      </div>
       <div id="details-error" class="notice error hidden"></div>
       <div class="actions"><button class="btn big" id="details-continue">Continue</button></div>
     </div>
@@ -274,6 +291,7 @@
 <div id="device-warning" class="device-warning hidden"></div>
 <div id="toast" class="toast hidden"></div>
 
+<script src="aamva.js"></script>
 <script src="kiosk.js"></script>
 </body>
 </html>
