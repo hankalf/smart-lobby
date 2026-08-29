@@ -105,7 +105,20 @@ async function sendWebhook({ url, title, lines, photoUrl, visit_id, delivery_id 
     logFinish(logId, res.ok ? 'sent' : `http_${res.status}`, res.ok ? null : text.slice(0, 500));
     return { ok: res.ok, status: res.status, detail: explainWebhookError(res.status, text, format) };
   } catch (err) {
-    const detail = /abort/i.test(String(err.message)) ? 'The server did not answer within 15 seconds.' : String(err.message || err);
+    /*
+     * Notifications live or die on this now, so the reason has to be readable
+     * by whoever set the link up. "fetch failed" is what the runtime says for
+     * everything from a deleted Flow to a typo in the URL.
+     */
+    const raw = String((err && err.message) || err);
+    const name = format === 'teams' ? 'Teams' : format === 'slack' ? 'Slack'
+      : format === 'google_chat' ? 'Google Chat' : 'that service';
+    const detail = /abort/i.test(raw)
+      ? `${name} did not answer within 15 seconds.`
+      : /fetch failed|ENOTFOUND|ECONNREFUSED|EAI_AGAIN|network/i.test(raw)
+        ? `Could not reach ${name}. Check the link was pasted whole and that the flow still exists — a deleted or `
+          + 'turned-off Teams workflow looks exactly like this.'
+        : raw;
     logFinish(logId, 'error', detail);
     return { ok: false, status: 0, detail };
   }
