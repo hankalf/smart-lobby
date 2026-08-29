@@ -154,7 +154,10 @@ router.get('/dashboard', (req, res) => {
   const devices = all('SELECT id, name, last_seen_at FROM devices ORDER BY name');
   res.json({ onsite, stats, week, devices, storage_warning,
     // Whether anything has quietly stopped working — see notify.health().
-    health: { ...notify.health(), backup: require('../backup').health() },
+    health: {
+      ...notify.health(),
+      backup: { ...require('../backup').health(), offsite: require('../offsite').health() }
+    },
     recent_deliveries: all(
       `SELECT d.*, h.name AS host_name FROM deliveries d LEFT JOIN hosts h ON h.id = d.recipient_host_id
        ORDER BY d.received_at DESC LIMIT 10`) });
@@ -1223,14 +1226,43 @@ const backup = require('../backup');
 router.get('/backups', (req, res) =>
   res.json({ keep: backup.KEEP, backups: backup.list(), health: backup.health() }));
 
-router.post('/backups', (req, res) => {
+router.post('/backups', async (req, res) => {
+  const offsite = require('../offsite');
   try {
-    const made = backup.create();
+    const made = backup.create({
+      includeMedia: settings.getSection('backup').offsite_include_media !== false
+        || !(req.body && req.body.for_offsite)
+    });
     audit(req, 'backup', 'database', null, { file: made.file, bytes: made.bytes, media: made.media_files });
-    res.json({ ok: true, ...made });
+    // Awaited here, unlike the nightly run, so the button can say what happened.
+    const copied = offsite.enabled() ? await offsite.copyOff(made) : null;
+    res.json({ ok: true, ...made, offsite: copied });
   } catch (err) {
     res.status(500).json({ ok: false, message: `Could not write a backup: ${err.message}` });
   }
+});
+
+/* ----------------------------------------------- copying it off the machine */
+
+router.post('/backups/offsite/test', async (req, res) => {
+  const offsite = require('../offsite');
+  // Test what is on screen, not whatever was saved last.
+  if (req.body && req.body.url !== undefined) {
+    settings.setSection('backup', { offsite_url: clean(req.body.url), offsite_secret: clean(req.body.secret) || '' });
+  }
+  const result = await offsite.test();
+  audit(req, 'offsite_test', 'backup', null, { ok: result.ok });
+  res.json(result);
+});
+
+/** Send a backup that is already on disk — for one that failed to go the first time. */
+router.post('/backups/:file/offsite', async (req, res) => {
+  const offsite = require('../offsite');
+  const full = backup.pathOf(req.params.file);
+  if (!full) return res.status(404).json({ ok: false, error: 'not_found' });
+  const result = await offsite.send(full, req.params.file);
+  audit(req, 'offsite_send', 'backup', null, { file: req.params.file, ok: result.ok });
+  res.json(result);
 });
 
 /*

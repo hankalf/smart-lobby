@@ -201,6 +201,26 @@ const DEFAULTS = {
     camera_proxy: false,
     camera_size: 'small'       // small | medium | large
   },
+  /*
+   * Copying a backup off the machine.
+   *
+   * The destination is a URL, and the one that works for a normal account in
+   * somebody else's tenant is a Power Automate flow into OneDrive — the same
+   * shape as the Teams webhook, and needing no Azure app registration or admin
+   * consent, which is exactly what such an account cannot obtain.
+   */
+  backup: {
+    offsite_enabled: false,
+    offsite_url: '',
+    offsite_secret: '',
+    // A database-only copy is a fraction of the size, for sites whose photos
+    // push the archive past what the flow will accept.
+    offsite_include_media: true,
+    offsite_last_at: '',
+    offsite_last_ok: true,
+    offsite_last_error: '',
+    offsite_last_file: ''
+  },
   privacy: {
     retain_visits_days: 730,
     retain_photos_days: 90,
@@ -518,7 +538,27 @@ function publicSettings() {
   return {
     org: s.org,
     // Only the notice: retention numbers and the rest stay on the server.
-    privacy: { notice: privacyNotice('en'), notice_es: privacyNotice('es') },
+    /*
+   * Copying a backup off the machine.
+   *
+   * The destination is a URL, and the one that works for a normal account in
+   * somebody else's tenant is a Power Automate flow into OneDrive — the same
+   * shape as the Teams webhook, and needing no Azure app registration or admin
+   * consent, which is exactly what such an account cannot obtain.
+   */
+  backup: {
+    offsite_enabled: false,
+    offsite_url: '',
+    offsite_secret: '',
+    // A database-only copy is a fraction of the size, for sites whose photos
+    // push the archive past what the flow will accept.
+    offsite_include_media: true,
+    offsite_last_at: '',
+    offsite_last_ok: true,
+    offsite_last_error: '',
+    offsite_last_file: ''
+  },
+  privacy: { notice: privacyNotice('en'), notice_es: privacyNotice('es') },
     kiosk: s.kiosk,
     types: s.types,
     details: s.details,

@@ -51,6 +51,12 @@ Each one is opened and integrity-checked after it is written. They live on the s
 so on their own they answer "something corrupted the database" and not "the volume is gone" — for that,
 download one from **Settings → Backups** and keep it elsewhere.
 
+Each new backup can also be posted straight into a **OneDrive** folder, which is what makes a copy
+survive losing the volume. The destination is a Power Automate flow ("When an HTTP request is
+received" → "Create file"), set up the same way as the Teams channel link and for the same reason:
+it needs no Azure app registration and no admin consent. Step-by-step instructions are on the
+Backups page.
+
 Restoring is done from the same page. The archive is checked, the current data is backed up first, and
 the restore is staged: it is applied by the next server start, because swapping the file out from under
 an open SQLite handle is how a restore becomes a second disaster.

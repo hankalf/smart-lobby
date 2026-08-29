@@ -385,6 +385,10 @@
     if (b.pending_restore) {
       out.push(`<div class="notice"><b>A restore is waiting to be applied.</b> It takes effect the next time the
         server starts. Until then this is still the old data.</div>`);
+    } else if (b.offsite && b.offsite.enabled && b.offsite.last_ok === false) {
+      out.push(`<div class="notice error"><b>Backups are not reaching OneDrive.</b>
+        ${esc(b.offsite.last_error || '')} They are still being written on the server, but the copy that would
+        survive losing it is not getting away. See <b>Settings → Backups</b>.</div>`);
     } else if (b.stale) {
       out.push(`<div class="notice error"><b>${b.last_at
         ? `The last backup was ${esc(fmtDate(b.last_at))}.`
@@ -3083,6 +3087,45 @@
           <span class="muted" id="backup-total"></span></div>
         <div id="backup-list"><p class="muted">Loading…</p></div>
 
+        <h3>Copy each backup to OneDrive</h3>
+        <p class="muted" style="margin-top:0">A backup sitting on the same volume as the data does not survive losing
+          the volume. This posts each new one straight into a OneDrive folder as it is written, so there is always a
+          copy somewhere else without anybody remembering to do anything.</p>
+        ${chk('backup.offsite_enabled', 'Send every backup to OneDrive')}
+        <div class="form-grid">
+          ${txt('backup.offsite_url', 'Flow URL', 'text', 'https://prod-00.westus.logic.azure.com/workflows/…')}
+          ${txt('backup.offsite_secret', 'Shared word (optional)', 'text', 'Anything — the flow can check for it')}
+        </div>
+        ${chk('backup.offsite_include_media', 'Send the uploaded files too',
+          'Off sends the database alone — a fraction of the size, but photos and signatures would not come back')}
+        <div class="row"><button class="btn subtle" id="offsite-test" type="button">Send a test file</button></div>
+        <div id="offsite-result"></div>
+
+        <details class="howto">
+          <summary><b>Setting up the OneDrive flow</b></summary>
+          <p class="muted" style="margin-top:.5rem">This is the same shape as the Teams channel link, and for the same
+            reason: it needs no Azure app registration and no admin consent, which a normal account in a company
+            tenant cannot get anyway.</p>
+          <ol>
+            <li>Go to <b>make.powerautomate.com</b> and sign in with your work account.</li>
+            <li><b>Create</b> &rarr; <b>Instant cloud flow</b> &rarr; trigger
+              <b>&ldquo;When an HTTP request is received&rdquo;</b>.</li>
+            <li>Add a step: <b>OneDrive for Business</b> &rarr; <b>Create file</b>.</li>
+            <li><b>Folder path</b>: pick or type a folder, e.g. <code>/Smart Lobby backups</code>.</li>
+            <li><b>File name</b>: in the dynamic-content box, switch to the expression tab and use
+              <code>triggerOutputs()['queries']['name']</code> — that is the filename we send.</li>
+            <li><b>File content</b>: expression <code>triggerBody()</code> — the archive itself.</li>
+            <li><b>Save</b>. Reopen the first step and copy the <b>HTTP POST URL</b> it now shows, and paste it above.</li>
+            <li>Press <b>Send a test file</b>. A small text file should appear in that folder within a few seconds.</li>
+          </ol>
+          <p class="muted">To check the shared word as well, add a <b>Condition</b> after the trigger comparing
+            <code>triggerOutputs()['headers']['X-Smart-Lobby-Secret']</code> to it, and only create the file when
+            they match.</p>
+          <p class="muted"><b>On size.</b> That trigger stops accepting very large uploads. If your archive grows past
+            about 45&nbsp;MB, turn off <b>Send the uploaded files too</b> — the database alone stays small for years.
+            A copy holding the database only is marked as such in the list, because it will not bring the photos back.</p>
+        </details>
+
         <h3>Restore</h3>
         <p class="muted" style="margin-top:0">Puts a backup back — the database and the files with it. The current
           data is copied first in case this was the mistake, and nothing is swapped while the server is running:
@@ -3467,6 +3510,13 @@
           ? `<div class="notice error"><b>${h.last_at ? `No backup since ${esc(fmtDate(h.last_at))}` : 'No backup has been written yet'}.</b>
              One should be written every night — press <b>Back up now</b> and check the server logs if it fails.</div>`
           : '';
+      const off = h.offsite || {};
+      if (off.enabled) {
+        $('#backup-health').innerHTML += off.last_ok
+          ? `<div class="notice">Copied to OneDrive${off.last_at ? ` — last one ${esc(fmtDate(off.last_at))}` : ''}.</div>`
+          : `<div class="notice error"><b>The last copy to OneDrive did not get there.</b>
+             ${esc(off.last_error || '')} Backups are still being written here.</div>`;
+      }
       $('#backup-total').textContent = data.backups.length
         ? `${data.backups.length} kept, ${sizeOf(h.total_bytes || 0)} in total`
         : '';
@@ -3476,13 +3526,22 @@
         <tbody>${data.backups.map((b) => `<tr>
           <td>${fmtDate(b.at)}</td><td>${sizeOf(b.bytes)}</td>
           <td>${b.complete ? 'Database and files'
-            : '<span class="muted">Database only — taken before backups included the files</span>'}</td>
+            : '<span class="muted">Database only — photos and signatures will not come back from this one</span>'}</td>
           <td style="white-space:nowrap">
             <a class="btn ghost" href="/api/admin/backups/${encodeURIComponent(b.file)}">Download</a>
+            ${(h.offsite && h.offsite.enabled) ? `<button class="btn ghost" data-bksend="${esc(b.file)}">Send</button>` : ''}
             <button class="btn ghost" data-bkdel="${esc(b.file)}">Delete</button></td>
         </tr>`).join('')}</tbody></table></div>`
         : '<p class="empty">No backup written yet — the first runs a minute after the server starts.</p>';
 
+      $$('[data-bksend]', wrap).forEach((b) => b.addEventListener('click', async () => {
+        b.disabled = true;
+        try {
+          const r = await api(`/backups/${encodeURIComponent(b.dataset.bksend)}/offsite`, { method: 'POST' });
+          toast(r.ok ? 'Sent to OneDrive' : `Did not get there — ${r.error}`, r.ok ? 3000 : 8000);
+          await drawBackups();
+        } catch { toast('Could not send that backup'); } finally { b.disabled = false; }
+      }));
       $$('[data-bkdel]', wrap).forEach((b) => b.addEventListener('click', async () => {
         if (!confirm('Delete this backup? It cannot be recovered.')) return;
         try { await api(`/backups/${encodeURIComponent(b.dataset.bkdel)}`, { method: 'DELETE' }); await drawBackups(); }
@@ -3547,12 +3606,34 @@
       });
     });
 
+    $('#offsite-test').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const box = $('#offsite-result');
+      const url = $('[data-set="backup.offsite_url"]').value.trim();
+      if (!url) return toast('Paste the flow URL first');
+      btn.disabled = true;
+      box.innerHTML = '<p class="muted">Sending a small file…</p>';
+      try {
+        const r = await api('/backups/offsite/test', { method: 'POST', body: {
+          url, secret: $('[data-set="backup.offsite_secret"]').value.trim() } });
+        box.innerHTML = r.ok
+          ? '<div class="notice"><b>It arrived.</b> Check the OneDrive folder — there should be a small text file in '
+            + 'it. Backups will land in the same place.</div>'
+          : `<div class="notice error"><b>It did not get there.</b> ${esc(r.error || '')}</div>`;
+      } catch {
+        box.innerHTML = '<div class="notice error">Could not run the test.</div>';
+      } finally { btn.disabled = false; }
+    });
+
     $('#backup-now').addEventListener('click', async (e) => {
       const btn = e.currentTarget;
       btn.disabled = true;
       try {
         const r = await api('/backups', { method: 'POST' });
-        toast(`Backup written — ${sizeOf(r.bytes)}`);
+        const copied = r.offsite
+          ? (r.offsite.ok ? ', and copied to OneDrive' : ` — but it did not reach OneDrive: ${r.offsite.error}`)
+          : '';
+        toast(`Backup written — ${sizeOf(r.bytes)}${copied}`, r.offsite && !r.offsite.ok ? 8000 : 3000);
         await drawBackups();
       } catch (err) {
         toast((err.data && err.data.message) || 'Could not write a backup', 5000);

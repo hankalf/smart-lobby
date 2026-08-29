@@ -101,7 +101,7 @@ function verify(dbPath) {
 /**
  * @returns {{file: string, bytes: number, entries: number, counts: object, media_files: number}}
  */
-function create() {
+function create({ includeMedia = true } = {}) {
   fs.mkdirSync(BACKUP_DIR, { recursive: true });
   const scratch = path.join(BACKUP_DIR, `.building-${Date.now()}.db`);
   try { fs.unlinkSync(scratch); } catch { /* not there */ }
@@ -116,7 +116,7 @@ function create() {
 
   const file = freeName('.zip');
   const full = path.join(BACKUP_DIR, file);
-  const media = walk(UPLOAD_DIR);
+  const media = includeMedia ? walk(UPLOAD_DIR) : [];
   let mediaBytes = 0;
   let written;
 
@@ -133,7 +133,10 @@ function create() {
       format: 1,
       counts: checked.counts,
       media_files: media.length,
-      media_bytes: mediaBytes
+      media_bytes: mediaBytes,
+      // Said plainly in the archive, so a database-only copy cannot be
+      // mistaken for a complete one months later.
+      database_only: !includeMedia
     }, null, 2)));
     written = archive.finish();
   } catch (err) {
@@ -146,7 +149,8 @@ function create() {
   }
 
   prune();
-  return { file, bytes: written.bytes, entries: written.entries, counts: checked.counts, media_files: media.length };
+  return { file, bytes: written.bytes, entries: written.entries, counts: checked.counts,
+    media_files: media.length, database_only: !includeMedia };
 }
 
 /** Newest first. Older database-only backups are listed, and marked as such. */
@@ -244,6 +248,12 @@ function runDaily() {
     const made = create();
     console.log(`[backup] wrote ${made.file} — ${Math.round(made.bytes / 1024)} kB, `
       + `${made.counts.visits} visit(s), ${made.media_files} uploaded file(s)`);
+    /*
+     * And straight off the machine, if that is set up. Deliberately not
+     * awaited and deliberately unable to throw: a destination that is down
+     * must not turn a backup that was written successfully into a failure.
+     */
+    require('./offsite').copyOff(made).catch(() => {});
     return made;
   } catch (err) {
     console.error('[backup] failed:', err.message);

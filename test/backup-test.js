@@ -117,6 +117,78 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
   ok('somebody else\'s database is refused', look.data.ok === false, JSON.stringify(look.data).slice(0, 110));
   fs.unlinkSync(foreignPath); fs.unlinkSync(otherDbPath);
 
+  /* ------------------------- copying it off the machine, to OneDrive ------ */
+
+  /*
+   * A stand-in for the Power Automate flow: it keeps what it is sent, so the
+   * test can open the upload and check a real archive arrived intact rather
+   * than merely that something was posted.
+   */
+  const http = require('http');
+  const landed = [];
+  const sink = http.createServer((rq, rs) => {
+    const chunks = [];
+    rq.on('data', (c) => chunks.push(c));
+    rq.on('end', () => {
+      landed.push({
+        url: rq.url,
+        headers: rq.headers,
+        body: Buffer.concat(chunks)
+      });
+      rs.writeHead(200).end('ok');
+    });
+  });
+  await new Promise((go) => sink.listen(0, '127.0.0.1', go));
+  const flow = `http://127.0.0.1:${sink.address().port}/workflows/fake`;
+
+  let t = await req('POST', '/api/admin/backups/offsite/test', { url: flow, secret: 'shared-word' });
+  ok('a test file reaches the destination', t.data.ok === true, JSON.stringify(t.data));
+  ok('…carrying the filename in the address', /[?&]name=/.test(landed[0].url), landed[0].url);
+  ok('…and in a header too', !!landed[0].headers['x-filename'], JSON.stringify(landed[0].headers['x-filename']));
+  ok('…with the shared word, so the flow can check it',
+    landed[0].headers['x-smart-lobby-secret'] === 'shared-word', landed[0].headers['x-smart-lobby-secret']);
+
+  await req('PUT', '/api/admin/settings', { backup: { offsite_enabled: true, offsite_url: flow } });
+  landed.length = 0;
+  const sent = await req('POST', '/api/admin/backups');
+  ok('a new backup is copied off as it is written', sent.data.offsite && sent.data.offsite.ok === true,
+    JSON.stringify(sent.data.offsite));
+  ok('exactly one upload arrived', landed.length === 1, String(landed.length));
+
+  const arrived = landed[0].body;
+  ok('what arrived is the archive itself, not base64 of it',
+    arrived.slice(0, 2).toString() === 'PK', arrived.slice(0, 4).toString('hex'));
+  ok('…the same size the server reported', arrived.length === sent.data.bytes,
+    `${arrived.length} vs ${sent.data.bytes}`);
+  const arrivedEntries = unzip.readZip(arrived);
+  ok('…and it opens, with the database in it', arrivedEntries.has('smartlobby.db'));
+  ok('…and the visitor photos with it',
+    [...arrivedEntries.keys()].some((k) => k.startsWith('uploads/')),
+    [...arrivedEntries.keys()].slice(0, 4).join(','));
+  ok('the sent name matches the backup that was written',
+    decodeURIComponent(landed[0].url.split('name=')[1] || '') === sent.data.file,
+    `${landed[0].url} vs ${sent.data.file}`);
+
+  /* ---- a destination that is down must not lose the backup ---- */
+  await new Promise((go) => sink.close(go));
+  const orphaned = await req('POST', '/api/admin/backups');
+  ok('a backup is still written when the destination is unreachable',
+    orphaned.status === 200 && orphaned.data.ok === true && orphaned.data.bytes > 0,
+    JSON.stringify(orphaned.data).slice(0, 80));
+  ok('…and it says the copy did not get there', orphaned.data.offsite && orphaned.data.offsite.ok === false,
+    JSON.stringify(orphaned.data.offsite));
+  ok('…in words that say what to do', /reach|answer/i.test((orphaned.data.offsite || {}).error || ''),
+    (orphaned.data.offsite || {}).error);
+  ok('the file is on disk regardless',
+    (await req('GET', '/api/admin/backups')).data.backups.some((b) => b.file === orphaned.data.file));
+
+  const dash = (await req('GET', '/api/admin/dashboard')).data;
+  ok('the dashboard reports the failed copy',
+    dash.health.backup.offsite.enabled === true && dash.health.backup.offsite.last_ok === false,
+    JSON.stringify(dash.health.backup.offsite));
+
+  await req('PUT', '/api/admin/settings', { backup: { offsite_enabled: false, offsite_url: '' } });
+
   /* ---- the state that gets thrown away, so the restore has something to prove ---- */
   await req('POST', '/api/kiosk/signin', {
     full_name: 'Hank Alfred 43', company: 'Later Co', phone: '415-268-8002',
