@@ -26,10 +26,27 @@ const KEEP = 7;
 
 const stamp = () => new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 
+/**
+ * A name nothing is using yet.
+ *
+ * The stamp is only to the second, so the nightly copy and somebody pressing
+ * "Back up now" in the same second land on the same name — and VACUUM INTO
+ * refuses to write over a file that exists, which surfaced as a 500 rather
+ * than a backup.
+ */
+function freeName() {
+  const base = `smartlobby-${stamp()}`;
+  for (let n = 0; n < 100; n++) {
+    const file = n ? `${base}-${n + 1}.db` : `${base}.db`;
+    if (!fs.existsSync(path.join(BACKUP_DIR, file))) return file;
+  }
+  throw new Error('could not find an unused backup filename');
+}
+
 /** @returns {{file: string, path: string, bytes: number}} */
 function create() {
   fs.mkdirSync(BACKUP_DIR, { recursive: true });
-  const file = `smartlobby-${stamp()}.db`;
+  const file = freeName();
   const full = path.join(BACKUP_DIR, file);
   /*
    * The filename is built here from a timestamp, never from anything a caller

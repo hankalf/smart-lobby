@@ -83,6 +83,14 @@ async function req(method, path, body, jar) {
   ok('it downloads', dl.status === 200 && body.length > 0, `${dl.status} ${body.length} bytes`);
   ok('and it really is a SQLite database', body.slice(0, 15).toString() === 'SQLite format 3', body.slice(0, 15).toString());
 
+  // Two in the same second used to collide on the filename and throw.
+  const rapid = await Promise.all([req('POST', '/api/admin/backups'), req('POST', '/api/admin/backups')]);
+  ok('two backups in the same second both succeed',
+    rapid.every((x) => x.status === 200 && x.data.bytes > 0),
+    JSON.stringify(rapid.map((x) => [x.status, x.data && (x.data.file || x.data.message)])));
+  ok('…with different names', rapid[0].data.file !== rapid[1].data.file,
+    `${rapid[0].data.file} vs ${rapid[1].data.file}`);
+
   ok('a backup cannot be fetched by climbing out of the folder',
     (await fetch(`${BASE}/api/admin/backups/${encodeURIComponent('../smartlobby.db')}`, { headers: { cookie } })).status === 404);
   ok('backups need a login', (await fetch(`${BASE}/api/admin/backups`)).status === 401);
