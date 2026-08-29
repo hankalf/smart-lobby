@@ -44,6 +44,17 @@ node scripts/reset-password.js you@example.com 'a new password'
 On Railway that is a one-off command against the service with the volume mounted. It re-enables the
 account and signs out every session it had.
 
+### Backups
+
+A ZIP holding the database **and** every uploaded file is written nightly to `data/backups/`, seven kept.
+Each one is opened and integrity-checked after it is written. They live on the same volume as the data,
+so on their own they answer "something corrupted the database" and not "the volume is gone" — for that,
+download one from **Settings → Backups** and keep it elsewhere.
+
+Restoring is done from the same page. The archive is checked, the current data is backed up first, and
+the restore is staged: it is applied by the next server start, because swapping the file out from under
+an open SQLite handle is how a restore becomes a second disaster.
+
 ## Tests
 
 ```bash

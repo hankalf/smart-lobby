@@ -50,6 +50,7 @@ const SUITES = [
   { name: 'card', file: 'card-test.js' },
   { name: 'board', file: 'board-test.js' },
   { name: 'account', file: 'account-test.js' },
+  { name: 'backup', file: 'backup-test.js' },
   { name: 'xss', file: 'xss-test.js', browser: true },
   { name: 'attack', file: 'attack-test.js' },
   { name: 'admin-smoke', file: 'admin-smoke.js', browser: true },

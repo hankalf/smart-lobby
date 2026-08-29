@@ -8,7 +8,7 @@ const post = (p, b) => fetch(BASE + p, { method: 'POST', headers: { 'Content-Typ
 
 (async () => {
   const ref = 'race-' + Date.now();
-  const payload = { full_name: 'Race Tester', company: 'Race Co', phone: '415-268-0999',
+  const payload = { full_name: 'Hank Alfred 14', company: 'Race Co', phone: '415-268-0999',
     visit_type: 'contractor', project_id: 1, client_ref: ref };
 
   const results = await Promise.all(Array.from({ length: 6 }, () => post('/api/kiosk/signin', payload)));
@@ -23,7 +23,7 @@ const post = (p, b) => fetch(BASE + p, { method: 'POST', headers: { 'Content-Typ
   const cookie = login.headers.get('set-cookie').split(';')[0];
   const visits = await (await fetch(`${BASE}/api/admin/visits?limit=50`, { headers: { cookie } })).json();
   const rows = visits.rows || visits;
-  // scoped to this run's reference: earlier runs left their own Race Tester rows
+  // scoped to this run's reference: earlier runs left their own Hank Alfred 14 rows
   const mine = rows.filter((v) => v.client_ref === ref);
   ok('exactly one visit recorded for this reference', mine.length === 1, `${mine.length} visits`);
 

@@ -22,7 +22,7 @@ const SIG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
 
   /* ---- a visit with a signed document, then deleted ---- */
   let r = await req('POST', '/api/kiosk/signin', {
-    full_name: 'Archie Restore', company: 'Archive Co', phone: '415-268-1001',
+    full_name: 'Hank Alfred 40', company: 'Archive Co', phone: '415-268-1001',
     visit_type: 'contractor', project_id: 1, photo: SIG,
     documents: [{ agreement_id: agreement.id, signature: SIG, answers: {} }],
     client_ref: 'arch-' + Date.now()
@@ -46,7 +46,7 @@ const SIG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
   const list = (await req('GET', '/api/admin/archive')).data;
   const entry = list.find((e) => e.kind === 'visit' && e.record_id === visitId);
   ok('it appears in the deleted list', !!entry, JSON.stringify(list.slice(0, 2)));
-  ok('the list shows who it was', entry && entry.label === 'Archie Restore', entry && entry.label);
+  ok('the list shows who it was', entry && entry.label === 'Hank Alfred 40', entry && entry.label);
   ok('…and that a document was signed', entry && entry.summary.documents_signed === 1, JSON.stringify(entry && entry.summary));
   ok('…and who deleted it', entry && typeof entry.deleted_by === 'string' && entry.deleted_by.length > 0, entry && entry.deleted_by);
 
@@ -58,7 +58,7 @@ const SIG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
   r = await req('POST', `/api/admin/archive/${entry.id}/restore`);
   ok('restoring succeeds', r.status === 200 && r.data.ok === true, JSON.stringify(r.data));
   detail = (await req('GET', `/api/admin/visits/${visitId}`)).data;
-  ok('the visit is back under its own id', detail && detail.full_name === 'Archie Restore', JSON.stringify(detail).slice(0, 80));
+  ok('the visit is back under its own id', detail && detail.full_name === 'Hank Alfred 40', JSON.stringify(detail).slice(0, 80));
   ok('its signature came back too', detail.signatures && detail.signatures.length === 1,
     JSON.stringify((detail.signatures || []).length));
   ok('it is no longer listed as deleted',
@@ -71,12 +71,12 @@ const SIG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
   ok('the visitor is in the deleted list', !!vEntry);
   ok('with a count of the visits taken with them', vEntry && vEntry.summary.visits >= 1, JSON.stringify(vEntry && vEntry.summary));
   ok('their visits are gone from the live list',
-    !(await liveVisits()).some((v) => v.full_name === 'Archie Restore'));
+    !(await liveVisits()).some((v) => v.full_name === 'Hank Alfred 40'));
 
   r = await req('POST', `/api/admin/archive/${vEntry.id}/restore`);
   ok('restoring the visitor works', r.status === 200 && r.data.ok === true, JSON.stringify(r.data));
   const back = await liveVisits();
-  ok('their visit came back with them', back.some((v) => v.full_name === 'Archie Restore'),
+  ok('their visit came back with them', back.some((v) => v.full_name === 'Hank Alfred 40'),
     `${back.length} visit(s) listed`);
 
   /* ---- restoring twice is refused, with a reason ---- */

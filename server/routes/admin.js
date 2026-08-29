@@ -154,7 +154,7 @@ router.get('/dashboard', (req, res) => {
   const devices = all('SELECT id, name, last_seen_at FROM devices ORDER BY name');
   res.json({ onsite, stats, week, devices, storage_warning,
     // Whether anything has quietly stopped working — see notify.health().
-    health: notify.health(),
+    health: { ...notify.health(), backup: require('../backup').health() },
     recent_deliveries: all(
       `SELECT d.*, h.name AS host_name FROM deliveries d LEFT JOIN hosts h ON h.id = d.recipient_host_id
        ORDER BY d.received_at DESC LIMIT 10`) });
@@ -1162,10 +1162,10 @@ function sampleVisit() {
   return {
     real: false,
     visit: {
-      id: 0, full_name: 'Ivan Ruiz', company: 'Ruiz Groundworks', phone: '(415) 268-0142',
-      email: 'ivan@example.com', visit_type: 'contractor', purpose: 'Foundation pour',
-      vehicle_reg: 'TX 8842B', badge_no: 'V260829-014', host_name: 'Hank Alfaro',
-      host_email: 'hank@example.com',
+      id: 0, full_name: 'Hank Alfred', company: 'Example Contracting', phone: '(415) 268-0142',
+      email: 'visitor@example.com', visit_type: 'contractor', purpose: 'Foundation pour',
+      vehicle_reg: 'TX 8842B', badge_no: 'V260829-014', host_name: 'Hank Alfred',
+      host_email: 'host@example.com',
       site_name: 'Main site', project_name: 'Lakeview Phase 2', location_name: 'North gate',
       device_name: 'Front gate iPad', signed_in_at: new Date().toISOString(), signed_out_at: null,
       id_name: 'IVAN R RUIZ', id_number: 'D1234567', id_state: 'TX', photo_path: null
@@ -1195,40 +1195,105 @@ function buildPreview(card) {
 
 router.post('/settings/test-webhook', async (req, res) => {
   if (!clean(req.body.url)) return res.json({ ok: false, detail: 'Enter a webhook URL first.' });
-  // The test sends the designed card, not a plain line, so what comes back is
-  // proof the layout and the photo link both survive the trip.
+  /*
+   * The test sends the designed card, not a plain line, so what comes back is
+   * proof the layout and the photo link both survive the trip.
+   *
+   * With one deliberate exception: it never tags anybody. The sample is built
+   * from a real recent visit, so a test would otherwise @-mention a real
+   * colleague in a real channel — someone who had nothing to do with the
+   * button being pressed, and who may not even be in that team. A real
+   * arrival tags the host; a test is not an arrival.
+   */
   const preview = buildPreview((req.body && req.body.card) || settings.getSection('notify').card);
-  const model = { ...preview.model, title: `${preview.model.title} — test` };
+  const model = { ...preview.model, title: `${preview.model.title} — test`, mention: null };
   const result = await notify.sendWebhook({ url: req.body.url, model });
-  res.json({ ...result, photo_included: !!model.photoUrl, public_url_reachable: preview.public_url_reachable });
+  res.json({
+    ...result,
+    photo_included: !!model.photoUrl,
+    tagged_nobody: true,
+    public_url_reachable: preview.public_url_reachable
+  });
 });
 
 /* -------------------------------------------------------------- backups */
 
 const backup = require('../backup');
 
-router.get('/backups', (req, res) => res.json({ keep: backup.KEEP, backups: backup.list() }));
+router.get('/backups', (req, res) =>
+  res.json({ keep: backup.KEEP, backups: backup.list(), health: backup.health() }));
 
 router.post('/backups', (req, res) => {
   try {
     const made = backup.create();
-    audit(req, 'backup', 'database', null, { file: made.file, bytes: made.bytes });
-    res.json({ ok: true, ...made, path: undefined });
+    audit(req, 'backup', 'database', null, { file: made.file, bytes: made.bytes, media: made.media_files });
+    res.json({ ok: true, ...made });
   } catch (err) {
     res.status(500).json({ ok: false, message: `Could not write a backup: ${err.message}` });
   }
 });
 
 /*
- * The whole database, as a file. This is the copy that survives losing the
+ * The whole thing, as one file. This is the copy that survives losing the
  * machine, so it is deliberately easy to take — and deliberately behind a
- * login, because it is every visitor record in one download.
+ * login, because it is every visitor record and every photo in one download.
  */
 router.get('/backups/:file', (req, res) => {
   const full = backup.pathOf(req.params.file);
   if (!full) return res.status(404).json({ error: 'not_found' });
   audit(req, 'backup_download', 'database', null, { file: req.params.file });
   res.download(full);
+});
+
+router.delete('/backups/:file', (req, res) => {
+  const full = backup.pathOf(req.params.file);
+  if (!full) return res.status(404).json({ error: 'not_found' });
+  require('fs').unlinkSync(full);
+  audit(req, 'backup_delete', 'database', null, { file: req.params.file });
+  res.json({ ok: true });
+});
+
+/* --------------------------------------------------------------- restore */
+
+/**
+ * Putting a backup back.
+ *
+ * Nothing is swapped while the server is running: the archive is checked, the
+ * current data is backed up in case this was the mistake, and the restore is
+ * staged for the next start. Only an owner can, because it replaces
+ * everything — including which accounts exist, which is to say including who
+ * can undo it.
+ */
+router.post('/restore', files.memoryUpload.single('file'), (req, res) => {
+  if (req.user.role !== 'owner') {
+    return res.status(403).json({ ok: false, message: 'Only the owner can restore a backup.' });
+  }
+  if (!req.file || !req.file.buffer || !req.file.buffer.length) {
+    return res.status(400).json({ ok: false, message: 'Choose a backup file first.' });
+  }
+  const result = backup.stageRestore(req.file.buffer);
+  if (!result.ok) return res.status(400).json({ ok: false, message: result.error });
+  audit(req, 'restore_staged', 'database', null,
+    { from: req.file.originalname, counts: result.counts, safety_backup: result.safety_backup });
+  res.json({
+    ok: true,
+    ...result,
+    message: `Ready to restore ${result.counts.visits} visit(s) and ${result.media_files} file(s). `
+      + 'It is applied the next time the server starts — restart it to finish.'
+  });
+});
+
+/** Read an archive and report on it, changing nothing. */
+router.post('/restore/check', files.memoryUpload.single('file'), (req, res) => {
+  if (!req.file || !req.file.buffer) return res.status(400).json({ ok: false, error: 'Choose a file first.' });
+  res.json(backup.inspect(req.file.buffer));
+});
+
+router.delete('/restore', (req, res) => {
+  const had = !!backup.pendingRestore();
+  backup.cancelRestore();
+  if (had) audit(req, 'restore_cancelled', 'database', null);
+  res.json({ ok: true, cancelled: had });
 });
 
 /* ----------------------------------------------------------- wall board */

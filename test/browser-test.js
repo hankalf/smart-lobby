@@ -94,7 +94,7 @@ async function armDeckSignature() {
   // new visitor: skip lookup
   await page.click('#identify-skip');
   await page.waitForSelector('[data-screen="details"]:not([hidden])');
-  await page.fill('#f-name', 'Test Browser');
+  await page.fill('#f-name', 'Hank Alfred 20');
   await page.fill('#f-company', 'E2E Ltd');
   await page.fill('#f-phone', '415-268-0199');
   const projVisible = await page.$eval('#f-project', (el) => !!el.closest('label') && !el.closest('label').hidden).catch(() => false);
@@ -164,7 +164,7 @@ async function armDeckSignature() {
   const cookie = res.headers.get('set-cookie').split(';')[0];
   const visits = await (await fetch(`${BASE}/api/admin/visits?limit=5`, { headers: { cookie } })).json();
   const rowsV = visits.rows || visits;
-  const mine = rowsV.find((v) => v.full_name === 'Test Browser');
+  const mine = rowsV.find((v) => v.full_name === 'Hank Alfred 20');
   ok('visit recorded for browser sign-in', !!mine, JSON.stringify(rowsV.slice(0, 2)));
   if (mine) {
     const detail = await (await fetch(`${BASE}/api/admin/visits/${mine.id}`, { headers: { cookie } })).json();

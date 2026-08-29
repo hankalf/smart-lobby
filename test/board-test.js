@@ -33,23 +33,23 @@ const anon = (path) => fetch(BASE + path, { cache: 'no-store' });
 
   /* ---- the roster ---- */
   await req('POST', '/api/kiosk/signin', {
-    full_name: 'Board Watcher', company: 'Board Co', phone: '415-268-7001',
+    full_name: 'Hank Alfred 41', company: 'Board Co', phone: '415-268-7001',
     visit_type: 'contractor', project_id: 1, client_ref: 'board-' + Date.now()
   });
   let data = await (await anon(`/api/board/${key}/data`)).json();
   ok('the roster loads without a login', Array.isArray(data.onsite), JSON.stringify(data).slice(0, 80));
-  const me = data.onsite.find((p) => p.name === 'Board Watcher');
+  const me = data.onsite.find((p) => p.name === 'Hank Alfred 41');
   ok('somebody who just signed in is on it', !!me, data.onsite.map((p) => p.name).join(','));
   ok('their company is shown', me && me.company === 'Board Co', me && me.company);
   ok('the arrival counts as recent', me && Date.parse(me.in) >= Date.parse(data.recent_since));
   ok('the board carries the site heading', typeof data.title === 'string' && data.title.length > 0, data.title);
 
   /* ---- signing out moves them across ---- */
-  const visit = (await req('GET', '/api/admin/visits?limit=50')).data.find((v) => v.full_name === 'Board Watcher');
+  const visit = (await req('GET', '/api/admin/visits?limit=50')).data.find((v) => v.full_name === 'Hank Alfred 41');
   await req('POST', '/api/kiosk/signout', { visit_id: visit.id });
   data = await (await anon(`/api/board/${key}/data`)).json();
-  ok('they leave the on-site list', !data.onsite.some((p) => p.name === 'Board Watcher'));
-  ok('…and appear under just signed out', data.left.some((p) => p.name === 'Board Watcher'),
+  ok('they leave the on-site list', !data.onsite.some((p) => p.name === 'Hank Alfred 41'));
+  ok('…and appear under just signed out', data.left.some((p) => p.name === 'Hank Alfred 41'),
     data.left.map((p) => p.name).join(','));
 
   /* ---- what the panel can hide ---- */

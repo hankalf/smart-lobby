@@ -30,7 +30,7 @@ function findAll(node, type, out = []) {
   /* ---- a visit with a photo, so the picture has something to point at ---- */
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
   const r = await req('POST', '/api/kiosk/signin', {
-    full_name: 'Cardy McCardface', company: 'Card Co', phone: '415-268-6001',
+    full_name: 'Hank Alfred', company: 'Card Co', phone: '415-268-6001',
     visit_type: 'contractor', project_id: 1, host_id: host.id, photo: PNG, client_ref: 'card-' + Date.now()
   });
   ok('a visit with a photo is created', r.status === 200 && !!r.data.visit, JSON.stringify(r.data).slice(0, 70));
@@ -45,7 +45,7 @@ function findAll(node, type, out = []) {
 
   /* ---- the heading ---- */
   p = await preview({ title_template: '{name} from {company} is here', fields: [] });
-  ok('tokens are filled in', /Cardy McCardface from Card Co is here/.test(p.model.title), p.model.title);
+  ok('tokens are filled in', /Hank Alfred from Card Co is here/.test(p.model.title), p.model.title);
   /*
    * Built here rather than through the preview: the preview shows a real
    * visit, and whether that one happens to have a host is not something this
@@ -53,7 +53,7 @@ function findAll(node, type, out = []) {
    */
   const cards = require('../server/notify-card');
   const bare = cards.buildModel(
-    { full_name: 'Nobody Expected', visit_type: 'visitor', signed_in_at: new Date().toISOString() },
+    { full_name: 'Hank Alfred', visit_type: 'visitor', signed_in_at: new Date().toISOString() },
     { title_template: '{name} has arrived to see {host}', fields: [] },
     { org: { name: 'Test' }, fmtTime: (x) => x, baseUrl: '' });
   ok('an unnamed host reads as reception', /to see reception$/.test(bare.title), bare.title);

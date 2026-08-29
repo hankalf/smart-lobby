@@ -2,6 +2,15 @@
 require('dotenv').config();
 
 const path = require('path');
+
+/*
+ * A restore staged from the dashboard is applied here, before the line below
+ * opens the database — requiring db.js is what opens it, and replacing the
+ * file out from under an open handle is how a restore becomes a second
+ * disaster. This is the only moment nothing is holding it.
+ */
+require('./restore-boot').applyPending();
+
 const express = require('express');
 const { migrate, all, get, run, nowISO, STORAGE } = require('./db');
 const auth = require('./auth');

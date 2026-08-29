@@ -115,7 +115,7 @@ const SIG = `data:image/png;base64,${PNG_B64}`;
 
   /* ---- contractor sign-in with induction signature ---- */
   r = await post('/api/kiosk/signin', {
-    full_name: 'Carlos Vega', company: 'Vega Electrical', phone: '415-268-0101',
+    full_name: 'Hank Alfred', company: 'Vega Electrical', phone: '415-268-0101',
     visit_type: 'contractor', project_id: project.id, language: 'es',
     documents: [{ agreement_id: agreement.id, signature: SIG, answers: {} }],
     induction_completed: true, slideshow_id: deck.id, induction_signature: SIG,
@@ -124,7 +124,7 @@ const SIG = `data:image/png;base64,${PNG_B64}`;
   });
   const visit = r.data && r.data.visit;
   ok('contractor signs in', r.status === 200 && visit && visit.id && r.data.checkout_code, JSON.stringify(r.data).slice(0, 120));
-  r = await post('/api/kiosk/signin', { full_name: 'Carlos Vega', company: 'Vega Electrical', phone: '415-268-0101', visit_type: 'contractor', project_id: project.id, client_ref: 'test-ref-1' });
+  r = await post('/api/kiosk/signin', { full_name: 'Hank Alfred', company: 'Vega Electrical', phone: '415-268-0101', visit_type: 'contractor', project_id: project.id, client_ref: 'test-ref-1' });
   ok('client_ref dedupes retried sign-in', r.data.duplicate === true && r.data.visit.id === visit.id, JSON.stringify(r.data).slice(0, 120));
 
   /* ---- induction signature stored ---- */
@@ -140,18 +140,18 @@ const SIG = `data:image/png;base64,${PNG_B64}`;
 
   /* ---- returning visitor skips induction ---- */
   r = await post('/api/kiosk/lookup', { phone: '415-268-0101' });
-  ok('lookup finds Carlos', r.data.found === true && r.data.visitor.full_name === 'Carlos Vega');
+  ok('lookup finds Carlos', r.data.found === true && r.data.visitor.full_name === 'Hank Alfred');
   r = await post('/api/kiosk/induction', { visit_type: 'contractor', visitor_id: r.data.visitor.id, language: 'en' });
   ok('returning contractor skips induction', r.data.required === false, JSON.stringify(r.data).slice(0, 100));
 
   /* ---- shared phone asks who you are ---- */
-  r = await post('/api/kiosk/signin', { full_name: 'Maria Vega', company: 'Vega Electrical', phone: '415-268-0101', visit_type: 'contractor', project_id: project.id, client_ref: 'test-ref-2' });
+  r = await post('/api/kiosk/signin', { full_name: 'Hank Alfred 8', company: 'Vega Electrical', phone: '415-268-0101', visit_type: 'contractor', project_id: project.id, client_ref: 'test-ref-2' });
   ok('second person on shared phone signs in as new visitor', r.status === 200 && r.data.visit && r.data.visit.visitor_id !== visit.visitor_id, JSON.stringify(r.data).slice(0, 140));
   r = await post('/api/kiosk/lookup', { phone: '415-268-0101' });
   ok('shared phone returns choice list', r.data.multiple === true && r.data.matches.length === 2, JSON.stringify(r.data).slice(0, 140));
 
   /* ---- sign-out ---- */
-  r = await post('/api/kiosk/signout/search', { q: 'Carlos' });
+  r = await post('/api/kiosk/signout/search', { q: 'Hank' });
   const target = Array.isArray(r.data) ? r.data[0] : null;
   ok('sign-out search finds him', !!target, JSON.stringify(r.data).slice(0, 120));
   if (target) {

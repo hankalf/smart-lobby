@@ -73,7 +73,7 @@ const DEFAULT_CARD = {
 /** Fill {name}, {company}, {host}… leaving nothing behind when a value is empty. */
 function fill(template, tokens) {
   const text = String(template || '').replace(/\{(\w+)\}/g, (_, key) => tokens[key] || '');
-  // "Ivan Ruiz has arrived to see " when nobody was named — tidy the seam.
+  // "Hank Alfred has arrived to see " when nobody was named — tidy the seam.
   return text.replace(/\s+/g, ' ').replace(/[\s·,-]+$/, '').trim();
 }
 

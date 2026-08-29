@@ -50,12 +50,12 @@ const cardText = (p) => JSON.stringify(p.body);
     posts[0] && cardText(posts[0]).slice(0, 120));
 
   /* a staff member with their own Teams link */
-  r = await req('POST', '/api/admin/staff', { name: 'Dana Ops', email: 'dana@x.test', webhook_url: PERSON, active: 1 });
+  r = await req('POST', '/api/admin/staff', { name: 'Hank Alfred', email: 'dana@x.test', webhook_url: PERSON, active: 1 });
   const host = r.data;
   ok('staff member with a Teams link created', !!host.id && host.webhook_url === PERSON);
 
   posts.length = 0;
-  r = await req('POST', '/api/kiosk/signin', { full_name: 'Teams Visitor', company: 'Teams Co', phone: '415-268-0700',
+  r = await req('POST', '/api/kiosk/signin', { full_name: 'Hank Alfred 19', company: 'Teams Co', phone: '415-268-0700',
     visit_type: 'contractor', project_id: 1, host_id: host.id, client_ref: 'teams-' + Date.now() });
   ok('sign-in ok', r.status === 200, JSON.stringify(r.data).slice(0, 90));
   await new Promise((r2) => setTimeout(r2, 1200));
@@ -64,7 +64,7 @@ const cardText = (p) => JSON.stringify(p.body);
   const toChannel = posts.find((p) => p.path.endsWith('/channel'));
   ok('the person being visited is messaged', !!toPerson, JSON.stringify(posts.map((p) => p.path)));
   ok('the company channel is posted too', !!toChannel);
-  ok('the card names visitor and host', !!toPerson && /Teams Visitor/.test(cardText(toPerson)) && /Dana Ops/.test(cardText(toPerson)));
+  ok('the card names visitor and host', !!toPerson && /Hank Alfred 19/.test(cardText(toPerson)) && /Hank Alfred/.test(cardText(toPerson)));
 
   /* both attempts are in the activity log as sent */
   r = await req('GET', '/api/admin/notifications');

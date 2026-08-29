@@ -56,7 +56,7 @@ const ok = (n, c, x) => { if (c) { pass++; console.log(`  ok  ${n}`); } else { f
   if (result.decoded) {
     const p = result.parsed;
     ok('it parses as a licence', p.ok, JSON.stringify(p));
-    ok('the name comes out right', p.name === 'John Smith', p.name);
+    ok('the name comes out right', p.name === 'Hank Alfred 4', p.name);
     ok('the licence number comes out right', p.number === '12345678', p.number);
     ok('the issuing state comes out right', p.state === 'TX', p.state);
     ok('nothing else is returned — no DOB, no address',

@@ -34,7 +34,7 @@ async function req(method, path, body) {
   r = await req('POST', '/api/admin/projects', { name: 'Closed job', active: 1 });
   const proj = r.data;
   await req('PATCH', `/api/admin/projects/${proj.id}`, { active: 0 });
-  r = await req('POST', '/api/kiosk/signin', { full_name: 'Late Arrival', company: 'Z', phone: '415-268-5552', visit_type: 'contractor', project_id: proj.id });
+  r = await req('POST', '/api/kiosk/signin', { full_name: 'Hank Alfred 5', company: 'Z', phone: '415-268-5552', visit_type: 'contractor', project_id: proj.id });
   ok('a closed project is refused at sign-in', r.status === 400 && r.data.error === 'unknown_project', JSON.stringify(r.data));
 
   /* ---- a project in use cannot be deleted ---- */

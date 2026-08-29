@@ -28,15 +28,15 @@ async function req(method, path, body) {
   }
 
   /* ---- deleting a staff member who has visitors ---- */
-  r = await req('POST', '/api/admin/staff', { name: 'Temp Host', email: 't@x.test', active: 1 });
+  r = await req('POST', '/api/admin/staff', { name: 'Hank Alfred', email: 't@x.test', active: 1 });
   const host = r.data;
-  r = await req('POST', '/api/kiosk/signin', { full_name: 'Sees Temp', company: 'C', phone: '415-268-0501',
+  r = await req('POST', '/api/kiosk/signin', { full_name: 'Hank Alfred 17', company: 'C', phone: '415-268-0501',
     visit_type: 'visitor', host_id: host.id, client_ref: 'probe-host-' + Date.now() });
   const visitId = r.data.visit && r.data.visit.id;
   r = await req('DELETE', `/api/admin/staff/${host.id}`);
   ok('a staff member with visitors can be removed', r.status === 200);
   r = await req('GET', `/api/admin/visits/${visitId}`);
-  ok('their visitor record still opens afterwards', r.status === 200 && r.data.full_name === 'Sees Temp',
+  ok('their visitor record still opens afterwards', r.status === 200 && r.data.full_name === 'Hank Alfred 17',
     JSON.stringify(r.data).slice(0, 80));
 
   /* ---- a document with no questions and no signature ---- */
@@ -44,7 +44,7 @@ async function req(method, path, body) {
     required_for: JSON.stringify(['visitor']), questions: '[]', require_signature: 0, active: 1 });
   const notice = r.data;
   ok('a read-only notice can be created', r.status === 200 && notice.require_signature === 0);
-  r = await req('POST', '/api/kiosk/signin', { full_name: 'Read Only', company: 'C', phone: '415-268-0502',
+  r = await req('POST', '/api/kiosk/signin', { full_name: 'Hank Alfred 15', company: 'C', phone: '415-268-0502',
     visit_type: 'visitor', host_id: null,
     documents: [{ agreement_id: notice.id, signature: null, answers: {} }],
     client_ref: 'probe-doc-' + Date.now() });
@@ -61,7 +61,7 @@ async function req(method, path, body) {
   ];
   for (const [label, value] of odd) {
     r = await req('POST', '/api/kiosk/signin', {
-      full_name: label.includes('company') ? 'Long Co Person' : value,
+      full_name: label.includes('company') ? 'Hank Alfred 22' : value,
       company: label.includes('company') ? value : 'Co',
       phone: '415-268-0600', visit_type: 'contractor', project_id: 1,
       client_ref: 'probe-' + Math.random().toString(36).slice(2)

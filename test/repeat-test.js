@@ -22,7 +22,7 @@ async function req(method, path, body) {
   const doc = docs[docs.length - 1]; // the seeded site-rules document Carlos signed
   const visitors = (await req('GET', '/api/admin/visitors')).data;
   const rows = visitors.rows || visitors;
-  const carlos = rows.find((v) => v.full_name === 'Carlos Vega');
+  const carlos = rows.find((v) => v.full_name === 'Hank Alfred');
   ok('test fixtures present', !!(doc && carlos), JSON.stringify({ doc: !!doc, carlos: !!carlos }));
 
   const due = async (visitorId) =>

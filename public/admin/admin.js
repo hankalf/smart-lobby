@@ -154,6 +154,26 @@
       mark.textContent = name.replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean)
         .slice(0, 2).map((w) => w[0].toUpperCase()).join('') || 'SL';
     }
+    showBoardLink();
+  }
+
+  /**
+   * The board sits beside "Open kiosk", but only once it has been switched on
+   * — the link carries the key, and a link to a board that does not exist yet
+   * is worse than no link at all.
+   */
+  async function showBoardLink() {
+    const link = $('#open-board');
+    if (!link) return;
+    try {
+      const b = await api('/board');
+      if (b && b.url) {
+        link.href = b.url;
+        link.classList.remove('hidden');
+      } else {
+        link.classList.add('hidden');
+      }
+    } catch { link.classList.add('hidden'); }
   }
 
   /* ----------------------------------------------------------------- gate */
@@ -360,6 +380,16 @@
     } else if (n.waiting) {
       out.push(`<div class="notice">${n.waiting} notification${n.waiting === 1 ? ' is' : 's are'} waiting to be
         sent again after a failure.</div>`);
+    }
+    const b = h.backup || {};
+    if (b.pending_restore) {
+      out.push(`<div class="notice"><b>A restore is waiting to be applied.</b> It takes effect the next time the
+        server starts. Until then this is still the old data.</div>`);
+    } else if (b.stale) {
+      out.push(`<div class="notice error"><b>${b.last_at
+        ? `The last backup was ${esc(fmtDate(b.last_at))}.`
+        : 'No backup has ever been written.'}</b> One should be written every night —
+        check <b>Settings → Backups</b>.</div>`);
     }
     if ((h.quiet_devices || []).length) {
       const names = h.quiet_devices.map((d) => esc(d.name)).join(', ');
@@ -3042,11 +3072,29 @@
       </div>
 
       <div class="card section" id="set-backups"><h2>Backups</h2>
-        <p class="muted" style="margin-top:0">A copy of the whole database is written every night and the last seven
-          are kept. They sit on the same volume as the live data, so they answer &ldquo;something corrupted the
-          database&rdquo; — not &ldquo;the volume is gone&rdquo;. For that, download one and keep it somewhere else.</p>
-        <div class="row"><button class="btn subtle" id="backup-now" type="button">Back up now</button></div>
+        <p class="muted" style="margin-top:0">One ZIP holding the database <b>and</b> every uploaded file — visitor
+          photos, signatures, deck slides, your logo — written every night, the last seven kept. Each one is opened
+          and checked after it is written, because an unverified backup is a guess.</p>
+        <p class="muted">They sit on the same volume as the live data, so on their own they answer &ldquo;something
+          corrupted the database&rdquo; and not &ldquo;the volume is gone&rdquo;. <b>Download one and keep it
+          somewhere else</b> — that is the copy that survives losing the machine.</p>
+        <div id="backup-health"></div>
+        <div class="row"><button class="btn subtle" id="backup-now" type="button">Back up now</button>
+          <span class="muted" id="backup-total"></span></div>
         <div id="backup-list"><p class="muted">Loading…</p></div>
+
+        <h3>Restore</h3>
+        <p class="muted" style="margin-top:0">Puts a backup back — the database and the files with it. The current
+          data is copied first in case this was the mistake, and nothing is swapped while the server is running:
+          the restore is applied the next time it starts.</p>
+        <div class="notice error" style="font-size:.9rem"><b>This replaces everything.</b> Every visit, visitor,
+          document, setting and account is taken from the backup, including which accounts exist — so if that backup
+          predates your password, you will be signing in with the old one.</div>
+        <div class="row">
+          <label class="btn subtle">Choose a backup…<input type="file" hidden id="restore-file" accept=".zip"></label>
+          <span class="muted" id="restore-name">No file chosen</span>
+        </div>
+        <div id="restore-result"></div>
       </div>
 
       <div class="card section" id="set-deleted"><h2>Deleted records</h2>
@@ -3371,7 +3419,12 @@
       const on = $('#board-on'); const fresh = $('#board-new'); const off = $('#board-off');
       const set = async (enabled, btn, note) => {
         btn.disabled = true;
-        try { await api('/board/key', { method: 'POST', body: { enabled } }); toast(note); await drawBoard(); }
+        try {
+          await api('/board/key', { method: 'POST', body: { enabled } });
+          toast(note);
+          await drawBoard();
+          showBoardLink();
+        }
         catch { btn.disabled = false; toast('Could not change the board'); }
       };
       if (on) on.addEventListener('click', () => set(true, on, 'Board is on'));
@@ -3406,14 +3459,93 @@
         if (err.message === 'unauthenticated') return;
         wrap.innerHTML = `<p class="empty">Could not load: ${esc(err.message)}</p>`; return;
       }
+      const h = data.health || {};
+      $('#backup-health').innerHTML = h.pending_restore
+        ? `<div class="notice"><b>A restore is waiting.</b> It is applied the next time the server starts.
+           <button class="btn link" id="restore-cancel" type="button">Cancel it</button></div>`
+        : h.stale
+          ? `<div class="notice error"><b>${h.last_at ? `No backup since ${esc(fmtDate(h.last_at))}` : 'No backup has been written yet'}.</b>
+             One should be written every night — press <b>Back up now</b> and check the server logs if it fails.</div>`
+          : '';
+      $('#backup-total').textContent = data.backups.length
+        ? `${data.backups.length} kept, ${sizeOf(h.total_bytes || 0)} in total`
+        : '';
+
       wrap.innerHTML = data.backups.length ? `<div class="table-wrap"><table>
-        <thead><tr><th>Taken</th><th>Size</th><th></th></tr></thead>
+        <thead><tr><th>Taken</th><th>Size</th><th>Holds</th><th></th></tr></thead>
         <tbody>${data.backups.map((b) => `<tr>
           <td>${fmtDate(b.at)}</td><td>${sizeOf(b.bytes)}</td>
-          <td><a class="btn ghost" href="/api/admin/backups/${encodeURIComponent(b.file)}">Download</a></td>
+          <td>${b.complete ? 'Database and files'
+            : '<span class="muted">Database only — taken before backups included the files</span>'}</td>
+          <td style="white-space:nowrap">
+            <a class="btn ghost" href="/api/admin/backups/${encodeURIComponent(b.file)}">Download</a>
+            <button class="btn ghost" data-bkdel="${esc(b.file)}">Delete</button></td>
         </tr>`).join('')}</tbody></table></div>`
         : '<p class="empty">No backup written yet — the first runs a minute after the server starts.</p>';
+
+      $$('[data-bkdel]', wrap).forEach((b) => b.addEventListener('click', async () => {
+        if (!confirm('Delete this backup? It cannot be recovered.')) return;
+        try { await api(`/backups/${encodeURIComponent(b.dataset.bkdel)}`, { method: 'DELETE' }); await drawBackups(); }
+        catch { toast('Could not delete that backup'); }
+      }));
+      const cancel = $('#restore-cancel');
+      if (cancel) cancel.addEventListener('click', async () => {
+        await api('/restore', { method: 'DELETE' }).catch(() => {});
+        toast('Restore cancelled');
+        await drawBackups();
+      });
     }
+
+    /*
+     * Restoring is two steps on purpose. The first only reads the file and
+     * says what is in it; nothing is staged until somebody has seen that and
+     * agreed to it, because the thing being replaced is everything.
+     */
+    $('#restore-file').addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      const box = $('#restore-result');
+      if (!file) return;
+      $('#restore-name').textContent = file.name;
+      box.innerHTML = '<p class="muted">Reading it…</p>';
+
+      const form = new FormData();
+      form.append('file', file);
+      let look;
+      try {
+        look = await fetch('/api/admin/restore/check', { method: 'POST', body: form }).then((r) => r.json());
+      } catch { look = { ok: false, error: 'The server did not answer.' }; }
+      if (!look.ok) {
+        box.innerHTML = `<div class="notice error">${esc(look.error)}</div>`;
+        return;
+      }
+
+      box.innerHTML = `<div class="notice">
+        <b>That is a valid backup.</b> ${look.created_at ? `Taken ${esc(fmtDate(look.created_at))}. ` : ''}
+        It holds ${look.counts.visits} visit(s), ${look.counts.visitors} visitor(s),
+        ${look.counts.signatures} signature(s), ${look.counts.users} account(s)
+        and ${look.media_files} uploaded file(s).</div>
+        <div class="row"><button class="btn" id="restore-go" type="button">Restore this backup</button></div>`;
+
+      $('#restore-go').addEventListener('click', async (ev) => {
+        const btn = ev.currentTarget;
+        if (!confirm(`Replace everything with this backup?\n\n`
+          + `${look.counts.visits} visits and ${look.media_files} files take the place of what is here now. `
+          + 'A copy of the current data is taken first.')) return;
+        btn.disabled = true;
+        const send = new FormData();
+        send.append('file', file);
+        try {
+          const r = await fetch('/api/admin/restore', { method: 'POST', body: send }).then((x) => x.json());
+          box.innerHTML = r.ok
+            ? `<div class="notice"><b>${esc(r.message)}</b><br>
+               The current data was saved first as <b>${esc(r.safety_backup)}</b>.</div>`
+            : `<div class="notice error">${esc(r.message)}</div>`;
+          await drawBackups();
+        } catch {
+          box.innerHTML = '<div class="notice error">Could not stage the restore.</div>';
+        } finally { btn.disabled = false; }
+      });
+    });
 
     $('#backup-now').addEventListener('click', async (e) => {
       const btn = e.currentTarget;
@@ -3811,7 +3943,8 @@
             : ' The photo went with it — check it rendered.';
         box.innerHTML = r.ok
           ? `<div class="notice"><b>Posted.</b> It should be in the Teams channel now — from <b>Flow bot</b>, which is
-             normal.${esc(photoNote)}</div>`
+             normal.${esc(photoNote)} Nobody was tagged: a test is not an arrival, so it never @-mentions a real
+             colleague. Real arrivals tag the host.</div>`
           : `<div class="notice error"><b>Teams refused it.</b> ${esc(r.detail || '')}</div>`;
       } catch (err) {
         box.innerHTML = `<div class="notice error"><b>Could not post.</b> ${esc(err.message || 'The server did not answer.')}</div>`;

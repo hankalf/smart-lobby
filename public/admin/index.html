@@ -78,6 +78,9 @@
     </nav>
     <div class="side-foot">
       <a class="btn ghost" href="/kiosk/" target="_blank" rel="noopener">Open kiosk ↗</a>
+      <!-- Only once the board has been switched on: a link to a page that
+           404s is worse than no link. Filled in by applyBranding(). -->
+      <a class="btn ghost hidden" id="open-board" target="_blank" rel="noopener">Open board ↗</a>
       <button class="btn link" id="logout">Sign out</button>
       <div class="muted" id="who"></div>
     </div>
