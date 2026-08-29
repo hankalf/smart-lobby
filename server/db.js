@@ -47,6 +47,14 @@ fs.mkdirSync(path.join(DATA_DIR, 'uploads'), { recursive: true });
 const db = new DatabaseSync(path.join(DATA_DIR, 'smartlobby.db'));
 db.exec('PRAGMA journal_mode = WAL');
 db.exec('PRAGMA foreign_keys = ON');
+/*
+ * Wait rather than fail when another connection is mid-write. WAL lets many
+ * readers run alongside one writer, but two writers still queue — the nightly
+ * backup's VACUUM INTO against a sign-in arriving at the same moment — and
+ * without this the second one throws "database is locked" instead of waiting
+ * the few milliseconds the first needs.
+ */
+db.exec('PRAGMA busy_timeout = 5000');
 
 function norm(params) {
   return params.map((p) => {

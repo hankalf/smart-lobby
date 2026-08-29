@@ -20,6 +20,7 @@ const byName = (list, name) => (list || []).find((c) => c.name === name);
 
 (async () => {
   await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  const DETAILS_BEFORE = (await req('GET', '/api/admin/settings')).data.details;
   await req('PUT', '/api/admin/settings', {
     details: { visitor: { photo: 'off', company: 'required', phone: 'required', staff: 'off', purpose: 'off' } }
   });
@@ -115,6 +116,10 @@ const byName = (list, name) => (list || []).find((c) => c.name === name);
   /* ---- reception can read it, a clerk cannot ---- */
   ok('a company with no name is refused',
     (await req('POST', '/api/admin/companies', { name: '  ' })).status === 400);
+
+  // Put the form back as it was: these settings are shared, and a later suite
+  // filling in a field this one switched off is not that suite's fault.
+  await req('PUT', '/api/admin/settings', { details: DETAILS_BEFORE });
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

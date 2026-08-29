@@ -33,14 +33,17 @@ function audit(req, action, entity, entityId, detail) {
  * with the clocks, so the bucketing happens here. Days nothing happened on are
  * left out, as they were when this was a GROUP BY.
  */
-function byLocalDay(timestamps, days) {
+function byLocalDay(timestamps, days, endOn) {
   const counts = new Map();
   for (const ts of timestamps) {
     if (!ts) continue;
     const day = localtime.dayOf(ts);
     counts.set(day, (counts.get(day) || 0) + 1);
   }
-  const earliest = localtime.dayOf(new Date(Date.now() - (days - 1) * 864e5));
+  // `endOn` lets a report end on a chosen day rather than always on today,
+  // which is what makes "last quarter" a thing that can be asked for.
+  const last = endOn ? Date.parse(`${endOn}T12:00:00Z`) : Date.now();
+  const earliest = localtime.dayOf(new Date(last - (days - 1) * 864e5));
   return [...counts.entries()]
     .filter(([day]) => day >= earliest)
     .sort((a, b) => (a[0] < b[0] ? -1 : 1))
@@ -219,6 +222,9 @@ router.get('/dashboard', (req, res) => {
        * whether anybody real has arrived since — which together are the
        * moment to offer to clear them out.
        */
+      // How full the volume is. Filling it stops sign-ins and the backup that
+      // would have warned you, so it is worth a banner rather than a page.
+      storage: require('../storage').health(),
       examples: (() => {
         const examples = require('../examples');
         return { present: examples.present(), real_visits: examples.present() && !examples.onlyExamples() };
@@ -370,13 +376,16 @@ router.get('/drivers', (req, res) => {
 /* ---------------------------------------------------------------- visits */
 
 router.get('/visits', (req, res) => {
-  const { from, to, status, q, type } = req.query;
+  const { from, to, status, q, type, project_id } = req.query;
   const where = [];
   const params = [];
   if (from) { where.push('v.signed_in_at >= ?'); params.push(from); }
   if (to) { where.push('v.signed_in_at <= ?'); params.push(`${to}T23:59:59.999Z`); }
   if (status) { where.push('v.status = ?'); params.push(status); }
   if (type) { where.push('v.visit_type = ?'); params.push(type); }
+  // So an export taken from Reports covers the same window and the same
+  // project as the figures it was downloaded from.
+  if (project_id) { where.push('v.project_id = ?'); params.push(Number(project_id)); }
   if (q) { where.push('(lower(p.full_name) LIKE ? OR lower(p.company) LIKE ? OR lower(h.name) LIKE ?)');
     params.push(`%${String(q).toLowerCase()}%`, `%${String(q).toLowerCase()}%`, `%${String(q).toLowerCase()}%`); }
   const sql = `SELECT v.*, p.full_name, p.company, p.phone, p.email, h.name AS host_name, s.name AS site_name,
@@ -1495,7 +1504,19 @@ router.get('/certificates/check', (req, res) => {
 const backup = require('../backup');
 
 router.get('/backups', (req, res) =>
-  res.json({ keep: backup.KEEP, backups: backup.list(), health: backup.health() }));
+  res.json({
+    keep: backup.KEEP,
+    backups: backup.list(),
+    /*
+     * With the off-site state folded in. The Backups panel has always drawn a
+     * notice from health.offsite and this call never sent one, so whether the
+     * copy to OneDrive was getting there could only be seen on the dashboard.
+     */
+    health: { ...backup.health(), offsite: require('../offsite').health() },
+    // What is using the room, so a full volume is a breakdown rather than a
+    // mystery: photos are almost always the answer.
+    storage: require('../storage').usage()
+  }));
 
 router.post('/backups', async (req, res) => {
   const offsite = require('../offsite');
@@ -1857,18 +1878,79 @@ router.post('/users/:id/password', (req, res) => {
 
 /* ----------------------------------------------------------------- stats */
 
+/**
+ * The figures behind the Reports page.
+ *
+ * Every other page has a date range and this one did not: it was fixed at
+ * thirty days for the chart and all-time for everything else, which cannot
+ * answer "last quarter, Lakeview only" — the question somebody actually takes
+ * to a client meeting.
+ *
+ * One window applies to the lot now, so the tiles, the chart and the tables
+ * all describe the same span rather than three different ones.
+ */
 router.get('/stats', (req, res) => {
+  const q = req.query || {};
+  const days = Math.min(731, Math.max(1, Number(q.days) || 30));
+  // An explicit from/to wins; otherwise the last N days ending today.
+  const to = clean(q.to) || localtime.today();
+  const from = clean(q.from)
+    || new Date(Date.parse(`${to}T12:00:00Z`) - (days - 1) * 864e5).toISOString().slice(0, 10);
+
+  const where = ['v.signed_in_at >= ?', 'v.signed_in_at <= ?'];
+  const params = [`${from}T00:00:00.000Z`, `${to}T23:59:59.999Z`];
+  if (clean(q.project_id)) { where.push('v.project_id = ?'); params.push(Number(q.project_id)); }
+  if (clean(q.visit_type)) { where.push('v.visit_type = ?'); params.push(String(q.visit_type)); }
+  const scope = `WHERE ${where.join(' AND ')}`;
+  const span = Math.max(1,
+    Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 864e5) + 1);
+
+  const rows = (sql) => all(sql, ...params);
+
+  /*
+   * Hours on site, per project. The site already records the project and both
+   * timestamps, so this was sitting in the data unasked for — and it is the
+   * number a contractor operation bills and audits against.
+   */
+  const byProject = rows(`
+    SELECT j.name,
+           COUNT(*) AS n,
+           SUM(CASE WHEN v.signed_out_at IS NOT NULL
+                    THEN (julianday(v.signed_out_at) - julianday(v.signed_in_at)) * 24 ELSE 0 END) AS hours,
+           SUM(CASE WHEN v.signed_out_at IS NULL THEN 1 ELSE 0 END) AS still_on_site
+      FROM visits v JOIN projects j ON j.id = v.project_id
+     ${scope} GROUP BY j.id ORDER BY hours DESC`)
+    .map((r) => ({ ...r, hours: Math.round((r.hours || 0) * 10) / 10 }));
+
   res.json({
-    by_day: byLocalDay(all(`SELECT signed_in_at FROM visits WHERE signed_in_at >= date('now','-30 days')`)
-      .map((r) => r.signed_in_at), 30),
-    by_type: all('SELECT visit_type, COUNT(*) AS n FROM visits GROUP BY visit_type ORDER BY n DESC'),
-    by_host: all(`SELECT h.name, COUNT(*) AS n FROM visits v JOIN hosts h ON h.id = v.host_id
-                  GROUP BY h.id ORDER BY n DESC LIMIT 10`),
-    by_company: all(`SELECT p.company AS name, COUNT(*) AS n FROM visits v JOIN visitors p ON p.id = v.visitor_id
-                     WHERE p.company IS NOT NULL AND p.company != '' GROUP BY lower(p.company) ORDER BY n DESC LIMIT 10`),
-    by_hour: byLocalHour(all('SELECT signed_in_at FROM visits').map((r) => r.signed_in_at)),
-    avg_minutes: get(`SELECT AVG((julianday(signed_out_at) - julianday(signed_in_at)) * 1440) AS m
-                      FROM visits WHERE signed_out_at IS NOT NULL`).m
+    from,
+    to,
+    days: span,
+    project_id: clean(q.project_id) ? Number(q.project_id) : null,
+    visit_type: clean(q.visit_type) || null,
+    total: rows(`SELECT COUNT(*) AS n FROM visits v ${scope}`)[0].n,
+    // Capped, so a two-year window does not try to draw 731 bars.
+    by_day: byLocalDay(rows(`SELECT v.signed_in_at FROM visits v ${scope}`).map((r) => r.signed_in_at),
+      Math.min(span, 92), to),
+    by_type: rows(`SELECT v.visit_type, COUNT(*) AS n FROM visits v ${scope} GROUP BY v.visit_type ORDER BY n DESC`),
+    by_host: rows(`SELECT h.name, COUNT(*) AS n FROM visits v JOIN hosts h ON h.id = v.host_id
+                   ${scope} GROUP BY h.id ORDER BY n DESC LIMIT 10`),
+    // Grouped on the company record where there is one, so three spellings of
+    // a firm are one row rather than three.
+    by_company: rows(`SELECT COALESCE(c.name, p.company) AS name, COUNT(*) AS n
+                        FROM visits v JOIN visitors p ON p.id = v.visitor_id
+                        LEFT JOIN companies c ON c.id = p.company_id
+                       ${scope} AND COALESCE(c.name, p.company) IS NOT NULL
+                         AND COALESCE(c.name, p.company) != ''
+                       GROUP BY COALESCE(CAST(c.id AS TEXT), lower(p.company)) ORDER BY n DESC LIMIT 10`),
+    by_hour: byLocalHour(rows(`SELECT v.signed_in_at FROM visits v ${scope}`).map((r) => r.signed_in_at)),
+    by_project: byProject,
+    total_hours: Math.round(byProject.reduce((sum, r) => sum + r.hours, 0) * 10) / 10,
+    avg_minutes: rows(`SELECT AVG((julianday(v.signed_out_at) - julianday(v.signed_in_at)) * 1440) AS m
+                       FROM visits v ${scope} AND v.signed_out_at IS NOT NULL`)[0].m,
+    projects: all('SELECT id, name FROM projects ORDER BY name'),
+    types: all('SELECT DISTINCT visit_type FROM visits WHERE visit_type IS NOT NULL ORDER BY visit_type')
+      .map((r) => r.visit_type)
   });
 });
 

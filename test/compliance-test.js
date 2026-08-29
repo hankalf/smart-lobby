@@ -31,6 +31,7 @@ const signin = (company, extra = {}) => req('POST', '/api/kiosk/signin', {
 
 (async () => {
   await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  const DETAILS_BEFORE = (await req('GET', '/api/admin/settings')).data.details;
   await req('PUT', '/api/admin/settings', {
     details: {
       contractor: { photo: 'off', company: 'required', phone: 'required', staff: 'off', project: 'off' },
@@ -134,6 +135,10 @@ const signin = (company, extra = {}) => req('POST', '/api/kiosk/signin', {
   ok('a certificate belonging to nobody is refused', r.status === 400, `${r.status} ${JSON.stringify(r.data)}`);
   r = await req('POST', '/api/admin/certificates', { company_id: covered.id, kind: '  ' });
   ok('…and one with no kind', r.status === 400, String(r.status));
+
+  // Put the form back as it was: these settings are shared, and a later suite
+  // filling in a field this one switched off is not that suite's fault.
+  await req('PUT', '/api/admin/settings', { details: DETAILS_BEFORE });
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

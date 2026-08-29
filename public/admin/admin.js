@@ -179,7 +179,22 @@
   };
   const fmtDate = (iso) => (iso ? new Date(iso).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: siteZone() }) : '—');
   const fmtTime = (iso) => (iso ? new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: siteZone() }) : '—');
-  const fmtDay = (iso) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: siteZone() }) : '—');
+  /**
+   * A date, whether given a timestamp or a plain YYYY-MM-DD.
+   *
+   * A bare date has no time in it, so it parses as UTC midnight — and shown
+   * in a zone behind UTC that is the evening before, which turned "29 Aug"
+   * into "28 Aug" on any site west of Greenwich. Anchored at midday, no zone
+   * shifts it off its own day.
+   */
+  const fmtDay = (value) => {
+    if (!value) return '—';
+    const plain = /^\d{4}-\d{2}-\d{2}$/.test(String(value));
+    const when = new Date(plain ? `${value}T12:00:00Z` : value);
+    if (Number.isNaN(when.getTime())) return String(value);
+    return when.toLocaleDateString('en-GB',
+      { day: '2-digit', month: 'short', year: 'numeric', timeZone: plain ? 'UTC' : siteZone() });
+  };
 
   /* ---------------------------------------------------------------- modal */
 
@@ -572,6 +587,16 @@
     });
   }
 
+  /** "1.4 GB" — sizes a person reads rather than a number of bytes. */
+  function fmtBytes(n) {
+    const bytes = Number(n) || 0;
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let i = 0;
+    let value = bytes;
+    while (value >= 1024 && i < units.length - 1) { value /= 1024; i++; }
+    return `${value >= 100 || i === 0 ? Math.round(value) : value.toFixed(1)} ${units[i]}`;
+  }
+
   function healthNotices(h) {
     if (!h) return '';
     const out = [];
@@ -584,6 +609,18 @@
       out.push(`<div class="notice">${n.waiting} notification${n.waiting === 1 ? ' is' : 's are'} waiting to be
         sent again after a failure.</div>`);
     }
+    const disk = h.storage || {};
+    if (disk.known && disk.level !== 'ok') {
+      const runsOut = disk.days_left != null
+        ? ` At the rate photos are arriving that is about ${disk.days_left} day${disk.days_left === 1 ? '' : 's'}.`
+        : '';
+      out.push(`<div class="notice${disk.level === 'critical' ? ' error' : ''}">
+        <b>Storage is ${disk.percent_used}% full</b> — ${fmtBytes(disk.free)} left.${esc(runsOut)}
+        When it fills, sign-ins stop and no backup can be written. What is using it is under
+        <b>Settings → Backups</b>; shortening how long photos are kept under
+        <b>Data retention</b> is usually the quickest room to find.</div>`);
+    }
+
     if (h.examples && h.examples.present && h.examples.real_visits) {
       out.push(`<div class="notice">Your own visits have started arriving, so the example records this site was
         set up with have done their job. <button class="btn link" id="clear-examples">Clear them out</button></div>`);
@@ -3495,34 +3532,137 @@
 
   /* -------------------------------------------------------------- reports */
 
+  /*
+   * Reports, over a window somebody chooses.
+   *
+   * The filters are the page: every figure below describes the same span and
+   * the same project, so the tiles, the chart and the tables cannot disagree
+   * with each other the way a fixed thirty days and an all-time table did.
+   */
+  const REPORT_KEY = 'sl.admin.report-range';
+
   VIEWS.reports = async (root) => {
-    const s = await api('/stats');
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(REPORT_KEY) || '{}'); } catch { saved = {}; }
+
+    const query = new URLSearchParams();
+    ['from', 'to', 'project_id', 'visit_type'].forEach((k) => { if (saved[k]) query.set(k, saved[k]); });
+    if (!saved.from && !saved.to) query.set('days', String(saved.days || 30));
+
+    const s = await api(`/stats?${query}`);
     const maxDay = Math.max(1, ...s.by_day.map((d) => d.n));
     const bar = (list) => {
       const max = Math.max(1, ...list.map((x) => x.n));
-      return `<div class="barlist">${list.map((x) => `<div class="b"><span>${esc(x.name || x.visit_type || x.hour || '—')}</span>
-        <div class="track"><div class="fill" style="width:${(x.n / max) * 100}%"></div></div><b>${x.n}</b></div>`).join('')}</div>`;
+      return list.length
+        ? `<div class="barlist">${list.map((x) => `<div class="b"><span>${esc(x.name || x.visit_type || x.hour || '—')}</span>
+          <div class="track"><div class="fill" style="width:${(x.n / max) * 100}%"></div></div><b>${x.n}</b></div>`).join('')}</div>`
+        : '<p class="empty">Nothing in this window.</p>';
     };
+    const hours = (n) => (n >= 10 ? Math.round(n) : Math.round(n * 10) / 10).toLocaleString();
+    // The window travels with the exports, or the spreadsheet says something
+    // different from the page it was downloaded from.
+    const exportQuery = new URLSearchParams({ from: s.from, to: s.to, format: 'csv' });
+    if (s.project_id) exportQuery.set('project_id', String(s.project_id));
+
     root.innerHTML = `
       <h1 class="page">Reports</h1>
       <p class="page-sub">Everything stays on your server — export any of it as CSV.</p>
-      <div class="grid cards" style="margin-bottom:1.25rem">
-        <div class="card stat"><div class="n">${s.avg_minutes ? Math.round(s.avg_minutes) : 0}</div><div class="l">Average minutes on site</div></div>
-        <div class="card stat"><div class="n">${s.by_day.reduce((a, b) => a + b.n, 0)}</div><div class="l">Visits in the last 30 days</div></div>
+
+      <div class="card section">
+        <div class="row" style="margin-bottom:0">
+          <select class="input" id="rp-preset" style="max-width:12rem">
+            ${[[7, 'Last 7 days'], [30, 'Last 30 days'], [90, 'Last 90 days'],
+               [365, 'Last 12 months'], [0, 'Between two dates…']]
+              .map(([v, l]) => `<option value="${v}" ${String(saved.days || 30) === String(v)
+                && !(saved.from || saved.to) ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+          <span id="rp-dates" class="row ${saved.from || saved.to ? '' : 'hidden'}" style="margin:0;gap:.5rem">
+            <input class="input" id="rp-from" type="date" value="${esc(s.from)}" style="max-width:10rem">
+            <span class="muted">to</span>
+            <input class="input" id="rp-to" type="date" value="${esc(s.to)}" style="max-width:10rem">
+          </span>
+          <select class="input" id="rp-project" style="max-width:14rem">
+            <option value="">Every project</option>
+            ${s.projects.map((p) => `<option value="${p.id}"
+              ${String(s.project_id) === String(p.id) ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
+          </select>
+          <select class="input" id="rp-type" style="max-width:12rem">
+            <option value="">Every visitor type</option>
+            ${s.types.map((t) => `<option value="${esc(t)}"
+              ${s.visit_type === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}
+          </select>
+          <button class="btn ghost" id="rp-reset">Reset</button>
+        </div>
+        <p class="muted" style="margin:.6rem 0 0">${esc(fmtDay(s.from))} to ${esc(fmtDay(s.to))} —
+          ${s.days} day${s.days === 1 ? '' : 's'}${s.project_id ? ', one project' : ''}.</p>
       </div>
-      <div class="card section"><h2>Visits per day (30 days)</h2>
-        <div class="bars">${s.by_day.map((d) => `<div style="height:${(d.n / maxDay) * 100}%" title="${d.day}: ${d.n}"></div>`).join('')}</div></div>
+
+      <div class="grid cards" style="margin-bottom:1.25rem">
+        <div class="card stat"><div class="n">${s.total.toLocaleString()}</div><div class="l">Visits</div></div>
+        <div class="card stat"><div class="n">${s.avg_minutes ? Math.round(s.avg_minutes) : 0}</div>
+          <div class="l">Average minutes on site</div></div>
+        <div class="card stat"><div class="n">${hours(s.total_hours)}</div>
+          <div class="l">Hours on site, all projects</div></div>
+        <div class="card stat"><div class="n">${Math.round((s.total / s.days) * 10) / 10}</div>
+          <div class="l">Visits a day</div></div>
+      </div>
+
+      <div class="card section"><h2>Visits per day</h2>
+        ${s.by_day.length
+          ? `<div class="bars">${s.by_day.map((d) => `<div style="height:${(d.n / maxDay) * 100}%"
+              title="${d.day}: ${d.n}"></div>`).join('')}</div>`
+          : '<p class="empty">Nothing in this window.</p>'}</div>
+
+      <div class="card section"><h2>Hours on site, per project</h2>
+        <p class="muted" style="margin-top:0">Counted from the time between signing in and signing out. Anybody still
+          on site is counted in the visits but not yet in the hours — they have not finished.</p>
+        <div class="table-wrap">${s.by_project.length ? `<table>
+          <thead><tr><th>Project</th><th>Visits</th><th>Hours</th><th>Average</th><th>Still on site</th></tr></thead>
+          <tbody>${s.by_project.map((p) => `<tr>
+            <td><b>${esc(p.name)}</b></td><td>${p.n}</td><td><b>${hours(p.hours)}</b></td>
+            <td class="muted">${p.n ? hours(p.hours / p.n) : 0} each</td>
+            <td>${p.still_on_site ? `<span class="pill on">${p.still_on_site}</span>` : '—'}</td>
+          </tr>`).join('')}</tbody></table>`
+          : '<p class="empty">No visits against a project in this window. Contractors pick one when they sign in — '
+            + 'set the project field to required on the <b>Visitor form</b> to collect it.</p>'}</div></div>
+
       <div class="grid two">
         <div class="card section"><h2>Busiest hosts</h2>${bar(s.by_host)}</div>
         <div class="card section"><h2>Top companies</h2>${bar(s.by_company)}</div>
         <div class="card section"><h2>By visit type</h2>${bar(s.by_type.map((t) => ({ name: t.visit_type, n: t.n })))}</div>
         <div class="card section"><h2>Arrivals by hour</h2>${bar(s.by_hour.map((h) => ({ name: `${h.hour}:00`, n: h.n })))}</div>
       </div>
+
       <div class="card section"><h2>Exports</h2>
-        <div class="row"><a class="btn ghost" href="/api/admin/visits?format=csv">All visits</a>
+        <p class="muted" style="margin-top:0">The visits export covers the window above; the others are as they stand
+          right now.</p>
+        <div class="row"><a class="btn ghost" href="/api/admin/visits?${exportQuery}">Visits in this window</a>
+        <a class="btn ghost" href="/api/admin/visits?format=csv">All visits, ever</a>
         <a class="btn ghost" href="/api/admin/deliveries?format=csv">All deliveries</a>
         <a class="btn ghost" href="/api/admin/rollcall?format=csv">Current roll call</a></div></div>`;
+
+    const remember = (patch) => {
+      const next = { ...saved, ...patch };
+      try { localStorage.setItem(REPORT_KEY, JSON.stringify(next)); } catch { /* private mode */ }
+      render('reports');
+    };
+
+    $('#rp-preset').addEventListener('change', (e) => {
+      const days = Number(e.target.value);
+      // "Between two dates" keeps whatever is on screen and stops presetting.
+      if (!days) return $('#rp-dates').classList.remove('hidden');
+      remember({ days, from: null, to: null });
+    });
+    ['#rp-from', '#rp-to'].forEach((sel) => $(sel).addEventListener('change', () =>
+      remember({ from: $('#rp-from').value, to: $('#rp-to').value, days: null })));
+    $('#rp-project').addEventListener('change', (e) => remember({ project_id: e.target.value || null }));
+    $('#rp-type').addEventListener('change', (e) => remember({ visit_type: e.target.value || null }));
+    $('#rp-reset').addEventListener('click', () => {
+      try { localStorage.removeItem(REPORT_KEY); } catch { /* private mode */ }
+      render('reports');
+    });
   };
+
 
   /* ------------------------------------------------------------- settings */
 
@@ -4156,6 +4296,11 @@
           <span class="muted" id="backup-total"></span></div>
         <div id="backup-list"><p class="muted">Loading…</p></div>
 
+        <h3>Room on the disk</h3>
+        <p class="muted" style="margin-top:0">When this fills, sign-ins stop and no backup can be written — including
+          the one that would have told you.</p>
+        <div id="storage-use"><p class="muted">Loading…</p></div>
+
         <h3>Copy each backup to OneDrive</h3>
         <p class="muted" style="margin-top:0">A backup sitting on the same volume as the data does not survive losing
           the volume. This posts each new one straight into a OneDrive folder as it is written, so there is always a
@@ -4167,6 +4312,10 @@
         </div>
         ${chk('backup.offsite_include_media', 'Send the uploaded files too',
           'Off sends the database alone — a fraction of the size, but photos and signatures would not come back')}
+        <p class="muted">A backup past what a flow accepts in one go is cut into pieces that fit, the database
+          first and the files after it. Each piece is a complete archive on its own, so a folder of them can be
+          restored in any order — and a piece holding only files brings back the photos without touching the
+          records.</p>
         <div class="row"><button class="btn subtle" id="offsite-test" type="button">Send a test file</button></div>
         <div id="offsite-result"></div>
 
@@ -4860,14 +5009,53 @@
           : '';
       const off = h.offsite || {};
       if (off.enabled) {
+        const pieces = off.last_parts > 1
+          ? ` in ${off.last_parts} pieces, because it is past what a flow accepts in one go` : '';
         $('#backup-health').innerHTML += off.last_ok
-          ? `<div class="notice">Copied to OneDrive${off.last_at ? ` — last one ${esc(fmtDate(off.last_at))}` : ''}.</div>`
+          ? `<div class="notice">Copied to OneDrive${off.last_at ? ` — last one ${esc(fmtDate(off.last_at))}` : ''}${esc(pieces)}.</div>`
           : `<div class="notice error"><b>The last copy to OneDrive did not get there.</b>
-             ${esc(off.last_error || '')} Backups are still being written here.</div>`;
+             ${esc(off.last_error || '')}
+             ${off.last_database_ok
+               ? ' The database itself did get away, so the records are safe off the machine — it is the photos and '
+                 + 'signatures that did not.'
+               : ''}
+             Backups are still being written here.</div>`;
       }
       $('#backup-total').textContent = data.backups.length
         ? `${data.backups.length} kept, ${sizeOf(h.total_bytes || 0)} in total`
         : '';
+
+      /*
+       * What is actually using the room. Photos are almost always the answer,
+       * and knowing that is the difference between shortening how long they
+       * are kept and deleting whatever looks big.
+       */
+      const st = data.storage || {};
+      const box = $('#storage-use');
+      if (box) {
+        const parts = [
+          ['Photos and signatures', st.uploads, `${st.upload_files || 0} files`],
+          ['Database', st.database, ''],
+          ['Backups kept here', st.backups, `${st.backup_files || 0} files`]
+        ].filter(([, bytes]) => bytes > 0);
+        box.innerHTML = `
+          ${st.volume_size ? `<div class="disk-bar ${esc(st.level || 'ok')}">
+            <div class="disk-fill" style="width:${Math.min(100, st.percent_used || 0)}%"></div></div>
+            <p class="muted" style="margin:.35rem 0 .75rem">${st.percent_used}% of
+              ${sizeOf(st.volume_size)} used — ${sizeOf(st.volume_free)} left${st.days_left != null
+                ? `, about ${st.days_left} day${st.days_left === 1 ? '' : 's'} at the rate photos are arriving` : ''}.</p>`
+            : '<p class="muted" style="margin:0 0 .75rem">This server does not report how big its disk is, so only the '
+              + 'breakdown below is known.</p>'}
+          <div class="section-order">
+            ${parts.map(([label, bytes, note]) => `<div class="section-row">
+              <span>${esc(label)}${note ? ` <span class="muted">— ${esc(note)}</span>` : ''}</span>
+              <b>${sizeOf(bytes)}</b></div>`).join('')
+              || '<div class="section-row off"><span>Nothing stored yet.</span></div>'}
+          </div>
+          ${st.photos > 0 ? `<p class="muted">Photos alone are ${sizeOf(st.photos)} across ${st.photo_files} files.
+            How long they are kept is set under <b>Data retention &amp; privacy</b>; shortening it is usually the
+            quickest room to find.</p>` : ''}`;
+      }
 
       wrap.innerHTML = data.backups.length ? `<div class="table-wrap"><table>
         <thead><tr><th>Taken</th><th>Size</th><th>Holds</th><th></th></tr></thead>

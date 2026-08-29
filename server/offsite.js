@@ -45,7 +45,9 @@ function record(result) {
     offsite_last_at: new Date().toISOString(),
     offsite_last_ok: !!result.ok,
     offsite_last_error: result.ok ? '' : String(result.error || '').slice(0, 300),
-    offsite_last_file: result.file || ''
+    offsite_last_file: result.file || '',
+    offsite_last_parts: result.parts || 0,
+    offsite_last_database_ok: result.split ? !!result.database_ok : !!result.ok
   });
   return result;
 }
@@ -66,8 +68,9 @@ async function send(full, name) {
     return {
       ok: false,
       file: name,
-      error: `That backup is ${Math.round(stat.size / 1048576)} MB, past what a Power Automate flow will accept. `
-        + 'Switch off "Send the uploaded files too" to send just the database, which is a fraction of the size.'
+      error: `That piece is ${Math.round(stat.size / 1048576)} MB, past what a Power Automate flow will accept. `
+        + 'A backup over the limit is normally cut into pieces that fit; a single file this big cannot be, so it '
+        + 'has to be fetched from Backups by hand.'
     };
   }
 
@@ -130,11 +133,77 @@ async function copyOff(made) {
   const backup = require('./backup');
   const full = backup.pathOf(made.file);
   if (!full) return record({ ok: false, file: made.file, error: 'The backup vanished before it could be sent.' });
-  const result = await send(full, made.file);
-  record(result);
-  if (result.ok) console.log(`[backup] copied ${made.file} off the machine`);
-  else console.error(`[backup] could not copy ${made.file} off the machine: ${result.error}`);
-  return result;
+
+  /*
+   * One piece if it fits, several if it does not.
+   *
+   * A whole archive under the limit is simplest to restore, so that is still
+   * what goes when it fits. Past the limit the choice used to be between
+   * failing and sending the database without the photos — which restores to
+   * records pointing at faces that are gone — so it is now cut up instead.
+   */
+  const stat = fs.statSync(full);
+  if (stat.size <= SIZE_MAX) {
+    const result = await send(full, made.file);
+    record(result);
+    if (result.ok) console.log(`[backup] copied ${made.file} off the machine`);
+    else console.error(`[backup] could not copy ${made.file} off the machine: ${result.error}`);
+    return result;
+  }
+  return copyInParts(made, stat.size);
+}
+
+/**
+ * Send a backup too big to go in one piece, as several that fit.
+ *
+ * The database part goes first: it is the smallest and the most valuable, and
+ * getting it away is worth doing even if the photos afterwards fail. What
+ * happened to each piece is reported, so a partial success reads as a partial
+ * success rather than as either a triumph or a disaster.
+ */
+async function copyInParts(made, wholeSize) {
+  const backup = require('./backup');
+  let built;
+  try {
+    // A margin under the limit: the ZIP's own headers and the manifest are
+    // added on top of the files a batch was measured by.
+    built = backup.createParts({ maxBytes: Math.floor(SIZE_MAX * 0.85) });
+  } catch (err) {
+    return record({ ok: false, file: made.file, error: `Could not split the backup up: ${err.message}` });
+  }
+
+  const sent = [];
+  try {
+    for (const part of built.parts) {
+      const result = await send(part.path, part.file);
+      sent.push({ ...result, kind: part.kind, index: part.index, of: part.total });
+      if (result.ok) console.log(`[backup] copied ${part.file} off the machine`);
+      else console.error(`[backup] could not copy ${part.file}: ${result.error}`);
+    }
+  } finally {
+    fs.rmSync(built.dir, { recursive: true, force: true });
+  }
+
+  const failed = sent.filter((r) => !r.ok);
+  const database = sent.find((r) => r.kind === 'database');
+  const summary = {
+    ok: failed.length === 0,
+    split: true,
+    parts: sent.length,
+    parts_sent: sent.length - failed.length,
+    file: `${made.file} (in ${sent.length} pieces)`,
+    database_ok: !!(database && database.ok),
+    error: failed.length
+      ? `${failed.length} of ${sent.length} pieces did not get there — ${failed[0].error}`
+        + (database && database.ok ? ' The database itself did get away.' : '')
+      : ''
+  };
+  if (failed.length === 0) {
+    console.log(`[backup] ${made.file} copied off in ${sent.length} pieces `
+      + `(${Math.round(wholeSize / 1048576)} MB whole)`);
+  }
+  record(summary);
+  return summary;
 }
 
 /** A small file, to prove the destination works before trusting it with a backup. */
@@ -160,8 +229,12 @@ function health() {
     last_at: c.offsite_last_at || null,
     last_ok: c.offsite_last_ok !== false,
     last_error: c.offsite_last_error || '',
-    last_file: c.offsite_last_file || ''
+    last_file: c.offsite_last_file || '',
+    last_parts: c.offsite_last_parts || 0,
+    // Whether the database itself got away, which is the part that matters
+    // most when only some of the pieces did.
+    last_database_ok: c.offsite_last_database_ok !== false
   };
 }
 
-module.exports = { send, copyOff, test, health, enabled, SIZE_WARN, SIZE_MAX };
+module.exports = { send, copyOff, copyInParts, test, health, enabled, SIZE_WARN, SIZE_MAX };

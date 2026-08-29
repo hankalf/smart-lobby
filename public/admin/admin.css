@@ -471,6 +471,12 @@ code.token { background: var(--bg); padding: .15rem .4rem; border-radius: 5px; f
 /* The button that stands in for the icon field on a visitor type row. */
 .icon-pick { font-size: 1.35rem; line-height: 1; min-width: 3.2rem; padding: .4rem .5rem; }
 
+/* ---------------------------------------------------------- room on disk */
+.disk-bar { height: 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
+.disk-fill { height: 100%; background: var(--brand); transition: width .3s ease; }
+.disk-bar.warning .disk-fill { background: #bc4b09; }
+.disk-bar.critical .disk-fill { background: var(--danger); }
+
 /* ------------------------------------------------------- badge numbering */
 .bn-samples { display: grid; gap: .3rem; margin: .6rem 0 .4rem; }
 .bn-row { display: flex; align-items: baseline; gap: .75rem; flex-wrap: wrap; }

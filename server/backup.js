@@ -198,8 +198,29 @@ function inspect(buffer) {
   try { files = unzip.readZip(buffer); } catch (err) {
     return { ok: false, error: `That is not a readable ZIP file (${String(err.message || err).slice(0, 80)}).` };
   }
+  const media = [...files.keys()].filter((k) => k.startsWith('uploads/'));
   const dbEntry = files.get('smartlobby.db');
-  if (!dbEntry) return { ok: false, error: 'That ZIP has no smartlobby.db in it, so it is not a Smart Lobby backup.' };
+  if (!dbEntry) {
+    /*
+     * A files-only piece of a split backup. It holds no database, so there is
+     * nothing to verify and nothing to swap — but the photos and signatures
+     * in it are exactly what a database-only restore would be missing, so it
+     * is a real archive rather than the wrong file.
+     */
+    if (media.length) {
+      let manifest = null;
+      try { manifest = JSON.parse(files.get('manifest.json').toString('utf8')); } catch { /* hand-made */ }
+      return {
+        ok: true,
+        files_only: true,
+        media_files: media.length,
+        part: manifest && manifest.part,
+        parts: manifest && manifest.parts,
+        created_at: manifest && manifest.created_at
+      };
+    }
+    return { ok: false, error: 'That ZIP has no smartlobby.db in it, so it is not a Smart Lobby backup.' };
+  }
 
   const scratch = path.join(DATA_DIR, `.inspect-${Date.now()}.db`);
   try {
@@ -208,11 +229,38 @@ function inspect(buffer) {
     if (!checked.ok) return { ok: false, error: `The database inside it did not verify — ${checked.error}` };
     let manifest = null;
     try { manifest = JSON.parse(files.get('manifest.json').toString('utf8')); } catch { /* older, or hand-made */ }
-    const media = [...files.keys()].filter((k) => k.startsWith('uploads/'));
-    return { ok: true, counts: checked.counts, media_files: media.length, created_at: manifest && manifest.created_at };
+    return {
+      ok: true, counts: checked.counts, media_files: media.length,
+      part: manifest && manifest.part, parts: manifest && manifest.parts,
+      created_at: manifest && manifest.created_at
+    };
   } finally {
     try { fs.unlinkSync(scratch); } catch { /* already gone */ }
   }
+}
+
+/**
+ * Unpack the uploads from a files-only piece, over whatever is there.
+ *
+ * Overwriting rather than merging carefully: the names are content paths the
+ * database points at, so a file of a given name is that file. Anything not in
+ * this piece is left alone, which is what makes the pieces independent.
+ */
+function restoreMediaOnly(buffer) {
+  const files = unzip.readZip(buffer);
+  let written = 0;
+  for (const [name, content] of files) {
+    if (!name.startsWith('uploads/')) continue;
+    // Never outside the uploads folder, whatever the archive claims to hold.
+    const rel = path.normalize(name.slice('uploads/'.length));
+    if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) continue;
+    const target = path.join(UPLOAD_DIR, rel);
+    if (!path.resolve(target).startsWith(path.resolve(UPLOAD_DIR))) continue;
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, content);
+    written++;
+  }
+  return { restored_files: written, applied: true };
 }
 
 /**
@@ -227,6 +275,12 @@ function inspect(buffer) {
 function stageRestore(buffer) {
   const checked = inspect(buffer);
   if (!checked.ok) return checked;
+  /*
+   * A files-only piece brings back photos and signatures without touching the
+   * database, so it is applied at once rather than staged for the next start
+   * — there is nothing open that needs closing first.
+   */
+  if (checked.files_only) return { ok: true, ...checked, ...restoreMediaOnly(buffer) };
   // A copy of what is about to be replaced, in case the restore was the mistake.
   let safety;
   try { safety = create().file; } catch (err) {
@@ -277,7 +331,97 @@ function health() {
   };
 }
 
+/**
+ * The same backup, cut into pieces small enough to post somewhere.
+ *
+ * A Power Automate flow stops accepting at around ninety megabytes, and a
+ * site keeping ninety days of photos passes that inside a fortnight — so the
+ * off-site copy either started failing or had to be sent without the photos,
+ * which restores to records pointing at faces that are gone.
+ *
+ * The database goes first and on its own, because it is small, it is the part
+ * that matters most, and getting it away is worth doing even if the photos
+ * later fail. The uploads then follow in batches. Every piece is a complete
+ * ZIP in its own right: one holds the database, the rest hold files, and any
+ * of them can be restored on its own in any order.
+ *
+ * @returns {{dir: string, parts: object[]}} written into a scratch directory
+ *   the caller is expected to delete
+ */
+function createParts({ maxBytes }) {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const dir = path.join(DATA_DIR, 'tmp', `offsite-${stamp}`);
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { recursive: true });
+
+  const scratch = path.join(dir, 'snapshot.db');
+  db.exec(`VACUUM INTO '${scratch.replace(/'/g, "''")}'`);
+  const checked = verify(scratch);
+  if (!checked.ok) {
+    fs.rmSync(dir, { recursive: true, force: true });
+    throw new Error(`the copy did not verify — ${checked.error}`);
+  }
+
+  const media = walk(UPLOAD_DIR);
+  const sizeOf = (rel) => { try { return fs.statSync(path.join(UPLOAD_DIR, rel)).size; } catch { return 0; } };
+
+  /*
+   * Grouped by size rather than by count: a hundred signatures and a hundred
+   * photographs are two very different numbers of bytes, and it is bytes the
+   * far end refuses. A single file larger than the limit gets a batch to
+   * itself and is refused there, where the reason can be given, rather than
+   * silently dropped.
+   */
+  const batches = [];
+  let batch = [];
+  let batchBytes = 0;
+  for (const rel of media) {
+    const size = sizeOf(rel);
+    if (batch.length && batchBytes + size > maxBytes) { batches.push(batch); batch = []; batchBytes = 0; }
+    batch.push(rel);
+    batchBytes += size;
+  }
+  if (batch.length) batches.push(batch);
+
+  const total = 1 + batches.length;
+  const parts = [];
+  const manifest = (index, kind, files) => Buffer.from(JSON.stringify({
+    created_at: new Date().toISOString(),
+    app: 'smart-lobby',
+    format: 1,
+    part: index,
+    parts: total,
+    kind,
+    files,
+    counts: checked.counts
+  }, null, 2));
+
+  const dbFile = path.join(dir, `smartlobby-${stamp}-1of${total}-database.zip`);
+  let archive = zip.create(dbFile);
+  archive.add('smartlobby.db', scratch);
+  archive.add('manifest.json', manifest(1, 'database', 1));
+  archive.finish();
+  parts.push({ file: path.basename(dbFile), path: dbFile, kind: 'database',
+    index: 1, total, bytes: fs.statSync(dbFile).size });
+
+  batches.forEach((files, i) => {
+    const index = i + 2;
+    const name = path.join(dir, `smartlobby-${stamp}-${index}of${total}-files.zip`);
+    archive = zip.create(name);
+    for (const rel of files) {
+      archive.add(`uploads/${rel}`, path.join(UPLOAD_DIR, rel), { store: INCOMPRESSIBLE.test(rel) });
+    }
+    archive.add('manifest.json', manifest(index, 'files', files.length));
+    archive.finish();
+    parts.push({ file: path.basename(name), path: name, kind: 'files',
+      index, total, bytes: fs.statSync(name).size, files: files.length });
+  });
+
+  fs.rmSync(scratch, { force: true });
+  return { dir, stamp, parts, counts: checked.counts, media_files: media.length };
+}
+
 module.exports = {
-  BACKUP_DIR, KEEP, create, list, prune, pathOf, runDaily, verify, health, totalBytes,
+  BACKUP_DIR, KEEP, create, createParts, list, prune, pathOf, runDaily, verify, health, totalBytes,
   inspect, stageRestore, pendingRestore, cancelRestore
 };

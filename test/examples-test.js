@@ -61,6 +61,7 @@ const NAMES = ['John Doe', 'Jane Doe', 'Sam Doe', 'Alex Doe'];
   ok('the dashboard knows the examples are on file', dash.health.examples.present === true,
     JSON.stringify(dash.health.examples));
 
+  const DETAILS_BEFORE = (await req('GET', '/api/admin/settings')).data.details;
   await req('PUT', '/api/admin/settings', {
     details: { visitor: { photo: 'off', company: 'off', phone: 'required', staff: 'off', purpose: 'off' } }
   });
@@ -96,6 +97,10 @@ const NAMES = ['John Doe', 'Jane Doe', 'Sam Doe', 'Alex Doe'];
   const after = (await req('GET', '/api/admin/dashboard')).data;
   ok('the dashboard stops mentioning them', after.health.examples.present === false,
     JSON.stringify(after.health.examples));
+
+  // Put the form back as it was: these settings are shared, and a later suite
+  // filling in a field this one switched off is not that suite's fault.
+  await req('PUT', '/api/admin/settings', { details: DETAILS_BEFORE });
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

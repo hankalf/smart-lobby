@@ -84,6 +84,7 @@ const sample = (over, seq = 1, type = 'contractor') =>
 
   /* ---- against a running server ---- */
   await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  const DETAILS_BEFORE = (await req('GET', '/api/admin/settings')).data.details;
   await req('PUT', '/api/admin/settings', {
     badge: { enabled: true, ...base },
     // Nothing but a name and a phone, so a sign-in here is testing badge
@@ -178,6 +179,10 @@ const sample = (over, seq = 1, type = 'contractor') =>
     /^SITE-\d{4}$/.test(reshaped.data.badge.badge_no), reshaped.data.badge.badge_no);
 
   await req('PUT', '/api/admin/settings', { badge: { ...base, badge_prefixes: {} } });
+
+  // Put the form back as it was: these settings are shared, and a later suite
+  // filling in a field this one switched off is not that suite's fault.
+  await req('PUT', '/api/admin/settings', { details: DETAILS_BEFORE });
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
