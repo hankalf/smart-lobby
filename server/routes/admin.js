@@ -12,6 +12,7 @@ const { nextBadgeNo } = require('../badges');
 const localtime = require('../localtime');
 const deviceSlugs = require('../devices');
 const ratelimit = require('../ratelimit');
+const archive = require('../archive');
 
 const router = express.Router();
 const clean = (v) => (typeof v === 'string' ? v.trim() : v);
@@ -365,9 +366,12 @@ router.post('/visits/signout-all', (req, res) => {
 });
 
 router.delete('/visits/:id', (req, res) => {
+  // Archived first, so the signed documents and induction record survive the
+  // delete and the whole thing can be put back.
+  const kept = archive.archiveVisit(Number(req.params.id), req.user);
   run('DELETE FROM visits WHERE id = ?', req.params.id);
-  audit(req, 'delete', 'visit', Number(req.params.id));
-  res.json({ ok: true });
+  audit(req, 'delete', 'visit', Number(req.params.id), { archived: kept });
+  res.json({ ok: true, archived: kept });
 });
 
 /* -------------------------------------------------------------- visitors */
@@ -410,9 +414,45 @@ router.post('/visitors/:id/reset-induction', (req, res) => {
 });
 
 router.delete('/visitors/:id', (req, res) => {
+  // Takes every visit they ever made with it, so all of that is archived too.
+  const kept = archive.archiveVisitor(Number(req.params.id), req.user);
   run('DELETE FROM visitors WHERE id = ?', req.params.id);
-  audit(req, 'delete', 'visitor', Number(req.params.id));
-  res.json({ ok: true });
+  audit(req, 'delete', 'visitor', Number(req.params.id), { archived: kept });
+  res.json({ ok: true, archived: kept });
+});
+
+/* ------------------------------------------------- deleted records & log */
+
+router.get('/archive', (req, res) => res.json(archive.list({ limit: req.query.limit })));
+
+router.post('/archive/:id/restore', (req, res) => {
+  const result = archive.restore(Number(req.params.id));
+  if (!result.ok) {
+    const message = {
+      not_found: 'That entry is no longer in the deleted list.',
+      already_present: 'That record is already back — nothing to restore.',
+      visitor_gone: 'The visitor this belongs to was deleted and purged, so the visit cannot be restored.',
+      unreadable: 'That entry could not be read.'
+    }[result.error] || 'That entry could not be restored.';
+    return res.status(400).json({ ...result, message });
+  }
+  audit(req, 'restore', result.kind, Number(req.params.id), { label: result.label });
+  res.json(result);
+});
+
+router.delete('/archive/:id', (req, res) => {
+  const result = archive.purge(Number(req.params.id));
+  if (!result.ok) return res.status(404).json(result);
+  audit(req, 'purge', 'archive', Number(req.params.id), { label: result.label });
+  res.json(result);
+});
+
+/** Who changed what, and when. Written all along; now it can be read. */
+router.get('/audit', (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 200, 1000);
+  res.json(all(`SELECT a.*, u.name AS user_name, u.email AS user_email
+                FROM audit_log a LEFT JOIN users u ON u.id = a.user_id
+                ORDER BY a.id DESC LIMIT ?`, limit));
 });
 
 /* ------------------------------------------------- simple CRUD resources */

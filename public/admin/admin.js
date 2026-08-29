@@ -186,10 +186,28 @@
 
   /* ----------------------------------------------------------------- nav */
 
-  $$('#nav button').forEach((b) => b.addEventListener('click', () => {
-    $$('#nav button').forEach((x) => x.classList.toggle('active', x === b));
+  let CURRENT = '';
+
+  /** Highlight one top-level tab, and show the Settings sub-list only under it. */
+  function markNav(view, section) {
+    $$('#nav button[data-view]').forEach((x) => x.classList.toggle('active', x.dataset.view === view));
+    $('#subnav').hidden = view !== 'settings';
+    $$('#subnav button').forEach((x) => x.classList.toggle('active', view === 'settings' && x.dataset.section === section));
+  }
+
+  $$('#nav button[data-view]').forEach((b) => b.addEventListener('click', () => {
+    markNav(b.dataset.view);
     render(b.dataset.view);
     location.hash = b.dataset.view;
+  }));
+
+  // A sub-section: show Settings if it is not already up, then open that panel.
+  $$('#subnav button').forEach((b) => b.addEventListener('click', async () => {
+    const section = b.dataset.section;
+    markNav('settings', section);
+    location.hash = `settings/${section}`;
+    if (CURRENT !== 'settings') await render('settings');
+    openSection(section);
   }));
 
   const VIEWS = {};
@@ -197,11 +215,92 @@
   async function render(view) {
     const target = $('#view');
     target.innerHTML = '<p class="empty">Loading…</p>';
+    CURRENT = view;
     try {
       await (VIEWS[view] || VIEWS.dashboard)(target);
     } catch (err) {
       if (err.message !== 'unauthenticated') target.innerHTML = `<p class="empty">Could not load: ${esc(err.message)}</p>`;
     }
+  }
+
+  /* --------------------------------------------------- collapsible panels */
+
+  /*
+   * Settings had grown to a dozen panels stacked end to end, which meant
+   * scrolling past branding and badge printing every time to reach retention.
+   * Each panel now folds shut, and which ones are left open is remembered per
+   * browser — so whoever lives in one section keeps it open and the rest
+   * stays out of the way.
+   */
+  const OPEN_KEY = 'sl.admin.open-sections';
+  const openSet = () => { try { return new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || '[]')); } catch { return new Set(); } };
+  const saveOpen = (s) => { try { localStorage.setItem(OPEN_KEY, JSON.stringify([...s])); } catch { /* private mode */ } };
+
+  function setSection(sec, on) {
+    sec.classList.toggle('open', on);
+    const head = sec.querySelector(':scope > .sec-head');
+    if (head) head.setAttribute('aria-expanded', String(on));
+    if (on) sec.dispatchEvent(new CustomEvent('sec:open'));
+  }
+
+  /** Turn every `.card.section` carrying an id into a panel that folds. */
+  function collapseSections(root) {
+    const open = openSet();
+    $$('.card.section[id]', root).forEach((sec) => {
+      const h2 = sec.querySelector(':scope > h2');
+      if (!h2 || sec.classList.contains('collapsible')) return;
+      const body = document.createElement('div');
+      body.className = 'sec-body';
+      while (h2.nextSibling) body.appendChild(h2.nextSibling);
+      const head = document.createElement('button');
+      head.type = 'button';
+      head.className = 'sec-head';
+      h2.replaceWith(head);
+      head.append(el('<span class="chev" aria-hidden="true">▶</span>'), h2);
+      sec.append(body);
+      sec.classList.add('collapsible');
+      setSection(sec, open.has(sec.id));
+      head.addEventListener('click', () => {
+        const on = !sec.classList.contains('open');
+        const s = openSet();
+        if (on) s.add(sec.id); else s.delete(sec.id);
+        saveOpen(s);
+        setSection(sec, on);
+      });
+    });
+  }
+
+  /** Run something the first time a panel is opened — and now, if it already is. */
+  function onSectionOpen(id, fn) {
+    const sec = document.getElementById(id);
+    if (!sec) return;
+    let done = false;
+    const go = () => { if (done) return; done = true; fn(); };
+    if (sec.classList.contains('open')) go();
+    else sec.addEventListener('sec:open', go);
+  }
+
+  function openSection(slug) {
+    const sec = document.getElementById(`set-${slug}`);
+    if (!sec) return;
+    if (!sec.classList.contains('open')) {
+      const s = openSet();
+      s.add(sec.id);
+      saveOpen(s);
+      setSection(sec, true);
+    }
+    sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    sec.classList.add('flash');
+    setTimeout(() => sec.classList.remove('flash'), 1400);
+  }
+
+  function setAllSections(root, on) {
+    const s = openSet();
+    $$('.collapsible[id]', root).forEach((sec) => {
+      if (on) s.add(sec.id); else s.delete(sec.id);
+      setSection(sec, on);
+    });
+    saveOpen(s);
   }
 
   /* ------------------------------------------------------------ dashboard */
@@ -2403,9 +2502,12 @@
 
     root.innerHTML = `
       <h1 class="page">Settings</h1>
-      <p class="page-sub">Everything here applies instantly to every kiosk.</p>
+      <p class="page-sub">Everything here applies instantly to every kiosk.
+        Open a section below, or pick one from the list under Settings in the menu.</p>
+      <div class="row"><button class="btn ghost" id="sec-expand">Expand all</button>
+        <button class="btn ghost" id="sec-collapse">Collapse all</button></div>
 
-      <div class="card section"><h2>Branding</h2>
+      <div class="card section" id="set-branding"><h2>Branding</h2>
         <div class="form-grid">
           ${txt('org.name', 'Organisation name')}
           ${txt('org.welcome_title', 'Kiosk headline')}
@@ -2500,7 +2602,7 @@
         ` : ''}
       </div>
 
-      <div class="card section"><h2>The “Your details” form</h2>
+      <div class="card section" id="set-details"><h2>The “Your details” form</h2>
         <p class="muted" style="margin-top:0">What each type of visitor is asked. An interview does not need a reason for
           visit — the card already says why they are here — so switch it off in that column alone.</p>
         <div class="table-wrap"><table class="fields-table">
@@ -2528,7 +2630,7 @@
         <div id="wording-fields"></div>
       </div>
 
-      <div class="card section"><h2>The order things are asked</h2>
+      <div class="card section" id="set-order"><h2>The order things are asked</h2>
         <p class="muted" style="margin-top:0">Finding the visitor always comes first — it decides whether they need the
           induction at all. Everything after that is yours to arrange, per type. A step that does not apply is skipped
           wherever it sits: no photo asked for, no documents for that type, an induction already watched.</p>
@@ -2541,7 +2643,7 @@
         </div>
       </div>
 
-      <div class="card section"><h2>Kiosk sign-in flow</h2>
+      <div class="card section" id="set-flow"><h2>Kiosk sign-in flow</h2>
         <div class="check-list">
           ${chk('kiosk.welcome_shows_menu', 'Skip “Touch to start”',
             'Put the sections straight on the home screen')}
@@ -2586,12 +2688,12 @@
 
       </div>
 
-      <div class="card section"><h2>ID badge printing</h2>
+      <div class="card section" id="set-badges"><h2>ID badge printing</h2>
         <p class="muted">Badge design, label size and reprinting now live in their own <b>Badges</b> tab.</p>
         <button class="btn subtle" id="go-badges">Open Badges</button>
       </div>
 
-      <div class="card section"><h2>Induction</h2>
+      <div class="card section" id="set-induction"><h2>Induction</h2>
         ${chk('induction.enabled', 'Show the induction deck during sign-in')}
         ${chk('induction.show_to_returning_visitors', 'Show it every visit', 'Off = only first-timers and anyone who has not seen the current version')}
         ${chk('induction.require_acknowledgement', 'Ask for a confirmation tap at the end')}
@@ -2599,7 +2701,7 @@
         ${txt('induction.acknowledgement_text_es', 'En español (optional)')}</div>
       </div>
 
-      <div class="card section"><h2>Deliveries</h2>
+      <div class="card section" id="set-deliveries"><h2>Deliveries</h2>
         ${chk('deliveries.enabled', 'Enable the delivery flow')}
         ${chk('deliveries.require_recipient', 'Require a recipient')}
         ${chk('deliveries.ask_tracking', 'Ask for a tracking number')}
@@ -2607,13 +2709,13 @@
         ${chk('deliveries.signature_on_collection', 'Capture a signature on collection')}
       </div>
 
-      <div class="card section"><h2>Access control</h2>
+      <div class="card section" id="set-access"><h2>Access control</h2>
         ${chk('access.enabled', 'Enable door control')}
         ${chk('access.unlock_button_on_kiosk', 'Show a “Request entry” button on the kiosk')}
         ${chk('access.unlock_on_signin', 'Unlock doors automatically when someone signs in')}
       </div>
 
-      <div class="card section"><h2>Notifications</h2>
+      <div class="card section" id="set-notifications"><h2>Notifications</h2>
         <h3>Microsoft Teams</h3>
         <p class="muted" style="margin-top:0">Arrivals go to a Teams channel everybody watches, and to the individual
           person being visited. Each staff member's own Teams link lives on their record under <b>Staff</b>; the
@@ -2677,14 +2779,21 @@
         <div class="table-wrap" id="notify-log"><p class="muted">Loading…</p></div>
       </div>
 
-      <div class="card section"><h2>Data retention</h2>
+      <div class="card section" id="set-retention"><h2>Data retention</h2>
         <div class="form-grid">
           ${txt('privacy.retain_visits_days', 'Delete visit records after (days)', 'number')}
           ${txt('privacy.retain_photos_days', 'Delete visitor photos after (days)', 'number')}
         </div>
       </div>
 
-      <div class="card section"><h2>Admin users</h2>
+      <div class="card section" id="set-deleted"><h2>Deleted records</h2>
+        <p class="muted" style="margin-top:0">Deleting a visit or a visitor no longer destroys it. The record is kept
+          here — with its signed documents and induction record — until the retention window above clears it, and can
+          be put back at any time.</p>
+        <div id="archive-list"><p class="empty">Loading…</p></div>
+      </div>
+
+      <div class="card section" id="set-users"><h2>Admin users</h2>
         <div class="table-wrap"><table><tbody>${users.map((u) => `<tr><td><b>${esc(u.name || u.email)}</b><div class="muted">${esc(u.email)}</div></td>
           <td>${esc(u.role)}</td><td>${u.id === (ME && ME.id) ? '<span class="muted">you</span>'
             : `<button class="btn ghost" data-udel="${u.id}">Remove</button>`}</td></tr>`).join('')}</tbody></table></div>
@@ -2696,7 +2805,112 @@
         </div>
       </div>
 
+      <div class="card section" id="set-activity"><h2>Activity log</h2>
+        <p class="muted" style="margin-top:0">Who changed what, and when.</p>
+        <div id="audit-list"><p class="empty">Loading…</p></div>
+      </div>
+
       <div class="row"><button class="btn" id="save-settings">Save settings</button></div>`;
+
+    collapseSections(root);
+    $('#sec-expand').addEventListener('click', () => setAllSections(root, true));
+    $('#sec-collapse').addEventListener('click', () => setAllSections(root, false));
+
+    /* ------------------------------------------- deleted records & the log */
+
+    const ARCHIVE_KIND = { visit: 'Visit', visitor: 'Visitor' };
+
+    /** The one-line description of what was thrown away. */
+    function archiveDetail(e) {
+      const s = e.summary || {};
+      const bits = [];
+      // A company field long enough to shove the Restore button off the row.
+      if (s.company) bits.push(esc(s.company.length > 70 ? `${s.company.slice(0, 70)}…` : s.company));
+      if (e.kind === 'visit') {
+        if (s.signed_in_at) bits.push(`signed in ${fmtDate(s.signed_in_at)}`);
+        if (s.documents_signed) bits.push(`${s.documents_signed} document${s.documents_signed === 1 ? '' : 's'} signed`);
+        if (s.induction) bits.push('induction completed');
+      } else {
+        bits.push(`${s.visits || 0} visit${s.visits === 1 ? '' : 's'} taken with them`);
+      }
+      return bits.join(' · ');
+    }
+
+    async function drawArchive() {
+      const wrap = $('#archive-list');
+      if (!wrap) return;
+      let rows;
+      try { rows = await api('/archive'); } catch (err) {
+        if (err.message === 'unauthenticated') return;
+        wrap.innerHTML = `<p class="empty">Could not load: ${esc(err.message)}</p>`; return;
+      }
+      if (!rows.length) { wrap.innerHTML = '<p class="empty">Nothing has been deleted.</p>'; return; }
+      wrap.innerHTML = `<div class="table-wrap"><table>
+        <thead><tr><th>What</th><th>Deleted</th><th>By</th><th></th></tr></thead>
+        <tbody>${rows.map((e) => `<tr>
+          <td class="arch-what"><b>${esc(e.label)}</b><div class="muted">${ARCHIVE_KIND[e.kind] || esc(e.kind)}${
+            archiveDetail(e) ? ' — ' + archiveDetail(e) : ''}</div></td>
+          <td>${fmtDate(e.deleted_at)}</td>
+          <td>${esc(e.deleted_by)}</td>
+          <td style="white-space:nowrap">
+            <button class="btn subtle" data-restore="${e.id}">Restore</button>
+            <button class="btn ghost" data-purge="${e.id}">Delete for good</button></td>
+        </tr>`).join('')}</tbody></table></div>`;
+
+      $$('[data-restore]', wrap).forEach((b) => b.addEventListener('click', async () => {
+        b.disabled = true;
+        try {
+          const r = await api(`/archive/${b.dataset.restore}/restore`, { method: 'POST' });
+          toast(`${r.label || 'Record'} restored`);
+          await drawArchive();
+          drawAudit();
+        } catch (err) {
+          b.disabled = false;
+          toast((err.data && err.data.message) || 'Could not restore that record');
+        }
+      }));
+
+      $$('[data-purge]', wrap).forEach((b) => b.addEventListener('click', async () => {
+        if (!confirm('Delete this permanently? The record and its signatures cannot be recovered afterwards.')) return;
+        b.disabled = true;
+        try {
+          await api(`/archive/${b.dataset.purge}`, { method: 'DELETE' });
+          toast('Deleted for good');
+          await drawArchive();
+          drawAudit();
+        } catch { b.disabled = false; toast('Could not delete that entry'); }
+      }));
+    }
+
+    const ACTIONS = {
+      delete: 'Deleted', restore: 'Restored', purge: 'Deleted for good', create: 'Created', update: 'Changed',
+      signout: 'Signed out', signout_all: 'Signed everyone out', reset_induction: 'Reset induction',
+      login: 'Signed in', unlock: 'Opened a door'
+    };
+
+    async function drawAudit() {
+      const wrap = $('#audit-list');
+      if (!wrap) return;
+      let rows;
+      try { rows = await api('/audit?limit=200'); } catch (err) {
+        if (err.message === 'unauthenticated') return;
+        wrap.innerHTML = `<p class="empty">Could not load: ${esc(err.message)}</p>`; return;
+      }
+      if (!rows.length) { wrap.innerHTML = '<p class="empty">Nothing recorded yet.</p>'; return; }
+      wrap.innerHTML = `<div class="table-wrap"><table>
+        <thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead>
+        <tbody>${rows.map((a) => `<tr>
+          <td style="white-space:nowrap">${fmtDate(a.created_at || a.at)}</td>
+          <td>${esc(a.user_name || a.user_email || 'system')}</td>
+          <td>${esc(ACTIONS[a.action] || a.action)} ${esc(a.entity || '')}${
+            a.entity_id ? ` <span class="muted">#${a.entity_id}</span>` : ''}</td>
+        </tr>`).join('')}</tbody></table></div>`;
+    }
+
+    // Both lists are fetched the first time their panel is opened, so the
+    // settings page still loads in one request for everyone who never looks.
+    onSectionOpen('set-deleted', drawArchive);
+    onSectionOpen('set-activity', drawAudit);
 
     /*
      * Custom wording, one visitor type at a time. Held here and sent whole on
@@ -3115,10 +3329,12 @@
     applyBranding();
     $('#who').textContent = `${ME.name || ME.email}`;
     $('#shell').classList.remove('hidden');
-    const view = (location.hash || '#dashboard').slice(1);
-    const btn = $(`#nav button[data-view="${view}"]`);
-    if (btn) { $$('#nav button').forEach((x) => x.classList.remove('active')); btn.classList.add('active'); }
-    render(VIEWS[view] ? view : 'dashboard');
+    // #settings/retention opens the settings page on that panel.
+    const [hashView, section] = (location.hash || '#dashboard').slice(1).split('/');
+    const view = VIEWS[hashView] ? hashView : 'dashboard';
+    markNav(view, section);
+    await render(view);
+    if (view === 'settings' && section) openSection(section);
   }
 
   (async () => {

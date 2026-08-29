@@ -53,6 +53,29 @@ h1.page { font-size: 1.6rem; margin: 0 0 .25rem; color: var(--brand-dark); }
 .section h2 { margin: 0 0 1rem; font-size: 1.1rem; color: var(--brand-dark); }
 .section h3 { margin: 1.5rem 0 .75rem; font-size: .95rem; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .05em; }
 
+/* ---------------------------------------------------- collapsible panels */
+.collapsible { padding: 0; }
+.collapsible .sec-head {
+  display: flex; align-items: center; gap: .6rem; width: 100%; text-align: left;
+  background: none; border: 0; padding: 1rem 1.25rem; cursor: pointer; border-radius: 12px;
+}
+.collapsible .sec-head:hover { background: #f4f8f6; }
+.collapsible .sec-head h2 { margin: 0; }
+.collapsible .chev { color: var(--ink-soft); font-size: .8rem; transition: transform .15s ease; flex: 0 0 auto; }
+.collapsible.open .chev { transform: rotate(90deg); }
+.collapsible .sec-body { padding: 0 1.25rem 1.25rem; }
+.collapsible:not(.open) .sec-body { display: none; }
+.collapsible.flash { box-shadow: 0 0 0 2px var(--brand); }
+/* Whatever somebody typed in "company", the Restore button stays on the row. */
+.arch-what { max-width: 30rem; overflow-wrap: anywhere; }
+
+/* The sub-sections of Settings, listed under it in the side menu. */
+.subnav { display: flex; flex-direction: column; gap: .05rem; margin: .15rem 0 .35rem .55rem;
+  padding-left: .5rem; border-left: 1px solid rgba(255,255,255,.15); }
+#nav .subnav button { font-size: .84rem; padding: .35rem .6rem; color: #a8c2b7; }
+#nav .subnav button.active { background: rgba(255,255,255,.12); color: #fff; font-weight: 600; }
+@media (max-width: 860px) { .subnav { display: none; } }
+
 /* ---------------------------------------------------------------- tables */
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: .92rem; }

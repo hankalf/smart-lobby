@@ -221,6 +221,13 @@ function purgeOldData() {
     const cutoff = new Date(Date.now() - p.retain_visits_days * 864e5).toISOString();
     const n = run('DELETE FROM visits WHERE signed_in_at < ?', cutoff).changes;
     if (n) console.log(`[retention] removed ${n} visit record(s) older than ${p.retain_visits_days} days`);
+    /*
+     * Deleted records are held for the same period, then cleared for good
+     * along with the images only they still referred to — otherwise the
+     * archive would quietly become the one place old visitor data lives on.
+     */
+    const archived = require('./archive').purgeOlderThan(p.retain_visits_days);
+    if (archived) console.log(`[retention] purged ${archived} deleted record(s) past the retention window`);
   }
   auth.purgeExpired();
 }

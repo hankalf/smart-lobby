@@ -294,6 +294,27 @@ function migrate() {
   );
 
   /*
+   * Deleting a visit used to destroy it, and its signed documents with it —
+   * one mis-click and the proof a contractor read the site rules was gone.
+   * A delete now writes the whole record here first, children and all, so it
+   * can be looked at and put back. Kept as one JSON payload rather than
+   * shadow tables so nothing in the live queries has to know it exists: a
+   * deleted row is genuinely out of the visits table, and no listing can leak
+   * it by forgetting a filter.
+   */
+  CREATE TABLE IF NOT EXISTS archived_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,              -- 'visit' | 'visitor'
+    record_id INTEGER NOT NULL,      -- the id it had, so a restore keeps it
+    label TEXT,                      -- who it was, for the list
+    summary TEXT,                    -- a few fields worth showing without opening it
+    payload TEXT NOT NULL,           -- the row and its children, in full
+    deleted_by TEXT,
+    deleted_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_archived_at ON archived_records(deleted_at DESC);
+
+  /*
    * The jobs a contractor can be on site for. Kept as a list the site manages
    * rather than free text, so "Mill Road" and "mill rd" do not both appear in
    * a report of who was where.

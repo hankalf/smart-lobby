@@ -46,6 +46,26 @@
       <button data-view="devices">Devices</button>
       <button data-view="reports">Reports</button>
       <button data-view="settings">Settings</button>
+      <!--
+        Settings is one long page, so its sections are listed here as well.
+        Picking one opens that section and jumps straight to it, which beats
+        scrolling past ten panels to reach data retention.
+      -->
+      <div class="subnav" id="subnav" hidden>
+        <button data-section="branding">Branding</button>
+        <button data-section="details">Your details form</button>
+        <button data-section="order">The order things are asked</button>
+        <button data-section="flow">Kiosk sign-in flow</button>
+        <button data-section="badges">ID badge printing</button>
+        <button data-section="induction">Induction</button>
+        <button data-section="deliveries">Deliveries</button>
+        <button data-section="access">Access control</button>
+        <button data-section="notifications">Notifications</button>
+        <button data-section="retention">Data retention</button>
+        <button data-section="deleted">Deleted records</button>
+        <button data-section="users">Admin users</button>
+        <button data-section="activity">Activity log</button>
+      </div>
     </nav>
     <div class="side-foot">
       <a class="btn ghost" href="/kiosk/" target="_blank" rel="noopener">Open kiosk ↗</a>
