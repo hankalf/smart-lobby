@@ -239,23 +239,105 @@ function unit() {
   }).then((r) => r.json()));
   ok('a staff member to route to exists', !!(officer && officer.id), JSON.stringify(officer).slice(0, 80));
 
+  /*
+   * Somebody with no email at all, to prove they cannot be ticked — and
+   * enough people besides to cross the threshold where the card grows a
+   * filter box, so the filter is actually exercised rather than skipped on a
+   * site that happens to have three staff.
+   */
+  await page.evaluate(async () => {
+    const add = (body) => fetch('/api/admin/staff', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    await add({ name: 'Hank Alfred 41', active: 1 });
+    for (let i = 42; i <= 50; i++) await add({ name: `Hank Alfred ${i}`, email: `h${i}@example.com`, active: 1 });
+  });
+
   await page.reload();
-  await page.waitForSelector('[data-routetype="contractor"]', { timeout: 10000 });
-  ok('every visitor type has an "Also tell" picker',
-    (await page.$$('[data-routetype]')).length === (await page.$$('[data-notifytype]')).length);
-  ok('somebody with no email cannot be picked — there is nothing to tag',
-    (await page.$$eval('[data-routetype="contractor"] option',
-      (os) => os.filter((o) => /no email/.test(o.textContent)).every((o) => o.disabled))));
+  await page.waitForSelector('[data-routecard="contractor"]', { timeout: 10000 });
+  ok('every visitor type gets a card',
+    (await page.$$('[data-routecard]')).length === (await page.$$('[data-notifytype]')).length,
+    `${(await page.$$('[data-routecard]')).length} cards`);
+  ok('each card carries its type name and icon',
+    (await page.textContent('[data-routecard="contractor"] .route-label')).trim().length > 0
+    && (await page.textContent('[data-routecard="contractor"] .route-icon')).trim().length > 0);
+  ok('staff are checkboxes, not a multi-select',
+    (await page.$$('[data-routecard="contractor"] [data-routestaff]')).length > 0
+    && (await page.$$('[data-routecard="contractor"] select')).length === 0);
+  ok('somebody with no email cannot be ticked — there is nothing to tag',
+    await page.$$eval('[data-routecard="contractor"] .route-person.no-email input',
+      (bs) => bs.length > 0 && bs.every((b) => b.disabled)));
+  ok('the card says who it reaches before anything is ticked',
+    /Nobody/.test(await page.textContent('[data-routecount="contractor"]')),
+    await page.textContent('[data-routecount="contractor"]'));
 
   await pillGone();
-  await page.selectOption('[data-routetype="contractor"]', [String(officer.id)]);
+  await page.check(`[data-routecard="contractor"] [data-routestaff][value="${officer.id}"]`);
   await pillSaved();
+  ok('ticking somebody updates the line saying who it reaches',
+    /Hank Alfred/.test(await page.textContent('[data-routecount="contractor"]')),
+    await page.textContent('[data-routecount="contractor"]'));
   const routing = await page.evaluate(() =>
     fetch('/api/admin/settings').then((r) => r.json()).then((s) => s.notify.type_routing));
   ok('the choice is saved against that type',
     (routing.contractor.staff || []).includes(officer.id), JSON.stringify(routing));
   ok('…and not against the others',
     !((routing.visitor || {}).staff || []).includes(officer.id), JSON.stringify(routing.visitor));
+
+  /* ---- a type nobody posts about tells nobody, and says so ---- */
+  ok('a posted type does not carry the "nothing is posted" note',
+    await page.isHidden('[data-routecard="contractor"] .route-off-note'));
+  await pillGone();
+  await page.uncheck('[data-routecard="contractor"] [data-notifytype]');
+  await page.waitForTimeout(200);
+  ok('unticking Post says the list below does nothing',
+    await page.isVisible('[data-routecard="contractor"] .route-off-note'));
+  await page.check('[data-routecard="contractor"] [data-notifytype]');
+  await page.waitForTimeout(200);
+  ok('…and ticking it back clears the note',
+    await page.isHidden('[data-routecard="contractor"] .route-off-note'));
+  await pillSaved();
+  ok('the people ticked survive Post being turned off and on',
+    await page.isChecked(`[data-routecard="contractor"] [data-routestaff][value="${officer.id}"]`));
+
+  /* ---- a long list gets a filter, and filtering must not lose a tick ---- */
+  ok('a long staff list gets a filter box', await page.isVisible('[data-routefilter="contractor"]'));
+  await page.fill('[data-routefilter="contractor"]', 'zzzz-no-such-name');
+  await page.waitForTimeout(200);
+  ok('filtering to nothing hides every row',
+    await page.$$eval('[data-routecard="contractor"] .route-person', (rs) => rs.every((r) => r.hidden)));
+  await page.fill('[data-routefilter="contractor"]', '44');
+  await page.waitForTimeout(200);
+  ok('…and a name narrows it to that one',
+    await page.$$eval('[data-routecard="contractor"] .route-person',
+      (rs) => rs.filter((r) => !r.hidden).length === 1));
+  await page.fill('[data-routefilter="contractor"]', '');
+  await page.waitForTimeout(200);
+  ok('clearing it brings the ticked person back, still ticked',
+    await page.isChecked(`[data-routecard="contractor"] [data-routestaff][value="${officer.id}"]`));
+
+  /*
+   * The dangerous case: a name hidden by the filter is still ticked, so a
+   * save while filtered must not quietly drop them.
+   */
+  await page.fill('[data-routefilter="contractor"]', 'zzzz-no-such-name');
+  await page.waitForTimeout(200);
+  await pillGone();
+  await page.check('[data-routecard="contractor"] [data-notifytype]').catch(() => {});
+  await page.uncheck('[data-routecard="contractor"] [data-notifytype]');
+  await page.check('[data-routecard="contractor"] [data-notifytype]');
+  await pillSaved();
+  const survived = await page.evaluate(() =>
+    fetch('/api/admin/settings').then((r) => r.json()).then((s) => s.notify.type_routing));
+  ok('saving while the list is filtered does not drop who is hidden',
+    (survived.contractor.staff || []).includes(officer.id), JSON.stringify(survived.contractor));
+  await page.fill('[data-routefilter="contractor"]', '');
+
+  /* ---- ticking on one card must not tick the same person on another ---- */
+  const otherCard = (await page.$$eval('[data-routecard]', (cs) => cs.map((c) => c.dataset.routecard)))
+    .find((k) => k !== 'contractor');
+  ok('the same person is untouched on another type\'s card',
+    !(await page.isChecked(`[data-routecard="${otherCard}"] [data-routestaff][value="${officer.id}"]`)));
 
   /*
    * The preview is built from a real recent visit; whether that one happens

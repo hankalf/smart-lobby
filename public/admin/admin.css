@@ -372,11 +372,43 @@ code.token { background: var(--bg); padding: .15rem .4rem; border-radius: 5px; f
 .tp-mention { margin-top: .45rem; }
 .tp-also { color: #616161; font-size: .78rem; }
 
-/* One visitor type: whether it is posted, and who else is told about it. */
-.route-row { flex-wrap: wrap; align-items: flex-start; gap: .5rem 1rem; }
-.route-row .route-name { flex: 1 1 8rem; font-weight: 600; }
-.route-row .route-also { display: flex; align-items: center; gap: .5rem; flex: 1 1 18rem; }
-.route-row .route-also select { min-width: 12rem; }
+/* One card per visitor type: whether it is posted, and who else is told. */
+.route-cards { display: grid; gap: .85rem; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr)); }
+.route-card { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
+.route-head {
+  display: flex; align-items: center; gap: .6rem; padding: .7rem .85rem;
+  background: var(--bg); border-bottom: 1px solid var(--line);
+}
+.route-icon { font-size: 1.35rem; line-height: 1; flex: 0 0 auto; }
+.route-label { font-weight: 700; color: var(--brand-dark); flex: 1 1 auto; overflow-wrap: anywhere; }
+.route-post { margin: 0; flex: 0 0 auto; white-space: nowrap; font-size: .85rem; }
+.route-body { padding: .7rem .85rem .85rem; }
+.route-also-head { margin-bottom: .5rem; }
+.route-also-title {
+  font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-soft); font-weight: 600;
+}
+.route-count { display: block; margin-top: .1rem; overflow-wrap: anywhere; }
+.route-filter { margin-bottom: .5rem; }
+/*
+ * Staff come from an imported spreadsheet as often as not, so this list can
+ * be long. It scrolls inside its own card rather than pushing the panel down
+ * the page and burying everything under it.
+ */
+.route-people {
+  display: grid; gap: .1rem; max-height: 13rem; overflow-y: auto;
+  border: 1px solid var(--line); border-radius: 9px; padding: .35rem;
+}
+.route-person { margin: 0; padding: .3rem .35rem; border-radius: 7px; align-items: flex-start; font-size: .88rem; }
+.route-person:hover { background: var(--bg); }
+.route-person .muted { font-size: .76rem; }
+.route-person.no-email { opacity: .55; }
+.route-person.no-email:hover { background: none; }
+/* A type nobody is posting about: the list below it does nothing. */
+.route-off-note { display: none; margin: 0 0 .5rem; }
+.route-card.not-posting .route-off-note { display: block; }
+.route-card.not-posting .route-also-head,
+.route-card.not-posting .route-filter,
+.route-card.not-posting .route-people { opacity: .45; }
 .tp-at { background: #e8ebfa; color: #4f52b2; border-radius: 3px; padding: 0 .2rem; font-weight: 600; }
 
 /* ------------------------------------ the kiosk, as these settings make it */

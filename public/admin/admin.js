@@ -3045,6 +3045,60 @@
   // One column per visitor type, straight from the Visitor types tab.
   const DETAIL_TYPES = null; // replaced by detailTypes() — kept null so stale references fail loudly
   const detailTypes = () => ((SETTINGS && SETTINGS.types) || []).map((ty) => [ty.key, ty.label]);
+  const routeTypes = () => ((SETTINGS && SETTINGS.types) || [])
+    .map((ty) => ({ key: ty.key, label: ty.label, icon: ty.icon || '👤' }));
+
+  /**
+   * One visitor type: whether it is announced, and who else hears about it.
+   *
+   * Staff come from the Staff tab, imported spreadsheet and all, so this list
+   * can be long — hence a filter box once there are more than a handful, and
+   * a list that scrolls inside the card rather than pushing the page down.
+   * Somebody with no email is shown but cannot be ticked: there is no address
+   * to tag, and a silently ignored choice is worse than a disabled one.
+   */
+  function routeCard(ty, s, staff) {
+    const chosen = (((s.notify.type_routing || {})[ty.key] || {}).staff || []).map(Number);
+    const posting = (s.notify.types_notified || {})[ty.key] !== false;
+    const taggable = staff.filter((h) => h.email);
+    const named = taggable.filter((h) => chosen.includes(h.id)).map((h) => h.name);
+
+    const person = (h) => `<label class="check route-person${h.email ? '' : ' no-email'}">
+      <input type="checkbox" data-routestaff="${esc(ty.key)}" value="${h.id}"
+        ${chosen.includes(h.id) ? 'checked' : ''} ${h.email ? '' : 'disabled'}>
+      <span>${esc(h.name)}<br><span class="muted">${h.email
+        ? esc(h.email) + (h.webhook_url ? ' · also messaged directly' : '')
+        : 'No email on file — nothing to tag'}</span></span></label>`;
+
+    return `<div class="route-card${posting ? '' : ' not-posting'}" data-routecard="${esc(ty.key)}">
+      <div class="route-head">
+        <span class="route-icon">${esc(ty.icon)}</span>
+        <span class="route-label">${esc(ty.label)}</span>
+        <label class="check route-post"><input type="checkbox" data-notifytype="${esc(ty.key)}"
+          ${posting ? 'checked' : ''}> <span>Post about these</span></label>
+      </div>
+      <div class="route-body">
+        <p class="muted route-off-note">Nothing is posted about this type at all, so nobody below is told either.</p>
+        <div class="route-also-head">
+          <span class="route-also-title">Also tell</span>
+          <span class="muted route-count" data-routecount="${esc(ty.key)}">${
+            named.length ? esc(joinNames(named)) : 'Nobody — just the host and the channel'}</span>
+        </div>
+        ${staff.length ? `
+          ${staff.length > 8 ? `<input class="input route-filter" data-routefilter="${esc(ty.key)}"
+            placeholder="Find a name">` : ''}
+          <div class="route-people">${staff.map(person).join('')}</div>
+          ${taggable.length ? '' : '<p class="muted" style="margin:.5rem 0 0">Nobody on the Staff tab has an email '
+            + 'address yet, so there is nobody who can be tagged.</p>'}`
+          : '<p class="muted" style="margin:.25rem 0 0">Nobody on the <b>Staff</b> tab yet.</p>'}
+      </div>
+    </div>`;
+  }
+
+  /** "A, B and C" — a list a person reads rather than a comma-separated dump. */
+  const joinNames = (names) => (names.length <= 1 ? (names[0] || '')
+    : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
+
 
   VIEWS.settings = async (root) => {
     SETTINGS = await api('/settings');
@@ -3426,30 +3480,17 @@
           ${chk('notify.on_delivery', 'A parcel arrives')}
         </div>
 
-        <h4>Who to post about, and who to tell</h4>
-        <p class="muted" style="margin-top:0">Applies to signing in, signing out and the induction. A type added later
-          on the <b>Visitor types</b> tab starts switched on, so a new one is never silently ignored.</p>
+        <h4>Who to post about, and who else to tell</h4>
+        <p class="muted" style="margin-top:0">One card per visitor type. <b>Post about these</b> covers signing in,
+          signing out and the induction; a type added later on the <b>Visitor types</b> tab starts switched on, so a
+          new one is never silently ignored.</p>
         <p class="muted" style="margin-top:0">The person being visited is always tagged. <b>Also tell</b> is for
           somebody who wants a whole kind of visitor regardless of who they came to see — a safety officer who wants
-          every contractor, an HR manager who wants every interview. They are tagged in the channel post, and if they
-          have a chat webhook on their <b>Staff</b> record they get it as a direct message too.</p>
-        <div class="section-order">
-          ${detailTypes().map(([type, label]) => {
-            const routed = ((s.notify.type_routing || {})[type] || {}).staff || [];
-            return `<div class="section-row route-row">
-              <span class="route-name">${esc(label)}</span>
-              <label class="check"><input type="checkbox" data-notifytype="${esc(type)}"
-                ${(s.notify.types_notified || {})[type] === false ? '' : 'checked'}> <span>Post</span></label>
-              <span class="route-also">
-                <span class="muted">Also tell</span>
-                ${staff.length ? `<select class="input" multiple size="${Math.min(5, Math.max(2, staff.length))}"
-                  data-routetype="${esc(type)}">
-                  ${staff.map((h) => `<option value="${h.id}" ${routed.map(Number).includes(h.id) ? 'selected' : ''}
-                    ${h.email ? '' : 'disabled'}>${esc(h.name)}${h.email ? '' : ' — no email, cannot be tagged'}</option>`).join('')}
-                </select>` : '<span class="muted">Nobody on the Staff tab yet.</span>'}
-              </span>
-            </div>`;
-          }).join('') || '<div class="section-row off"><span>No visitor types yet.</span></div>'}
+          every contractor, an HR manager who wants every interview. They are tagged in the channel post, and get it
+          as a direct message as well if they have a chat webhook on their <b>Staff</b> record.</p>
+        <div class="route-cards">
+          ${routeTypes().map((ty) => routeCard(ty, s, staff)).join('')
+            || '<div class="section-row off"><span>No visitor types yet.</span></div>'}
         </div>
 
         <div class="row" style="margin-top:1rem"><button class="btn subtle" id="test-hook">Send test to Teams</button></div>
@@ -3789,8 +3830,10 @@
     /** Who each visitor type is routed to, beyond the person being visited. */
     VIEWS.settings.collectRouting = () => {
       const out = {};
-      $$('[data-routetype]').forEach((el) => {
-        out[el.dataset.routetype] = { staff: $$('option:checked', el).map((o) => Number(o.value)) };
+      $$('[data-routecard]').forEach((card) => {
+        out[card.dataset.routecard] = {
+          staff: $$('[data-routestaff]:checked', card).map((box) => Number(box.value))
+        };
       });
       return out;
     };
@@ -3986,14 +4029,46 @@
         const el = $(sel);
         if (el) el.addEventListener('input', () => { drawCardPreview(); saveSettings.soon(); });
       });
-    $$('[data-notifytype]').forEach((el) => el.addEventListener('change', () => saveSettings.soon()));
-    $$('[data-routetype]').forEach((el) => el.addEventListener('change', () => {
+    $$('[data-notifytype]').forEach((el) => el.addEventListener('change', () => {
+      /*
+       * A type nobody is posting about tells nobody, routed or not — the card
+       * says so rather than leaving a list of names that does nothing.
+       */
+      const card = el.closest('.route-card');
+      if (card) card.classList.toggle('not-posting', !el.checked);
+      saveSettings.soon();
+    }));
+    $$('[data-routestaff]').forEach((el) => el.addEventListener('change', () => {
+      routeSummary(el.dataset.routestaff);
       /*
        * Saved at once rather than after the usual pause: the preview's extra
        * tag line is built from the routing the *server* holds, so redrawing
        * before the save lands would show the previous selection.
        */
       Promise.resolve(saveSettings.now()).then(loadCardPreview);
+    }));
+
+    /** The one-line "who this reaches", kept in step with the ticks. */
+    function routeSummary(type) {
+      const card = $(`[data-routecard="${type}"]`);
+      const label = $(`[data-routecount="${type}"]`, card);
+      if (!label) return;
+      const names = $$('[data-routestaff]:checked', card)
+        .map((box) => box.closest('.route-person').querySelector('span').childNodes[0].textContent.trim());
+      label.textContent = names.length ? joinNames(names) : 'Nobody — just the host and the channel';
+    }
+
+    /*
+     * Filtering hides rows rather than removing them, so a name ticked and
+     * then filtered out of view is still ticked when the box is cleared —
+     * and, more importantly, is still there to be collected on save.
+     */
+    $$('[data-routefilter]').forEach((box) => box.addEventListener('input', () => {
+      const card = $(`[data-routecard="${box.dataset.routefilter}"]`);
+      const needle = box.value.trim().toLowerCase();
+      $$('.route-person', card).forEach((row) => {
+        row.hidden = !!needle && !row.textContent.toLowerCase().includes(needle);
+      });
     }));
 
     // Drawn as soon as the panel is opened, not on a settings page nobody expanded.
