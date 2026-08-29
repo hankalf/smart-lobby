@@ -541,6 +541,9 @@ router.post('/signin', writeLimit, async (req, res) => {
                        WHERE v.id = ?`, visitId);
 
     notify.notifyArrival(visitId).catch(() => {});
+    // A separate post, off by default: on a busy gate it doubles the traffic,
+    // but it is the one a safety officer wants — the briefing on record.
+    if (b.induction_completed && b.slideshow_id) notify.notifyInduction(visitId).catch(() => {});
     if (settings.getSection('access').unlock_on_signin) {
       accessCtl.autoUnlock('signin', { visitId, actor: fullName, siteId: site ? site.id : null }).catch(() => {});
     }

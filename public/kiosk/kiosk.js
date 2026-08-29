@@ -1189,6 +1189,19 @@
     const fields = detailFields();
     const wording = ((state.cfg && state.cfg.wording) || {})[state.visitType] || {};
 
+    /*
+     * The privacy line. It comes down with the config — including in the copy
+     * cached for offline — so it is shown whether or not the kiosk can reach
+     * the server, which matters because the asking happens either way.
+     */
+    const privacy = (state.cfg && state.cfg.privacy) || {};
+    const notice = state.lang === 'es' ? (privacy.notice_es || privacy.notice) : privacy.notice;
+    const noteEl = $('#privacy-note');
+    if (noteEl) {
+      noteEl.textContent = notice || '';
+      show(noteEl, !!notice);
+    }
+
     for (const [field, sel] of Object.entries(DETAIL_WIDGETS)) {
       const wrap = $(sel);
       if (!wrap) continue;

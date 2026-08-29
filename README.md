@@ -32,6 +32,41 @@ installation.
 
 To use a different port: `PORT=3010 npm start`.
 
+### Nobody can sign in
+
+There is no reset email to send, so the way back in is on the machine holding the data:
+
+```bash
+node scripts/reset-password.js                       # lists the accounts
+node scripts/reset-password.js you@example.com 'a new password'
+```
+
+On Railway that is a one-off command against the service with the volume mounted. It re-enables the
+account and signs out every session it had.
+
+## Tests
+
+```bash
+npm test                    # every suite
+npm test -- board card      # only the suites whose name contains one of these
+npm test -- --keep          # leave the test database behind to poke at
+```
+
+Each suite gets a freshly started server against a throwaway database: the rate limiters are
+per-process, so suites sharing one would start tripping them and failing for reasons that have
+nothing to do with the code. The order in `test/run.js` is deliberate rather than alphabetical —
+`api-test` performs the first-run setup and leaves the fixtures the later suites read, and
+`probe-test` deletes the device fixture on purpose, so it goes last.
+
+The browser suites need Playwright and are skipped, loudly, without it:
+
+```bash
+npm install -D playwright && npx playwright install chromium
+```
+
+`test/fakebin/` holds stand-ins for LibreOffice and poppler, used only where the real ones are
+missing, so the deck-upload path can still be exercised on a machine without them.
+
 ### Where the data lives
 
 Everything is under `data/`:

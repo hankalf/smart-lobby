@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Smart Lobby">
+  <rect width="64" height="64" rx="14" fill="#123a2c"/>
+  <!-- A visitor badge on a lanyard: what the app is, at 16 pixels. -->
+  <path d="M24 10a8 8 0 0 1 16 0" fill="none" stroke="#2f7d5d" stroke-width="3" stroke-linecap="round"/>
+  <rect x="16" y="18" width="32" height="34" rx="5" fill="#fff"/>
+  <circle cx="32" cy="30" r="6" fill="#2f7d5d"/>
+  <path d="M22 46c2-5 5.5-7.5 10-7.5S40 41 42 46z" fill="#2f7d5d"/>
+</svg>

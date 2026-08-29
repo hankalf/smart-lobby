@@ -152,9 +152,12 @@ router.get('/dashboard', (req, res) => {
     .map((r) => r.signed_in_at), 14);
   const storage_warning = require('../db').STORAGE.message;
   const devices = all('SELECT id, name, last_seen_at FROM devices ORDER BY name');
-  res.json({ onsite, stats, week, devices, storage_warning, recent_deliveries: all(
-    `SELECT d.*, h.name AS host_name FROM deliveries d LEFT JOIN hosts h ON h.id = d.recipient_host_id
-     ORDER BY d.received_at DESC LIMIT 10`) });
+  res.json({ onsite, stats, week, devices, storage_warning,
+    // Whether anything has quietly stopped working — see notify.health().
+    health: notify.health(),
+    recent_deliveries: all(
+      `SELECT d.*, h.name AS host_name FROM deliveries d LEFT JOIN hosts h ON h.id = d.recipient_host_id
+       ORDER BY d.received_at DESC LIMIT 10`) });
 });
 
 router.get('/rollcall', (req, res) => {
@@ -364,6 +367,25 @@ router.post('/visits/signout-all', (req, res) => {
     nowISO(), req.user.email).changes;
   audit(req, 'signout_all', 'visit', null, { count: n });
   res.json({ ok: true, count: n });
+});
+
+/**
+ * Put somebody back on site.
+ *
+ * Sign-out is one tap next to somebody else's name, and until now the only way
+ * back was to sign them in again — a second visit for one afternoon, and a
+ * roll call that is wrong in the other direction. This restores the visit that
+ * is already there.
+ */
+router.post('/visits/:id/undo-signout', (req, res) => {
+  const visit = get('SELECT id, status, signed_out_at FROM visits WHERE id = ?', req.params.id);
+  if (!visit) return res.status(404).json({ error: 'not_found' });
+  if (visit.status === 'onsite') {
+    return res.status(400).json({ error: 'already_onsite', message: 'They are already signed in.' });
+  }
+  run("UPDATE visits SET status = 'onsite', signed_out_at = NULL, signed_out_by = NULL WHERE id = ?", req.params.id);
+  audit(req, 'undo_signout', 'visit', Number(req.params.id), { was_signed_out_at: visit.signed_out_at });
+  res.json({ ok: true, message: 'Back on site.' });
 });
 
 router.delete('/visits/:id', (req, res) => {
@@ -977,16 +999,13 @@ router.delete('/devices/:id', (req, res) => {
 
 /* -------------------------------------------------------------- settings */
 
-const MASK = '********';
-const maskSecrets = (s) => ({
-  ...s,
-  notify: {
-    ...s.notify,
-    twilio_auth_token: s.notify.twilio_auth_token ? MASK : ''
-  }
-});
-
-router.get('/settings', (req, res) => res.json(maskSecrets(settings.getAll())));
+/*
+ * Nothing is masked here any more: the only stored secret was the Twilio auth
+ * token, and SMS is gone. The Teams webhook URL is deliberately returned as it
+ * is — it has to be editable, and anyone who can read this is already signed
+ * in as an admin.
+ */
+router.get('/settings', (req, res) => res.json(settings.getAll()));
 
 router.put('/settings', (req, res) => {
   const patch = req.body || {};
@@ -1014,15 +1033,9 @@ router.put('/settings', (req, res) => {
     }
   }
 
-  // A masked secret means "unchanged" — never write the mask itself back.
-  if (patch.notify) {
-    for (const key of ['twilio_auth_token']) {
-      if (patch.notify[key] === MASK) delete patch.notify[key];
-    }
-  }
   const updated = settings.setAll(patch);
   audit(req, 'update', 'settings', null, Object.keys(patch));
-  res.json({ ...maskSecrets(updated), warnings });
+  res.json({ ...updated, warnings });
 });
 
 /* --------------------------------------------------------- branding images */
@@ -1104,12 +1117,6 @@ router.get('/notifications', (req, res) => {
                 ORDER BY n.id DESC LIMIT 50`));
 });
 
-router.post('/settings/test-sms', async (req, res) => {
-  if (!req.body.to) return res.status(400).json({ error: 'number_required' });
-  const ok = await notify.sendTestSms(req.body.to);
-  res.json({ ok, to: notify.toE164(req.body.to) });
-});
-
 /**
  * The card as it would arrive, built by the very same code that sends one.
  *
@@ -1137,7 +1144,19 @@ function safeJson(text, fallback) {
  * face; an invented one on a site that has not opened yet.
  */
 function sampleVisit() {
-  const real = get(`SELECT v.id FROM visits v WHERE v.photo_path IS NOT NULL ORDER BY v.signed_in_at DESC LIMIT 1`)
+  /*
+   * A visit that can show every part of the card wins: one whose host has an
+   * email demonstrates the tag, and one with a photo demonstrates the picture.
+   * Otherwise the preview would quietly leave out the very thing being turned
+   * on, and look like the setting had no effect.
+   */
+  const real = get(`SELECT v.id FROM visits v
+                    LEFT JOIN hosts h ON h.id = v.host_id
+                    WHERE v.photo_path IS NOT NULL AND h.email IS NOT NULL AND h.email != ''
+                    ORDER BY v.signed_in_at DESC LIMIT 1`)
+    || get(`SELECT v.id FROM visits v JOIN hosts h ON h.id = v.host_id
+            WHERE h.email IS NOT NULL AND h.email != '' ORDER BY v.signed_in_at DESC LIMIT 1`)
+    || get('SELECT id FROM visits WHERE photo_path IS NOT NULL ORDER BY signed_in_at DESC LIMIT 1')
     || get('SELECT id FROM visits ORDER BY signed_in_at DESC LIMIT 1');
   if (real) return { visit: notify.visitDetail(real.id), real: true };
   return {
@@ -1146,6 +1165,7 @@ function sampleVisit() {
       id: 0, full_name: 'Ivan Ruiz', company: 'Ruiz Groundworks', phone: '(415) 268-0142',
       email: 'ivan@example.com', visit_type: 'contractor', purpose: 'Foundation pour',
       vehicle_reg: 'TX 8842B', badge_no: 'V260829-014', host_name: 'Hank Alfaro',
+      host_email: 'hank@example.com',
       site_name: 'Main site', project_name: 'Lakeview Phase 2', location_name: 'North gate',
       device_name: 'Front gate iPad', signed_in_at: new Date().toISOString(), signed_out_at: null,
       id_name: 'IVAN R RUIZ', id_number: 'D1234567', id_state: 'TX', photo_path: null
@@ -1183,6 +1203,34 @@ router.post('/settings/test-webhook', async (req, res) => {
   res.json({ ...result, photo_included: !!model.photoUrl, public_url_reachable: preview.public_url_reachable });
 });
 
+/* -------------------------------------------------------------- backups */
+
+const backup = require('../backup');
+
+router.get('/backups', (req, res) => res.json({ keep: backup.KEEP, backups: backup.list() }));
+
+router.post('/backups', (req, res) => {
+  try {
+    const made = backup.create();
+    audit(req, 'backup', 'database', null, { file: made.file, bytes: made.bytes });
+    res.json({ ok: true, ...made, path: undefined });
+  } catch (err) {
+    res.status(500).json({ ok: false, message: `Could not write a backup: ${err.message}` });
+  }
+});
+
+/*
+ * The whole database, as a file. This is the copy that survives losing the
+ * machine, so it is deliberately easy to take — and deliberately behind a
+ * login, because it is every visitor record in one download.
+ */
+router.get('/backups/:file', (req, res) => {
+  const full = backup.pathOf(req.params.file);
+  if (!full) return res.status(404).json({ error: 'not_found' });
+  audit(req, 'backup_download', 'database', null, { file: req.params.file });
+  res.download(full);
+});
+
 /* ----------------------------------------------------------- wall board */
 
 const boardRoutes = require('./board');
@@ -1206,6 +1254,55 @@ router.post('/board/key', (req, res) => {
   res.json({ ...b, url: b.enabled && b.key ? `${notify.baseUrl()}/board/${b.key}` : null });
 });
 
+/**
+ * Whether the camera address actually gives back a picture.
+ *
+ * Answers from where the server is standing, which is exactly the question
+ * "Fetch through the server" turns on — and it also catches the far more
+ * common mistake of an http address, which the browser will refuse whatever
+ * this says.
+ */
+router.post('/board/camera-test', async (req, res) => {
+  const url = clean((req.body || {}).url) || settings.getSection('board').camera_url;
+  if (!url) return res.json({ ok: false, message: 'Enter a camera address first.' });
+
+  let parsed;
+  try { parsed = new URL(url); } catch { return res.json({ ok: false, message: 'That is not a valid web address.' }); }
+  if (parsed.protocol === 'rtsp:') {
+    return res.json({ ok: false, message: 'RTSP cannot be shown by a browser. Use the camera’s snapshot or MJPEG address, '
+      + 'or put something in front of it that speaks HLS.' });
+  }
+  if (!/^https?:$/.test(parsed.protocol)) {
+    return res.json({ ok: false, message: `${parsed.protocol.replace(':', '')} addresses cannot be shown on a web page.` });
+  }
+
+  const insecure = parsed.protocol === 'http:';
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const r = await fetch(url, { redirect: 'error', signal: controller.signal });
+    clearTimeout(timer);
+    const type = r.headers.get('content-type') || '';
+    if (!r.ok) return res.json({ ok: false, insecure, message: `The camera answered ${r.status}.` });
+    if (!/^(image|multipart|video|application\/(vnd\.apple\.mpegurl|x-mpegurl))/i.test(type)) {
+      return res.json({ ok: false, insecure,
+        message: `That address returned ${type || 'no content type'} rather than a picture. `
+          + 'If it is the camera’s own web page, choose the frame option instead.' });
+    }
+    res.json({ ok: true, insecure, content_type: type,
+      message: insecure
+        ? `The server can reach it (${type}). It is an http address, so tick "Fetch through the server" — `
+          + 'the browser will refuse to load it directly onto the https board.'
+        : `The server can reach it (${type}).` });
+  } catch (err) {
+    clearTimeout(timer);
+    res.json({ ok: false, insecure,
+      message: `This server could not reach it: ${String(err.message || err).slice(0, 120)}. `
+        + 'If the camera is on your local network that is expected — a server in the cloud cannot see it. '
+        + 'Untick "Fetch through the server" and give the camera an address reachable from the browser instead.' });
+  }
+});
+
 /* ----------------------------------------------------------------- users */
 
 router.get('/users', (req, res) => res.json(all('SELECT id, email, name, role, active, created_at FROM users ORDER BY id')));
@@ -1223,7 +1320,55 @@ router.post('/users', (req, res) => {
 router.delete('/users/:id', (req, res) => {
   if (Number(req.params.id) === req.user.id) return res.status(400).json({ error: 'cannot_delete_self' });
   run('DELETE FROM users WHERE id = ?', req.params.id);
+  audit(req, 'delete', 'user', Number(req.params.id));
   res.json({ ok: true });
+});
+
+/*
+ * Changing your own password. The current one is asked for even though the
+ * session already proves who you are: it is what stops a walk-up at an
+ * unlocked dashboard from locking the owner out of their own system.
+ *
+ * Rate limited on the same grounds as the login form — this is a password
+ * oracle otherwise, and a quieter one, because a wrong guess here does not
+ * show up as a failed sign-in.
+ */
+const passwordLimit = ratelimit.limit({
+  windowMs: 15 * 60_000, max: 10, name: 'password-change',
+  message: 'Too many attempts. Wait a few minutes and try again.'
+});
+
+router.post('/me/password', passwordLimit, (req, res) => {
+  const { current, password } = req.body || {};
+  if (!auth.verifyPassword(req.user.id, current)) {
+    return res.status(400).json({ error: 'wrong_password', message: 'That is not your current password.' });
+  }
+  if (!password || String(password).length < 8) {
+    return res.status(400).json({ error: 'weak_password', message: 'Use at least 8 characters.' });
+  }
+  auth.setPassword(req.user.id, password, auth.parseCookies(req)[auth.COOKIE]);
+  audit(req, 'password_change', 'user', req.user.id);
+  res.json({ ok: true, message: 'Password changed. Any other browser signed in as you has been signed out.' });
+});
+
+/**
+ * Setting somebody else's password — for the person who has forgotten theirs
+ * and is standing in front of you. Only an owner can, and never on themselves:
+ * that path asks for the current password above.
+ */
+router.post('/users/:id/password', (req, res) => {
+  if (req.user.role !== 'owner') return res.status(403).json({ error: 'owner_only', message: 'Only the owner can reset a password.' });
+  const id = Number(req.params.id);
+  if (id === req.user.id) return res.status(400).json({ error: 'use_own_form', message: 'Change your own password under Your account.' });
+  const target = get('SELECT id, email FROM users WHERE id = ?', id);
+  if (!target) return res.status(404).json({ error: 'not_found' });
+  const password = (req.body || {}).password;
+  if (!password || String(password).length < 8) {
+    return res.status(400).json({ error: 'weak_password', message: 'Use at least 8 characters.' });
+  }
+  auth.setPassword(id, password);
+  audit(req, 'password_reset', 'user', id, { email: target.email });
+  res.json({ ok: true, message: `${target.email} can now sign in with that password. They were signed out everywhere.` });
 });
 
 /* ----------------------------------------------------------------- stats */

@@ -60,7 +60,14 @@ const DEFAULT_CARD = {
   fields: ['company', 'type', 'project', 'host', 'purpose', 'vehicle', 'badge', 'time'],
   footer_template: '{org} · Smart Lobby',
   show_button: false,
-  button_label: 'Open Smart Lobby'
+  button_label: 'Open Smart Lobby',
+  /*
+   * Tag the person being visited in the channel post, using the email on
+   * their staff record. It is what turns a channel everybody half-watches
+   * into something that actually reaches the one person who needs it, without
+   * each of them having to set up a webhook of their own.
+   */
+  mention_host: true
 };
 
 /** Fill {name}, {company}, {host}… leaving nothing behind when a value is empty. */
@@ -111,6 +118,11 @@ function buildModel(v, card, ctx) {
     headerStyle: HEADER_STYLES.includes(c.header_style) ? c.header_style : 'accent',
     detailsStyle: c.details_style === 'lines' ? 'lines' : 'facts',
     footer: fill(c.footer_template, tokens) || null,
+    // Only with an address to tag: a mention of somebody Teams cannot resolve
+    // renders as literal <at> markup, which is worse than no mention.
+    mention: (c.mention_host !== false && v.host_email && v.host_name)
+      ? { name: v.host_name, email: v.host_email }
+      : null,
     action: c.show_button && ctx.baseUrl
       ? { label: c.button_label || DEFAULT_CARD.button_label, url: `${ctx.baseUrl}/admin/#visits` }
       : null
@@ -118,7 +130,7 @@ function buildModel(v, card, ctx) {
 }
 
 /** A model with no fields to choose from — sign-outs and parcels stay simple. */
-function plainModel({ title: heading, lines, photoUrl, org, card }) {
+function plainModel({ title: heading, lines, photoUrl, org, card, mention }) {
   const c = { ...DEFAULT_CARD, ...(card || {}) };
   return {
     title: heading,
@@ -133,17 +145,36 @@ function plainModel({ title: heading, lines, photoUrl, org, card }) {
     headerStyle: HEADER_STYLES.includes(c.header_style) ? c.header_style : 'accent',
     detailsStyle: c.details_style === 'lines' ? 'lines' : 'facts',
     footer: fill(c.footer_template, { org: (org && org.name) || '' }) || null,
+    mention: (c.mention_host !== false && mention && mention.email && mention.name) ? mention : null,
     action: null
   };
 }
 
 /* ------------------------------------------------------------- renderers */
 
+/*
+ * An @-mention in a Teams card is two halves that have to agree: the literal
+ * `<at>Name</at>` in the text, and an entity in msteams.entities whose `text`
+ * matches it exactly and whose `mentioned.id` is the person's address. Get
+ * either half wrong and Teams prints the markup instead of tagging anybody.
+ */
+const mentionTag = (m) => (m.mention ? `<at>${m.mention.name}</at>` : '');
+
+function mentionEntities(m) {
+  if (!m.mention) return null;
+  return [{
+    type: 'mention',
+    text: mentionTag(m),
+    mentioned: { id: m.mention.email, name: m.mention.name }
+  }];
+}
+
 function teamsCard(m) {
   const heading = [
     { type: 'TextBlock', text: m.title, weight: 'Bolder', size: 'Medium', wrap: true,
       ...(m.headerStyle === 'none' ? {} : { color: colorFor(m.headerStyle) }) },
-    ...(m.subtitle ? [{ type: 'TextBlock', text: m.subtitle, isSubtle: true, wrap: true, spacing: 'None' }] : [])
+    ...(m.subtitle ? [{ type: 'TextBlock', text: m.subtitle, isSubtle: true, wrap: true, spacing: 'None' }] : []),
+    ...(m.mention ? [{ type: 'TextBlock', text: `${mentionTag(m)} — your visitor is here.`, wrap: true, spacing: 'Small' }] : [])
   ];
 
   const details = m.detailsStyle === 'facts'
@@ -189,7 +220,8 @@ function teamsCard(m) {
           ...body,
           ...(m.footer ? [{ type: 'TextBlock', text: m.footer, isSubtle: true, size: 'Small', wrap: true, spacing: 'Medium' }] : [])
         ],
-        ...(m.action ? { actions: [{ type: 'Action.OpenUrl', title: m.action.label, url: m.action.url }] } : {})
+        ...(m.action ? { actions: [{ type: 'Action.OpenUrl', title: m.action.label, url: m.action.url }] } : {}),
+        ...(m.mention ? { msteams: { entities: mentionEntities(m) } } : {})
       }
     }]
   };
@@ -202,6 +234,8 @@ const containerStyle = (style) => (style === 'emphasis' ? 'emphasis' : style ===
 const asLines = (m) => m.fields.map((f) => (f.label ? `${f.label}: ${f.value}` : String(f.value)));
 
 function slackBody(m) {
+  // Slack tags by its own user id, not an email, so the name is all we can
+  // honestly put here — <at> markup would arrive as literal text.
   const text = [`*${m.title}*`, ...(m.subtitle ? [m.subtitle] : []), ...asLines(m)].join('\n');
   return {
     text,

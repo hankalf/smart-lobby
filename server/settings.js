@@ -137,12 +137,24 @@ const DEFAULTS = {
     /*
      * Notifications go to Microsoft Teams: a company channel that sees every
      * arrival, and each staff member's own Teams link for their own visitors.
-     * Email was removed — this deployment cannot reach a mail server, and a
-     * channel post is what the site actually watches.
+     * Email and SMS were both removed — this deployment cannot reach a mail
+     * server, text messages were never going to be paid for, and a channel
+     * post is what the site actually watches.
+     *
+     * Which events are worth posting at all. These have existed since the
+     * start and were never on any screen, so sign-out notifications could not
+     * be switched on however much a site wanted them.
      */
     on_signin: true,
     on_signout: false,
     on_delivery: true,
+    on_induction: false,
+    /*
+     * And who is worth posting about. Keyed by visitor type; a type that is
+     * not named here notifies, so adding a new one on the Visitor types tab
+     * does not silently go unannounced.
+     */
+    types_notified: {},
     global_webhook_url: '',
     webhook_channel_always: true,
     webhook_format: 'teams',
@@ -153,14 +165,7 @@ const DEFAULTS = {
      */
     public_url: '',
     // What an arrival looks like when it lands — see server/notify-card.js.
-    card: { ...require('./notify-card').DEFAULT_CARD },
-    sms_enabled: false,
-    sms_provider: 'twilio',
-    twilio_account_sid: '',
-    twilio_auth_token: '',
-    sms_from: '',
-    sms_on_signin: true,
-    sms_on_delivery: false
+    card: { ...require('./notify-card').DEFAULT_CARD }
   },
   /*
    * The wall board: who is on site, on a page somebody can leave open.
@@ -177,12 +182,44 @@ const DEFAULTS = {
     show_photos: true,
     show_company: true,
     show_host: true,
-    title: ''
+    title: '',
+    /*
+     * A camera alongside the roster.
+     *
+     * The board is served over https, and a browser will not load an http
+     * image into an https page — so a camera on the local network, which is
+     * almost always plain http, cannot be shown directly however the URL is
+     * written. `proxy` makes the server fetch it instead, which fixes that,
+     * but only works where the server can reach the camera: on Railway it
+     * cannot see your LAN. The panel says all of this plainly.
+     */
+    camera_enabled: false,
+    camera_mode: 'snapshot',   // snapshot | mjpeg | hls | embed
+    camera_url: '',
+    camera_label: '',
+    camera_refresh_seconds: 5,
+    camera_proxy: false,
+    camera_size: 'small'       // small | medium | large
   },
   privacy: {
     retain_visits_days: 730,
     retain_photos_days: 90,
-    hide_names_on_signout_list: false
+    /*
+     * A licence number is the most identifying thing this system holds, and it
+     * is useful for far less time than the visit record it sits on — long
+     * enough to answer a question about last month, not for two years. It gets
+     * its own, shorter window, cleared from the visit while the visit stays.
+     */
+    retain_id_days: 180,
+    hide_names_on_signout_list: false,
+    /*
+     * What the kiosk tells a visitor about what it is taking. Shown on the
+     * details screen, where the asking happens, rather than buried in a
+     * document they scroll past.
+     */
+    notice_enabled: true,
+    notice_text: '',
+    notice_text_es: ''
   }
 };
 
@@ -344,13 +381,16 @@ function deepMerge(base, override) {
 }
 
 /*
- * Settings saved before email was removed still carry its keys — including an
- * SMTP password and an API key. They are dropped on read so nothing dead is
- * served to the dashboard, and cleared from storage the first time, so the
- * credentials do not sit in the database for a feature that no longer exists.
+ * Settings saved before email and then SMS were removed still carry their
+ * keys — including an SMTP password, an API key and a Twilio auth token. They
+ * are dropped on read so nothing dead is served to the dashboard, and cleared
+ * from storage the first time, so credentials for features that no longer
+ * exist do not sit in the database indefinitely.
  */
 const DEAD_NOTIFY_KEYS = ['email_enabled', 'email_provider', 'email_api_key', 'from_name', 'from_email',
-  'smtp_host', 'smtp_port', 'smtp_secure', 'smtp_user', 'smtp_pass', 'test_email_to'];
+  'smtp_host', 'smtp_port', 'smtp_secure', 'smtp_user', 'smtp_pass', 'test_email_to',
+  'sms_enabled', 'sms_provider', 'twilio_account_sid', 'twilio_auth_token', 'sms_from',
+  'sms_on_signin', 'sms_on_delivery'];
 
 function stripDeadKeys(stored) {
   if (!stored.notify || typeof stored.notify !== 'object') return false;
@@ -359,7 +399,7 @@ function stripDeadKeys(stored) {
   for (const k of found) delete stored.notify[k];
   run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
     'notify', JSON.stringify(stored.notify));
-  console.log(`[settings] removed ${found.length} stored email setting(s) left over from the email notifications`);
+  console.log(`[settings] removed ${found.length} stored setting(s) left over from email and SMS notifications`);
   return true;
 }
 
@@ -425,10 +465,60 @@ function setAll(patch) {
 }
 
 /** Settings safe to expose to an unauthenticated kiosk (no SMTP creds). */
+/**
+ * What the kiosk tells a visitor about what it is taking.
+ *
+ * Written out rather than left to the site to remember, and assembled from
+ * what is actually switched on — a notice mentioning a photo on a kiosk that
+ * never asks for one is worse than none, because it is not true. Anything
+ * typed into the settings box wins outright.
+ */
+function privacyNotice(lang = 'en') {
+  const p = getAll().privacy || {};
+  if (p.notice_enabled === false) return null;
+  const written = lang === 'es' ? (p.notice_text_es || p.notice_text) : p.notice_text;
+  if (written && written.trim()) return written.trim();
+
+  const details = getAll().details || {};
+  const asks = (field) => Object.values(details).some((d) => d && d[field] && d[field] !== 'off');
+  const org = (getAll().org || {}).name || 'this site';
+  const days = Number(p.retain_visits_days) || 0;
+  const idDays = Number(p.retain_id_days) || 0;
+
+  // "a, b and c" — a list joined with a comma throughout reads as one run-on
+  // clause the moment the purpose is appended to it.
+  const listOf = (items, and) => (items.length < 2 ? items[0] || ''
+    : `${items.slice(0, -1).join(', ')} ${and} ${items[items.length - 1]}`);
+
+  if (lang === 'es') {
+    const taken = listOf(['su nombre y los datos que introduzca',
+      asks('photo') ? 'una fotografía' : null,
+      asks('id_scan') ? 'el nombre, el número y el estado emisor de su identificación' : null]
+      .filter(Boolean), 'y');
+    const kept = [days ? `los registros ${days} días` : null,
+      idDays && asks('id_scan') ? `los datos de la identificación ${idDays} días` : null].filter(Boolean);
+    return `${org} registra ${taken}, para saber quién está en las instalaciones, por seguridad y para el `
+      + `control de incendios.${kept.length ? ` Se conservan ${listOf(kept, 'y')}.` : ''} `
+      + 'Puede pedir una copia de sus datos o su eliminación en recepción.';
+  }
+
+  const taken = listOf(['your name and the details you enter',
+    asks('photo') ? 'a photograph' : null,
+    asks('id_scan') ? 'the name, number and issuing state on your ID' : null]
+    .filter(Boolean), 'and');
+  const kept = [days ? `records for ${days} days` : null,
+    idDays && asks('id_scan') ? `ID details for ${idDays} days` : null].filter(Boolean);
+  return `${org} records ${taken}, so we know who is on site for safety and fire roll call.`
+    + `${kept.length ? ` We keep ${listOf(kept, 'and')}.` : ''} `
+    + 'Ask at reception for a copy of your details or to have them removed.';
+}
+
 function publicSettings() {
   const s = getAll();
   return {
     org: s.org,
+    // Only the notice: retention numbers and the rest stay on the server.
+    privacy: { notice: privacyNotice('en'), notice_es: privacyNotice('es') },
     kiosk: s.kiosk,
     types: s.types,
     details: s.details,
@@ -441,6 +531,6 @@ function publicSettings() {
   };
 }
 
-module.exports = { DEFAULTS, getAll, getSection, setSection, setAll, publicSettings, deepMerge,
+module.exports = { DEFAULTS, getAll, getSection, setSection, setAll, publicSettings, privacyNotice, deepMerge,
   isValidTimeZone, isValidLocale, PHONE_COUNTRIES, phoneCountry, DETAIL_FIELDS, fieldsFor,
   FLOW_STEPS, flowFor, configRev, bumpConfigRev, LANGUAGES, inLanguage, sanitizeTypes, TYPE_MODES };

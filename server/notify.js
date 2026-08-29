@@ -1,5 +1,5 @@
 'use strict';
-const { run, get, nowISO } = require('./db');
+const { run, get, all, nowISO } = require('./db');
 const settings = require('./settings');
 const cards = require('./notify-card');
 const photolink = require('./photolink');
@@ -31,8 +31,25 @@ function log(entry) {
 // A row goes in before the attempt and is settled after, so the dashboard can
 // show what is in flight right now, not just what already finished.
 const logStart = (entry) => log({ ...entry, status: 'sending' });
-function logFinish(id, status, error) {
-  run('UPDATE notifications SET status = ?, error = ? WHERE id = ?', status, error || null, id);
+
+/*
+ * How long before a failed post is tried again: a minute, then five, then
+ * twenty-five. Three goes covers a service restarting or a network blip, and
+ * stops well short of posting an arrival to a channel an hour after the person
+ * walked in, which would be worse than not posting it at all.
+ */
+const RETRY_DELAYS_MS = [60_000, 5 * 60_000, 25 * 60_000];
+
+function logFinish(id, status, error, { retryable = false, payload = null } = {}) {
+  const row = get('SELECT attempts FROM notifications WHERE id = ?', id);
+  const attempts = (row && row.attempts) || 1;
+  const delay = retryable ? RETRY_DELAYS_MS[attempts - 1] : undefined;
+  run('UPDATE notifications SET status = ?, error = ?, next_try_at = ?, payload = COALESCE(?, payload) WHERE id = ?',
+    delay ? 'retrying' : status,
+    error || null,
+    delay ? new Date(Date.now() + delay).toISOString() : null,
+    payload ? JSON.stringify(payload) : null,
+    id);
 }
 
 /**
@@ -91,7 +108,14 @@ async function sendWebhook({ url, model, visit_id, delivery_id }) {
 
     // Chat platforms explain refusals in the body, which is the useful part.
     const text = await res.text().catch(() => '');
-    logFinish(logId, res.ok ? 'sent' : `http_${res.status}`, res.ok ? null : text.slice(0, 500));
+    /*
+     * A 404 or a 401 means the webhook is gone or revoked — trying it again in
+     * a minute will fail in exactly the same way. A 429 or a 5xx is the service
+     * having a moment, which is precisely what a retry is for.
+     */
+    const worthRetrying = !res.ok && (res.status === 429 || res.status >= 500);
+    logFinish(logId, res.ok ? 'sent' : `http_${res.status}`, res.ok ? null : text.slice(0, 500),
+      { retryable: worthRetrying, payload: worthRetrying ? { url: target, model } : null });
     return { ok: res.ok, status: res.status, detail: explainWebhookError(res.status, text, format) };
   } catch (err) {
     /*
@@ -108,7 +132,8 @@ async function sendWebhook({ url, model, visit_id, delivery_id }) {
         ? `Could not reach ${name}. Check the link was pasted whole and that the flow still exists — a deleted or `
           + 'turned-off Teams workflow looks exactly like this.'
         : raw;
-    logFinish(logId, 'error', detail);
+    // Never answering, or not being reachable, is the most retryable failure there is.
+    logFinish(logId, 'error', detail, { retryable: true, payload: { url: target, model } });
     return { ok: false, status: 0, detail };
   }
 }
@@ -124,49 +149,6 @@ function explainWebhookError(status, body, format) {
   if (status === 401 || status === 403) return 'The webhook refused the request. It may have been revoked, or your tenant blocks it.';
   if (status === 429) return 'Rate limited — too many messages too quickly.';
   return `The server answered ${status}. ${text}`;
-}
-
-/**
- * SMS via Twilio's REST API — no SDK needed, it is one form POST.
- * Numbers should be in E.164 form (+447700900123); UK 07… numbers are converted.
- */
-function toE164(number, countryCode) {
-  const country = settings.phoneCountry(countryCode || settings.getSection('org').phone_country);
-  const raw = String(number || '').replace(/[^\d+]/g, '');
-  if (!raw) return null;
-  if (raw.startsWith('+')) return raw;
-  if (raw.startsWith('00')) return `+${raw.slice(2)}`;
-  // Countries with a trunk prefix drop it: UK 07700 900123 -> +447700900123.
-  if (country.trunk && raw.startsWith(country.trunk)) return `${country.dial}${raw.slice(country.trunk.length)}`;
-  // Locally typed numbers without a country code, e.g. US 5551234567 -> +15551234567.
-  if (!country.trunk && raw.length <= 10) return `${country.dial}${raw}`;
-  return `+${raw}`;
-}
-
-async function sendSms({ to, message, visit_id, delivery_id }) {
-  const n = settings.getSection('notify');
-  const number = toE164(to);
-  if (!n.sms_enabled || !n.twilio_account_sid || !n.twilio_auth_token || !n.sms_from || !number) {
-    log({ visit_id, delivery_id, channel: 'sms', target: to, subject: null,
-      status: n.sms_enabled ? 'skipped_no_number' : 'skipped_disabled' });
-    return false;
-  }
-  const url = `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(n.twilio_account_sid)}/Messages.json`;
-  const auth = Buffer.from(`${n.twilio_account_sid}:${n.twilio_auth_token}`).toString('base64');
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ To: number, From: n.sms_from, Body: message.slice(0, 600) })
-    });
-    const data = await res.json().catch(() => ({}));
-    log({ visit_id, delivery_id, channel: 'sms', target: number, subject: null,
-      status: res.ok ? 'sent' : `error_${res.status}`, error: res.ok ? null : (data.message || '') });
-    return res.ok;
-  } catch (err) {
-    log({ visit_id, delivery_id, channel: 'sms', target: number, status: 'error', error: String(err.message || err) });
-    return false;
-  }
 }
 
 const fmtTime = (iso) => {
@@ -190,6 +172,17 @@ function visitDetail(visitId) {
               WHERE v.id = ?`, visitId);
 }
 
+/**
+ * Whether this kind of visitor is one the site wants to hear about.
+ *
+ * Absent from the map means yes, so a visitor type added later is announced
+ * rather than quietly ignored until somebody notices the silence.
+ */
+function typeNotified(visitType) {
+  const map = settings.getSection('notify').types_notified || {};
+  return map[visitType] !== false;
+}
+
 /** Everything the card builder needs that is not on the visit row itself. */
 const cardContext = (extra) => ({
   org: settings.getSection('org'),
@@ -203,19 +196,14 @@ async function notifyArrival(visitId) {
   if (!n.on_signin) return;
   const v = visitDetail(visitId);
   if (!v) return;
+  if (!typeNotified(v.visit_type)) return;
 
   const model = cards.buildModel(v, n.card, cardContext({
     photoUrl: cardPhotoUrl(v),
     fallbackTitle: `${v.full_name} has arrived`
   }));
 
-  await Promise.all([
-    sendWebhooks({ ownUrl: v.host_webhook, model, visit_id: visitId }),
-    n.sms_on_signin
-      ? sendSms({ to: v.host_phone,
-        message: `${model.title}. ${v.company ? v.company + '. ' : ''}Reception.`, visit_id: visitId })
-      : Promise.resolve(false)
-  ]);
+  await sendWebhooks({ ownUrl: v.host_webhook, model, visit_id: visitId });
 }
 
 async function notifyDeparture(visitId) {
@@ -223,12 +211,14 @@ async function notifyDeparture(visitId) {
   if (!n.on_signout) return;
   const v = visitDetail(visitId);
   if (!v) return;
+  if (!typeNotified(v.visit_type)) return;
   const model = cards.plainModel({
     title: `${v.full_name} has signed out`,
     lines: [`Signed out: ${fmtTime(v.signed_out_at)}`, v.host_name ? `Staff member: ${v.host_name}` : null].filter(Boolean),
     photoUrl: cardPhotoUrl(v),
     org: settings.getSection('org'),
-    card: n.card
+    card: n.card,
+    mention: { name: v.host_name, email: v.host_email }
   });
   await sendWebhooks({ ownUrl: v.host_webhook, model, visit_id: visitId });
 }
@@ -252,20 +242,117 @@ async function notifyDelivery(deliveryId) {
     // A parcel photo is a box, not a person, so it is never behind the toggle.
     photoUrl: null,
     org: settings.getSection('org'),
-    card: n.card
+    card: n.card,
+    // Whoever the parcel is for, if they are a staff member with an address.
+    mention: { name: d.host_name, email: d.host_email }
   });
-  await Promise.all([
-    sendWebhooks({ ownUrl: d.host_webhook, model, delivery_id: deliveryId }),
-    n.sms_on_delivery
-      ? sendSms({ to: d.host_phone, message: `${model.title}. ${d.parcel_count} parcel(s) at reception.`, delivery_id: deliveryId })
-      : Promise.resolve(false)
-  ]);
+  await sendWebhooks({ ownUrl: d.host_webhook, model, delivery_id: deliveryId });
 }
 
-/** Turn an SMTP failure into something a person can act on. */
-async function sendTestSms(to) {
-  return sendSms({ to, message: 'Smart Lobby test message. If you can read this, SMS notifications are working.' });
+/**
+ * Try again, for the posts that were worth trying again.
+ *
+ * Each retry updates the row it came from rather than adding a new one, so the
+ * activity list shows one arrival with three attempts against it rather than
+ * three arrivals — the log is meant to answer "did this person's host get
+ * told", and a row per attempt buries that.
+ */
+async function retryPending() {
+  const due = all(
+    `SELECT id, target, payload, attempts FROM notifications
+     WHERE status = 'retrying' AND next_try_at IS NOT NULL AND next_try_at <= ? LIMIT 20`, nowISO());
+  for (const row of due) {
+    let payload;
+    try { payload = JSON.parse(row.payload); } catch { payload = null; }
+    if (!payload || !payload.url || !payload.model) {
+      run("UPDATE notifications SET status = 'error', next_try_at = NULL WHERE id = ?", row.id);
+      continue;
+    }
+    const attempts = row.attempts + 1;
+    run('UPDATE notifications SET attempts = ?, next_try_at = NULL WHERE id = ?', attempts, row.id);
+    const format = detectWebhookFormat(payload.url) || settings.getSection('notify').webhook_format;
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch(payload.url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cards.render(format, payload.model)), signal: controller.signal
+      });
+      clearTimeout(timer);
+      const text = await res.text().catch(() => '');
+      // Out of goes: it stays failed, and the dashboard says so.
+      const again = !res.ok && attempts <= RETRY_DELAYS_MS.length && (res.status === 429 || res.status >= 500);
+      run('UPDATE notifications SET status = ?, error = ?, next_try_at = ? WHERE id = ?',
+        res.ok ? 'sent' : again ? 'retrying' : `http_${res.status}`,
+        res.ok ? null : text.slice(0, 500),
+        again ? new Date(Date.now() + RETRY_DELAYS_MS[attempts - 1]).toISOString() : null,
+        row.id);
+      if (res.ok) console.log(`[notify] retry ${attempts} delivered #${row.id}`);
+    } catch (err) {
+      const again = attempts <= RETRY_DELAYS_MS.length;
+      run('UPDATE notifications SET status = ?, error = ?, next_try_at = ? WHERE id = ?',
+        again ? 'retrying' : 'error', String(err.message || err).slice(0, 300),
+        again ? new Date(Date.now() + RETRY_DELAYS_MS[attempts - 1]).toISOString() : null,
+        row.id);
+    }
+  }
+  return due.length;
 }
 
-module.exports = { notifyArrival, notifyDeparture, notifyDelivery, sendTestSms, sendWebhook, sendWebhooks,
-  webhookTargets, sendSms, toE164, baseUrl, cardPhotoUrl, cardContext, visitDetail, fmtTime };
+/**
+ * Whether anyone should be worried, for the banner on the dashboard.
+ *
+ * Failures have always been recorded; nothing has ever raised a hand about
+ * them. A deleted Teams flow looks exactly like everything being fine until
+ * somebody thinks to open the activity list, by which point a fortnight of
+ * arrivals have gone unannounced.
+ */
+function health() {
+  const since = new Date(Date.now() - 24 * 3600_000).toISOString();
+  const recent = all(
+    `SELECT status FROM notifications WHERE channel = 'webhook' AND created_at >= ?`, since);
+  const failed = recent.filter((r) => r.status !== 'sent' && r.status !== 'sending' && r.status !== 'retrying').length;
+  const waiting = all("SELECT id FROM notifications WHERE status = 'retrying'").length;
+
+  const quiet = all(
+    `SELECT name, last_seen_at FROM devices
+     WHERE last_seen_at IS NOT NULL AND last_seen_at < ? ORDER BY last_seen_at`,
+    new Date(Date.now() - 60 * 60_000).toISOString());
+
+  const configured = !!settings.getSection('notify').global_webhook_url;
+  return {
+    notifications: { sent: recent.length - failed, failed, waiting, configured, window_hours: 24 },
+    quiet_devices: quiet.map((d) => ({ name: d.name, last_seen_at: d.last_seen_at }))
+  };
+}
+
+/**
+ * Somebody has finished the site induction.
+ *
+ * Off by default — on a busy gate it doubles the traffic in the channel — but
+ * the one a safety officer actually wants, because it is the moment the
+ * briefing is on record rather than the moment somebody walked in.
+ */
+async function notifyInduction(visitId) {
+  const n = settings.getSection('notify');
+  if (!n.on_induction) return;
+  const v = visitDetail(visitId);
+  if (!v || !typeNotified(v.visit_type)) return;
+  const model = cards.plainModel({
+    title: `${v.full_name} has completed the site induction`,
+    lines: [
+      v.company ? `Company: ${v.company}` : null,
+      `Type: ${v.visit_type}`,
+      `Completed: ${fmtTime(nowISO())}`
+    ].filter(Boolean),
+    photoUrl: cardPhotoUrl(v),
+    org: settings.getSection('org'),
+    card: n.card,
+    mention: { name: v.host_name, email: v.host_email }
+  });
+  await sendWebhooks({ ownUrl: v.host_webhook, model, visit_id: visitId });
+}
+
+module.exports = { notifyArrival, notifyDeparture, notifyDelivery, notifyInduction,
+  sendWebhook, sendWebhooks, webhookTargets, baseUrl, cardPhotoUrl, cardContext, visitDetail, fmtTime,
+  retryPending, health, RETRY_DELAYS_MS, typeNotified };

@@ -337,3 +337,16 @@ code.token { background: var(--bg); padding: .15rem .4rem; border-radius: 5px; f
 .copy-row { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
 .copy-row code.token { flex: 1 1 18rem; padding: .5rem .6rem; user-select: all; }
 .copy-row .btn { white-space: nowrap; }
+
+/* Ten rows, then scroll: an activity log that grows without bound pushes
+   everything under it off the page. */
+.scroll-10 { max-height: 26rem; overflow-y: auto; }
+.scroll-10 thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+
+/* The literal request body, for telling "we sent that" from "Teams added that". */
+.json-dump {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: .7rem;
+  font-size: .72rem; line-height: 1.45; max-height: 22rem; overflow: auto; white-space: pre;
+}
+.tp-mention { margin-top: .45rem; }
+.tp-at { background: #e8ebfa; color: #4f52b2; border-radius: 3px; padding: 0 .2rem; font-weight: 600; }

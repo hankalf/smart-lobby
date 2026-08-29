@@ -427,6 +427,15 @@ function migrate() {
    * query parameter, is what survives "Add to Home Screen" on an iPad.
    */
   addColumn('devices', 'slug', 'TEXT');
+
+  /*
+   * A webhook post that fails is worth trying again — Teams having a bad thirty
+   * seconds should not cost an arrival its notification. These carry what is
+   * needed to send it a second time, and how many goes it has had.
+   */
+  addColumn('notifications', 'attempts', 'INTEGER NOT NULL DEFAULT 1');
+  addColumn('notifications', 'payload', 'TEXT');
+  addColumn('notifications', 'next_try_at', 'TEXT');
   backfillDeviceSlugs();
   exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_slug ON devices(slug)');
   /*

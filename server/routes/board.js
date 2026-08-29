@@ -82,6 +82,15 @@ router.get('/:key/data', boardLimit, allow, (req, res) => {
                     ORDER BY v.signed_out_at DESC LIMIT 25`, since).map(shape);
 
   res.set('Cache-Control', 'no-store').json({
+    camera: b.camera_enabled && b.camera_url ? {
+      mode: b.camera_mode || 'snapshot',
+      // Through the server when asked for, so the page sees a same-origin
+      // https URL and the browser's mixed-content rule stops applying.
+      url: b.camera_proxy ? `/api/board/${encodeURIComponent(req.params.key)}/camera` : b.camera_url,
+      label: b.camera_label || '',
+      refresh: Math.min(60, Math.max(1, Number(b.camera_refresh_seconds) || 5)),
+      size: b.camera_size || 'small'
+    } : null,
     title: b.title || org.name || 'Smart Lobby',
     logo: org.logo_path || null,
     timezone: org.timezone || null,
@@ -102,6 +111,57 @@ router.get('/:key/photo/:id', boardLimit, allow, (req, res) => {
   if (!abs) return res.status(404).end();
   res.setHeader('Cache-Control', 'private, max-age=300');
   res.sendFile(abs);
+});
+
+/**
+ * The camera picture, fetched by the server rather than the browser.
+ *
+ * This exists for one reason: the board is https, and a browser refuses to
+ * load an http image into an https page. Going through the server turns the
+ * camera into a same-origin https URL and the rule stops applying — but only
+ * where the server can reach the camera at all, which a cloud host cannot do
+ * for something on your local network.
+ *
+ * The URL is set by a signed-in admin, so this is not a hole anyone else can
+ * point somewhere; even so it follows no redirects, gives up quickly, and
+ * passes through only images, so it cannot be turned into a general fetcher
+ * for the inside of the network the server sits on.
+ */
+router.get('/:key/camera', boardLimit, allow, async (req, res) => {
+  const b = settings.getSection('board');
+  if (!b.camera_enabled || !b.camera_url) return res.status(404).end();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const upstream = await fetch(b.camera_url, { redirect: 'error', signal: controller.signal });
+    // The timeout covers getting an answer, not the stream that follows: an
+    // MJPEG feed is one response that never ends, and aborting it at ten
+    // seconds would make the picture freeze every ten seconds.
+    clearTimeout(timer);
+    if (!upstream.ok) return res.status(502).json({ error: 'camera_unreachable', status: upstream.status });
+    const type = upstream.headers.get('content-type') || '';
+    if (!/^(image|multipart|video)\//i.test(type)) {
+      return res.status(502).json({ error: 'not_an_image', detail: type.slice(0, 60) });
+    }
+    res.setHeader('Content-Type', type);
+    res.setHeader('Cache-Control', 'no-store');
+    // Streamed rather than buffered, so an MJPEG feed keeps flowing.
+    const reader = upstream.body.getReader();
+    req.on('close', () => reader.cancel().catch(() => {}));
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!res.write(Buffer.from(value))) {
+        await new Promise((resolve) => res.once('drain', resolve));
+      }
+    }
+    res.end();
+  } catch (err) {
+    if (!res.headersSent) res.status(502).json({ error: 'camera_failed', detail: String(err.message || err).slice(0, 120) });
+    else res.end();
+  } finally {
+    clearTimeout(timer);
+  }
 });
 
 module.exports = { router, newKey, keyMatches };

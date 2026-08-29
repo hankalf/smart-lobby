@@ -406,3 +406,9 @@ body:has(.screen[data-screen="induction"]:not([hidden])) .lang-toggle { display:
 .panel.doc-full { max-width: min(64rem, 96vw); }
 .doc-scroll { margin: 0 0 .6rem; }
 .doc-scroll.hidden { display: none; }
+
+/* What we take and for how long, under the form that takes it. */
+.privacy-note {
+  margin: 1rem 0 0; font-size: .82rem; line-height: 1.5; color: var(--ink-soft, #667);
+  border-top: 1px solid var(--line, #dde3e0); padding-top: .75rem;
+}

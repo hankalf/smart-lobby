@@ -42,6 +42,27 @@
     toast._t = setTimeout(() => t.classList.add('hidden'), ms);
   }
 
+  /** The same, with a way back from what just happened. */
+  function toastUndo(msg, undo, ms = 8000) {
+    const t = $('#toast');
+    t.innerHTML = '';
+    t.append(msg + ' ');
+    const btn = document.createElement('button');
+    btn.className = 'btn link';
+    btn.type = 'button';
+    btn.textContent = 'Undo';
+    btn.style.color = '#fff';
+    btn.addEventListener('click', async () => {
+      t.classList.add('hidden');
+      clearTimeout(toast._t);
+      try { await undo(); } catch { toast('Could not undo that'); }
+    });
+    t.append(btn);
+    t.classList.remove('hidden');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => t.classList.add('hidden'), ms);
+  }
+
   /*
    * Times are shown on the site's clock, not the one this dashboard happens to
    * be open on. Someone checking the gate from head office in another country
@@ -320,6 +341,35 @@
 
   /* ------------------------------------------------------------ dashboard */
 
+  /*
+   * The things that break silently.
+   *
+   * A deleted Teams flow and a kiosk that stopped talking both look exactly
+   * like everything being fine — the failures were recorded all along, but
+   * only somebody who thought to open the activity list would ever see them.
+   * These say it on the page people actually look at.
+   */
+  function healthNotices(h) {
+    if (!h) return '';
+    const out = [];
+    const n = h.notifications || {};
+    if (n.failed > 0) {
+      out.push(`<div class="notice error"><b>${n.failed} notification${n.failed === 1 ? '' : 's'} failed
+        in the last ${n.window_hours} hours.</b> Arrivals may not be reaching Teams. The reason for each is under
+        <b>Settings → Notifications → Activity</b>${n.waiting ? `, and ${n.waiting} are waiting to be tried again` : ''}.</div>`);
+    } else if (n.waiting) {
+      out.push(`<div class="notice">${n.waiting} notification${n.waiting === 1 ? ' is' : 's are'} waiting to be
+        sent again after a failure.</div>`);
+    }
+    if ((h.quiet_devices || []).length) {
+      const names = h.quiet_devices.map((d) => esc(d.name)).join(', ');
+      out.push(`<div class="notice error"><b>No word from ${names}</b> for over an hour.
+        A kiosk that has stopped checking in is either switched off or off the network —
+        anyone signing in on it is being queued, not recorded.</div>`);
+    }
+    return out.join('');
+  }
+
   VIEWS.dashboard = async (root) => {
     const d = await api('/dashboard');
     const max = Math.max(1, ...d.week.map((w) => w.n));
@@ -328,6 +378,7 @@
       <p class="page-sub">Live view of who is on site right now.</p>
       ${d.storage_warning ? `<div class="notice error" style="font-size:1rem">
         <b>Storage is not persistent.</b> ${esc(d.storage_warning)}</div>` : ''}
+      ${healthNotices(d.health)}
       <div class="grid cards" style="margin-bottom:1.25rem">
         ${[['On site now', d.stats.onsite], ['Signed in today', d.stats.today_in], ['Signed out today', d.stats.today_out],
            ['Parcels waiting', d.stats.deliveries_waiting], ['Inductions today', d.stats.inductions_today],
@@ -383,9 +434,24 @@
 
   function bindSignoutButtons(root, after) {
     $$('[data-signout]', root).forEach((b) => b.addEventListener('click', async () => {
-      await api(`/visits/${b.dataset.signout}/signout`, { method: 'POST' });
-      toast('Signed out');
+      const id = b.dataset.signout;
+      await api(`/visits/${id}/signout`, { method: 'POST' });
+      // Sign-out is one tap beside somebody else's name; the way back should be too.
+      toastUndo('Signed out', async () => {
+        await api(`/visits/${id}/undo-signout`, { method: 'POST' });
+        toast('Back on site');
+        after();
+      });
       after();
+    }));
+    $$('[data-undo-signout]', root).forEach((b) => b.addEventListener('click', async () => {
+      try {
+        await api(`/visits/${b.dataset.undoSignout}/undo-signout`, { method: 'POST' });
+        toast('Back on site');
+        after();
+      } catch (err) {
+        toast((err.data && err.data.message) || 'Could not put them back on site');
+      }
     }));
     // Reprinting from wherever somebody is standing when they are asked for it.
     $$('[data-reprint]', root).forEach((b) => b.addEventListener('click', () => reprintBadge(b.dataset.reprint)));
@@ -446,9 +512,14 @@
           <td><b>${esc(r.full_name)}</b></td><td>${esc(r.company || '')}</td><td>${esc(r.visit_type)}</td>
           <td>${esc(r.host_name || '')}</td><td>${fmtDate(r.signed_in_at)}</td><td>${fmtDate(r.signed_out_at)}</td>
           <td><span class="pill ${r.status === 'onsite' ? 'on' : 'off'}">${r.status}</span></td>
-          <td><button class="btn ghost" data-visit="${r.id}">View</button></td></tr>`).join('')}</tbody></table>`
+          <td style="white-space:nowrap"><button class="btn ghost" data-visit="${r.id}">View</button>
+            ${r.status === 'onsite'
+              ? `<button class="btn ghost" data-signout="${r.id}">Sign out</button>`
+              : `<button class="btn ghost" data-undo-signout="${r.id}">Back on site</button>`}
+          </td></tr>`).join('')}</tbody></table>`
         : '<p class="empty">No visits match those filters.</p>';
       $$('[data-visit]').forEach((b) => b.addEventListener('click', () => visitDetail(b.dataset.visit)));
+      bindSignoutButtons($('#v-results'), load);
     };
     $('#v-search').addEventListener('click', load);
     $('#v-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
@@ -2744,9 +2815,10 @@
 
       <div class="card section" id="set-notifications"><h2>Notifications</h2>
         <h3>Microsoft Teams</h3>
-        <p class="muted" style="margin-top:0">Arrivals go to a Teams channel everybody watches, and to the individual
-          person being visited. Each staff member's own Teams link lives on their record under <b>Staff</b>; the
-          channel below is the one that sees everything.</p>
+        <p class="muted" style="margin-top:0">Arrivals go to one Teams channel, and the person being visited is
+          tagged in the post using the email on their <b>Staff</b> record — so they get a notification without
+          anybody setting up a link of their own. A staff member who wants their own direct message can still paste
+          a personal Teams link on their record.</p>
         ${chk('notify.webhook_channel_always', 'Post every arrival to the company channel',
           'With this off, the channel is only used for people who have no Teams link of their own')}
         <div class="form-grid">
@@ -2824,6 +2896,13 @@
             <p class="muted" style="margin:.6rem 0 .3rem">Not shown</p>
             <div class="section-order" id="cd-rest"></div>
 
+            <h4>Tagging the host</h4>
+            <label class="check"><input type="checkbox" id="cd-mention">
+              <span>Tag the person being visited in the channel post<br>
+              <span class="muted">Uses the email on their <b>Staff</b> record, so the one person who needs to know
+                gets a Teams notification without setting up a link of their own. Somebody with no email on file is
+                simply not tagged.</span></span></label>
+
             <h4>Button</h4>
             <label class="check"><input type="checkbox" id="cd-button"> <span>Add a button that opens the dashboard</span></label>
             <label class="field"><span>Button wording</span><input class="input" id="cd-button-label"></label>
@@ -2833,6 +2912,14 @@
             <div class="muted" style="margin-bottom:.4rem">Preview</div>
             <div id="cd-preview" class="teams-preview"><p class="empty">Loading…</p></div>
             <p class="muted" id="cd-sample"></p>
+            <details class="sub-fold">
+              <summary><h3>Exactly what we send</h3></summary>
+              <p class="muted" style="margin-top:0">The whole request body, as Teams receives it. If something
+                appears in the channel that is not in here — an extra line, a footer, a link — it was added by the
+                Teams workflow receiving this, not by Smart Lobby, and it is removed by editing that flow in Power
+                Automate.</p>
+              <pre class="json-dump" id="cd-json"></pre>
+            </details>
             <label class="field" style="margin-top:.75rem"><span>Public address of this server</span>
               <input class="input" data-set="notify.public_url" placeholder="https://your-app.up.railway.app"
                 value="${esc(s.notify.public_url || '')}">
@@ -2841,26 +2928,36 @@
           </div>
         </div>
 
-        <h3>SMS (Twilio)</h3>
-        ${chk('notify.sms_enabled', 'Send text messages to hosts', 'Uses the mobile number on each staff record')}
-        <div class="form-grid">
-          ${txt('notify.twilio_account_sid', 'Twilio Account SID')}
-          ${txt('notify.twilio_auth_token', 'Twilio Auth Token', 'password')}
-          ${txt('notify.sms_from', 'Send from number', 'text', '+441234567890')}
+        <h3>When to post</h3>
+        <p class="muted" style="margin-top:0">Which moments are worth interrupting a channel for.</p>
+        <div class="check-list">
+          ${chk('notify.on_signin', 'Someone signs in')}
+          ${chk('notify.on_signout', 'Someone signs out')}
+          ${chk('notify.on_induction', 'Someone finishes the site induction',
+            'The moment the briefing is on record, rather than the moment they walked in')}
+          ${chk('notify.on_delivery', 'A parcel arrives')}
         </div>
-        ${chk('notify.sms_on_signin', 'Text the staff member when a visitor arrives')}
-        ${chk('notify.sms_on_delivery', 'Text the recipient when a parcel arrives')}
-        <div class="row"><button class="btn subtle" id="test-hook">Send test to Teams</button>
-          <button class="btn subtle" id="test-sms">Send test SMS</button>
-          <input class="input" id="test-sms-to" placeholder="Number for the test SMS" style="max-width:15rem"></div>
+
+        <h4>Who to post about</h4>
+        <p class="muted" style="margin-top:0">Applies to signing in, signing out and the induction. A type added later
+          on the <b>Visitor types</b> tab starts switched on, so a new one is never silently ignored.</p>
+        <div class="section-order">
+          ${detailTypes().map(([type, label]) => `<div class="section-row">
+            <span>${esc(label)}</span>
+            <label class="check"><input type="checkbox" data-notifytype="${esc(type)}"
+              ${(s.notify.types_notified || {})[type] === false ? '' : 'checked'}> <span>Post</span></label>
+          </div>`).join('') || '<div class="section-row off"><span>No visitor types yet.</span></div>'}
+        </div>
+
+        <div class="row" style="margin-top:1rem"><button class="btn subtle" id="test-hook">Send test to Teams</button></div>
         <div id="email-result"></div>
 
         <h3>Activity</h3>
         <p class="muted" style="margin-top:0">The last 50 attempts on every channel — what is being sent right now,
-          what went through, what failed and why, and what was skipped because a channel is switched off.</p>
+          what went through, what failed and why, and what is queued to be tried again.</p>
         <div class="row" style="margin:.4rem 0"><span id="notify-summary"></span>
           <button class="btn ghost" id="notify-refresh" type="button">Refresh</button></div>
-        <div class="table-wrap" id="notify-log"><p class="muted">Loading…</p></div>
+        <div class="table-wrap scroll-10" id="notify-log"><p class="muted">Loading…</p></div>
       </div>
 
       <div class="card section" id="set-board"><h2>Live on-site board</h2>
@@ -2879,13 +2976,77 @@
           ${chk('board.show_company', 'Show company')}
           ${chk('board.show_host', 'Show who they are visiting')}
         </div>
+        <p class="muted">The board also has a <b>Roll call</b> button: the same list, bigger, where you tap each
+          person as they are found at the muster point. What you have ticked stays on that device and clears when
+          the tab is closed.</p>
+
+        <h3>Camera</h3>
+        ${chk('board.camera_enabled', 'Show a camera on the board')}
+        <div class="notice" id="camera-warning" style="font-size:.9rem">
+          <b>Before you paste a URL, the awkward part.</b> The board is served over <b>https</b>, and a browser will
+          not load an <b>http</b> picture into an https page — so a camera on your local network, which is almost
+          always plain http, cannot be shown directly however the address is written. Two ways round it:
+          give the camera an https address of its own (a reverse proxy or a tunnel), or tick
+          <b>Fetch through the server</b> below — which only works if <i>this server</i> can reach the camera, and a
+          server in the cloud cannot see your local network. RTSP addresses cannot be shown by a browser at all.
+        </div>
+        <div class="form-grid">
+          <label class="field"><span>How the camera serves its picture</span>
+            <select class="input" data-set="board.camera_mode">
+              ${[['snapshot', 'A still image, refreshed — snapshot.jpg'],
+                 ['mjpeg', 'MJPEG stream — one long-running image'],
+                 ['hls', 'HLS video — .m3u8'],
+                 ['embed', 'The camera’s own page, in a frame']]
+                .map(([v, l]) => `<option value="${v}" ${(s.board.camera_mode || 'snapshot') === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+            <span class="muted">Most cameras offer a snapshot URL; it is the one that works almost everywhere</span></label>
+          ${txt('board.camera_url', 'Camera address', 'text', 'https://camera.example.com/snapshot.jpg')}
+          ${txt('board.camera_label', 'Label on the box', 'text', 'Front gate')}
+          ${txt('board.camera_refresh_seconds', 'Refresh a still image every (seconds)', 'number')}
+          <label class="field"><span>Size on the board</span>
+            <select class="input" data-set="board.camera_size">
+              ${[['small', 'Small'], ['medium', 'Medium'], ['large', 'Large']]
+                .map(([v, l]) => `<option value="${v}" ${(s.board.camera_size || 'small') === v ? 'selected' : ''}>${l}</option>`).join('')}
+            </select>
+            <span class="muted">Clicking the box on the board makes it big either way</span></label>
+        </div>
+        ${chk('board.camera_proxy', 'Fetch through the server',
+          'Fixes the http/https problem, but only for a camera this server can reach itself')}
+        <div class="row"><button class="btn subtle" id="camera-test" type="button">Test the camera</button></div>
+        <div id="camera-result"></div>
       </div>
 
-      <div class="card section" id="set-retention"><h2>Data retention</h2>
+      <div class="card section" id="set-retention"><h2>Data retention &amp; privacy</h2>
         <div class="form-grid">
           ${txt('privacy.retain_visits_days', 'Delete visit records after (days)', 'number')}
           ${txt('privacy.retain_photos_days', 'Delete visitor photos after (days)', 'number')}
+          ${txt('privacy.retain_id_days', 'Clear scanned ID details after (days)', 'number')}
         </div>
+        <p class="muted">A licence number is the most identifying thing here and is useful for far less time than the
+          visit it sits on. Clearing it empties the three ID fields and leaves the rest of the visit alone.</p>
+
+        <h3>What the kiosk tells visitors</h3>
+        ${chk('privacy.notice_enabled', 'Show a privacy note on the details screen',
+          'Under the form that asks, not buried in a document nobody reads')}
+        <div class="field-list">
+          <label class="field"><span>Wording</span>
+            <textarea class="input" rows="3" data-set="privacy.notice_text"
+              placeholder="Leave empty and one is written for you">${esc(s.privacy.notice_text || '')}</textarea>
+            <span class="muted">Left empty, the kiosk shows a note built from what you actually ask for and how
+              long you keep it — so it cannot claim to take a photo on a kiosk that never asks for one.</span></label>
+          <label class="field"><span>Wording en español</span>
+            <textarea class="input" rows="3" data-set="privacy.notice_text_es"
+              placeholder="Opcional">${esc(s.privacy.notice_text_es || '')}</textarea></label>
+        </div>
+        <div id="privacy-preview"></div>
+      </div>
+
+      <div class="card section" id="set-backups"><h2>Backups</h2>
+        <p class="muted" style="margin-top:0">A copy of the whole database is written every night and the last seven
+          are kept. They sit on the same volume as the live data, so they answer &ldquo;something corrupted the
+          database&rdquo; — not &ldquo;the volume is gone&rdquo;. For that, download one and keep it somewhere else.</p>
+        <div class="row"><button class="btn subtle" id="backup-now" type="button">Back up now</button></div>
+        <div id="backup-list"><p class="muted">Loading…</p></div>
       </div>
 
       <div class="card section" id="set-deleted"><h2>Deleted records</h2>
@@ -2896,20 +3057,39 @@
       </div>
 
       <div class="card section" id="set-users"><h2>Admin users</h2>
+        <h3 style="margin-top:0">Your account</h3>
+        <p class="muted" style="margin-top:0">Signed in as <b>${esc((ME && (ME.name || ME.email)) || '')}</b>.
+          Changing your password signs out any other browser signed in as you.</p>
+        <div class="inline-form">
+          <label class="field"><span>Current password</span>
+            <input class="input" id="pw-current" type="password" autocomplete="current-password"></label>
+          <label class="field"><span>New password</span>
+            <input class="input" id="pw-new" type="password" autocomplete="new-password"></label>
+          <label class="field"><span>New password again</span>
+            <input class="input" id="pw-again" type="password" autocomplete="new-password"></label>
+          <button class="btn" id="pw-save" type="button">Change password</button>
+        </div>
+        <div id="pw-result"></div>
+
+        <h3>Everyone with a login</h3>
         <div class="table-wrap"><table><tbody>${users.map((u) => `<tr><td><b>${esc(u.name || u.email)}</b><div class="muted">${esc(u.email)}</div></td>
-          <td>${esc(u.role)}</td><td>${u.id === (ME && ME.id) ? '<span class="muted">you</span>'
-            : `<button class="btn ghost" data-udel="${u.id}">Remove</button>`}</td></tr>`).join('')}</tbody></table></div>
+          <td>${esc(u.role)}</td><td style="white-space:nowrap">${u.id === (ME && ME.id) ? '<span class="muted">you</span>'
+            : `${(ME && ME.role === 'owner') ? `<button class="btn subtle" data-upw="${u.id}" data-uemail="${esc(u.email)}">Set password</button> ` : ''}
+               <button class="btn ghost" data-udel="${u.id}">Remove</button>`}</td></tr>`).join('')}</tbody></table></div>
         <div class="inline-form" style="margin-top:1rem">
           <label class="field"><span>Name</span><input class="input" id="u-name"></label>
           <label class="field"><span>Email</span><input class="input" id="u-email" type="email"></label>
           <label class="field"><span>Password</span><input class="input" id="u-pass" type="password" autocomplete="new-password"></label>
           <button class="btn" id="u-add">Add user</button>
         </div>
+        <p class="muted">Nobody can sign in at all? There is no reset email to send — run
+          <code>node scripts/reset-password.js you@example.com &#39;a new password&#39;</code> on the server
+          holding the data. On Railway that is a one-off command against this service.</p>
       </div>
 
       <div class="card section" id="set-activity"><h2>Activity log</h2>
         <p class="muted" style="margin-top:0">Who changed what, and when.</p>
-        <div id="audit-list"><p class="empty">Loading…</p></div>
+        <div id="audit-list" class="scroll-10"><p class="empty">Loading…</p></div>
       </div>
 
       <div class="row"><button class="btn" id="save-settings">Save settings</button></div>`;
@@ -2940,6 +3120,7 @@
     cdSet('#cd-button-label', card.button_label);
     $('#cd-photo').checked = card.show_photo !== false;
     $('#cd-button').checked = !!card.show_button;
+    $('#cd-mention').checked = card.mention_host !== false;
 
     function readCard() {
       card.header_style = $('#cd-header').value;
@@ -2952,9 +3133,21 @@
       card.photo_shape = $('#cd-photo-shape').value;
       card.show_button = $('#cd-button').checked;
       card.button_label = $('#cd-button-label').value;
+      card.mention_host = $('#cd-mention').checked;
       return card;
     }
     VIEWS.settings.collectCard = () => readCard();
+
+    /*
+     * Stored as "false means no", so a visitor type created after this was
+     * last saved is not sitting silently at the bottom of a map nobody
+     * remembers to update.
+     */
+    VIEWS.settings.collectNotifyTypes = () => {
+      const out = {};
+      $$('[data-notifytype]').forEach((el) => { out[el.dataset.notifytype] = el.checked; });
+      return out;
+    };
 
     const FIELD_LABEL = (id) => (CARD_FIELDS.find((f) => f.id === id) || {}).label || id;
     const FIELD_SENSITIVE = (id) => !!(CARD_FIELDS.find((f) => f.id === id) || {}).sensitive;
@@ -3013,6 +3206,8 @@
       }
       if (!CARD_FIELDS.length) { CARD_FIELDS = data.fields; drawCardFields(); }
       $('#cd-preview').innerHTML = teamsPreviewHtml(data.model);
+      const dump = $('#cd-json');
+      if (dump) dump.textContent = JSON.stringify(data.teams, null, 2);
       $('#cd-sample').textContent = data.sample
         ? 'Nobody has signed in yet, so this shows made-up details.'
         : 'Shown with your most recent arrival.';
@@ -3033,7 +3228,9 @@
         ? `<img class="tp-photo ${m.photoShape === 'person' ? 'round' : ''}" src="${esc(m.photoUrl)}" alt="">`
         : '';
       const heading = `<div class="tp-title tp-${esc(m.headerStyle)}">${esc(m.title)}</div>
-        ${m.subtitle ? `<div class="tp-sub">${esc(m.subtitle)}</div>` : ''}`;
+        ${m.subtitle ? `<div class="tp-sub">${esc(m.subtitle)}</div>` : ''}
+        ${m.mention ? `<div class="tp-mention"><span class="tp-at">@${esc(m.mention.name)}</span>
+           — your visitor is here.</div>` : ''}`;
       const details = m.fields.length
         ? (m.detailsStyle === 'facts'
           ? `<div class="tp-facts">${m.fields.map((f) => `<div class="tp-fact-l">${esc(f.label)}</div>
@@ -3052,7 +3249,7 @@
     }
 
     ['#cd-header', '#cd-details', '#cd-title', '#cd-subtitle', '#cd-footer', '#cd-photo',
-      '#cd-photo-place', '#cd-photo-shape', '#cd-button', '#cd-button-label']
+      '#cd-photo-place', '#cd-photo-shape', '#cd-button', '#cd-button-label', '#cd-mention']
       .forEach((sel) => { const el = $(sel); if (el) el.addEventListener('input', drawCardPreview); });
 
     // Drawn as soon as the panel is opened, not on a settings page nobody expanded.
@@ -3196,9 +3393,78 @@
 
     // Both lists are fetched the first time their panel is opened, so the
     // settings page still loads in one request for everyone who never looks.
+    /* ---------------------------------------------------------- backups */
+
+    const sizeOf = (bytes) => (bytes > 1048576
+      ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} kB`);
+
+    async function drawBackups() {
+      const wrap = $('#backup-list');
+      if (!wrap) return;
+      let data;
+      try { data = await api('/backups'); } catch (err) {
+        if (err.message === 'unauthenticated') return;
+        wrap.innerHTML = `<p class="empty">Could not load: ${esc(err.message)}</p>`; return;
+      }
+      wrap.innerHTML = data.backups.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>Taken</th><th>Size</th><th></th></tr></thead>
+        <tbody>${data.backups.map((b) => `<tr>
+          <td>${fmtDate(b.at)}</td><td>${sizeOf(b.bytes)}</td>
+          <td><a class="btn ghost" href="/api/admin/backups/${encodeURIComponent(b.file)}">Download</a></td>
+        </tr>`).join('')}</tbody></table></div>`
+        : '<p class="empty">No backup written yet — the first runs a minute after the server starts.</p>';
+    }
+
+    $('#backup-now').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try {
+        const r = await api('/backups', { method: 'POST' });
+        toast(`Backup written — ${sizeOf(r.bytes)}`);
+        await drawBackups();
+      } catch (err) {
+        toast((err.data && err.data.message) || 'Could not write a backup', 5000);
+      } finally { btn.disabled = false; }
+    });
+
+    /*
+     * The note as the kiosk would show it — including the one written for you
+     * when the box is empty, which is otherwise invisible until you walk over
+     * to the iPad.
+     */
+    async function drawPrivacyPreview() {
+      const box = $('#privacy-preview');
+      if (!box) return;
+      try {
+        const cfg = await fetch('/api/kiosk/config').then((r) => r.json());
+        const note = cfg.privacy && cfg.privacy.notice;
+        box.innerHTML = note
+          ? `<p class="muted" style="margin-bottom:.25rem">On the kiosk, visitors see:</p>
+             <div class="notice">${esc(note)}</div>`
+          : '<p class="muted">No note is shown on the kiosk.</p>';
+      } catch { box.innerHTML = ''; }
+    }
+
     onSectionOpen('set-deleted', drawArchive);
     onSectionOpen('set-activity', drawAudit);
     onSectionOpen('set-board', drawBoard);
+    $('#camera-test').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const box = $('#camera-result');
+      const url = $('[data-set="board.camera_url"]').value.trim();
+      if (!url) return toast('Enter a camera address first');
+      btn.disabled = true;
+      box.innerHTML = '<p class="muted">Asking the server to fetch it…</p>';
+      try {
+        const r = await api('/board/camera-test', { method: 'POST', body: { url } });
+        box.innerHTML = `<div class="notice ${r.ok ? '' : 'error'}">${esc(r.message)}</div>`;
+      } catch {
+        box.innerHTML = '<div class="notice error">Could not run the test.</div>';
+      } finally { btn.disabled = false; }
+    });
+
+    onSectionOpen('set-backups', drawBackups);
+    onSectionOpen('set-retention', drawPrivacyPreview);
 
     /*
      * Custom wording, one visitor type at a time. Held here and sent whole on
@@ -3384,6 +3650,7 @@
       if (VIEWS.settings.collectFlow) patch.flow = VIEWS.settings.collectFlow();
       if (VIEWS.settings.collectWording) patch.wording = VIEWS.settings.collectWording();
       if (VIEWS.settings.collectCard) setPath(patch, 'notify.card', VIEWS.settings.collectCard());
+      if (VIEWS.settings.collectNotifyTypes) setPath(patch, 'notify.types_notified', VIEWS.settings.collectNotifyTypes());
       SETTINGS = await api('/settings', { method: 'PUT', body: patch });
       if (SETTINGS.warnings && SETTINGS.warnings.length) toast(SETTINGS.warnings.join(' '), 7000);
       else toast('Settings saved');
@@ -3521,17 +3788,10 @@
         setPath(patch, input.dataset.set, value);
       });
       if (VIEWS.settings.collectCard) setPath(patch, 'notify.card', VIEWS.settings.collectCard());
+      if (VIEWS.settings.collectNotifyTypes) setPath(patch, 'notify.types_notified', VIEWS.settings.collectNotifyTypes());
       SETTINGS = await api('/settings', { method: 'PUT', body: patch });
     }
 
-    $('#test-sms').addEventListener('click', async () => {
-      const to = $('#test-sms-to').value.trim();
-      if (!to) return toast('Enter a number to send the test to');
-      await saveNotifySettings().catch(() => {});
-      const r = await api('/settings/test-sms', { method: 'POST', body: { to } });
-      toast(r.ok ? `Test SMS sent to ${r.to}` : 'SMS failed — check the Twilio details');
-      drawNotifications();
-    });
     $('#test-hook').addEventListener('click', async (e) => {
       const btn = e.currentTarget;
       const box = $('#email-result');
@@ -3577,6 +3837,39 @@
     });
     $$('[data-udel]').forEach((b) => b.addEventListener('click', async () => {
       await api(`/users/${b.dataset.udel}`, { method: 'DELETE' }); render('settings');
+    }));
+
+    $('#pw-save').addEventListener('click', async (e) => {
+      // Captured now: currentTarget is null the moment this function awaits.
+      const btn = e.currentTarget;
+      const box = $('#pw-result');
+      const [current, next, again] = ['#pw-current', '#pw-new', '#pw-again'].map((sel) => $(sel).value);
+      // Caught here rather than by the server, so a typo does not spend one of
+      // the ten attempts the rate limiter allows.
+      if (next !== again) return box.innerHTML = '<div class="notice error">The two new passwords do not match.</div>';
+      if (String(next).length < 8) return box.innerHTML = '<div class="notice error">Use at least 8 characters.</div>';
+      btn.disabled = true;
+      try {
+        const r = await api('/me/password', { method: 'POST', body: { current, password: next } });
+        box.innerHTML = `<div class="notice">${esc(r.message)}</div>`;
+        ['#pw-current', '#pw-new', '#pw-again'].forEach((sel) => { $(sel).value = ''; });
+      } catch (err) {
+        box.innerHTML = `<div class="notice error">${esc((err.data && err.data.message) || 'Could not change the password.')}</div>`;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    $$('[data-upw]').forEach((b) => b.addEventListener('click', async () => {
+      const pass = prompt(`New password for ${b.dataset.uemail} — at least 8 characters.\n\n`
+        + 'They will be signed out everywhere and will need this to sign back in.');
+      if (pass === null) return;
+      try {
+        const r = await api(`/users/${b.dataset.upw}/password`, { method: 'POST', body: { password: pass } });
+        toast(r.message, 6000);
+      } catch (err) {
+        toast((err.data && err.data.message) || 'Could not set that password', 5000);
+      }
     }));
   };
 

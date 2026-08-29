@@ -69,6 +69,25 @@ function requireAuth(req, res, next) {
   next();
 }
 
+/**
+ * Change a password, and cut every session but the one asking.
+ *
+ * Somebody changing their password has usually decided the old one is no
+ * longer trustworthy, so leaving the other sessions signed in would defeat
+ * the point. `keepToken` is the browser doing the changing, which stays.
+ */
+function setPassword(userId, password, keepToken) {
+  if (!password || String(password).length < 8) throw new Error('weak_password');
+  run('UPDATE users SET password_hash = ? WHERE id = ?', bcrypt.hashSync(String(password), 10), userId);
+  if (keepToken) run('DELETE FROM sessions WHERE user_id = ? AND token != ?', userId, keepToken);
+  else run('DELETE FROM sessions WHERE user_id = ?', userId);
+}
+
+function verifyPassword(userId, password) {
+  const user = get('SELECT password_hash FROM users WHERE id = ?', userId);
+  return !!user && bcrypt.compareSync(String(password || ''), user.password_hash);
+}
+
 function anyUsers() {
   return all('SELECT id FROM users LIMIT 1').length > 0;
 }
@@ -77,4 +96,5 @@ function purgeExpired() {
   run('DELETE FROM sessions WHERE expires_at < ?', nowISO());
 }
 
-module.exports = { COOKIE, createUser, verifyLogin, startSession, endSession, currentUser, requireAuth, anyUsers, purgeExpired, parseCookies };
+module.exports = { COOKIE, createUser, verifyLogin, startSession, endSession, currentUser, requireAuth,
+  anyUsers, purgeExpired, parseCookies, setPassword, verifyPassword };

@@ -44,15 +44,38 @@ const CSP = [
   "connect-src 'self'",
   // The kiosk embeds an uploaded PDF when poppler cannot split it into pages.
   "object-src 'self'",
+  // Nothing frames anything by default; the board widens this for one camera.
+  "frame-src 'self'",
   "base-uri 'none'",
   "form-action 'self'",
   "frame-ancestors 'none'"
 ].join('; ');
 
+/**
+ * The board may show one camera, so its page — and only its page — is allowed
+ * to load pictures from exactly that one origin.
+ *
+ * Widening the policy for the whole app to admit a camera would give every
+ * other page the same reach for no reason. This adds the configured origin to
+ * the three directives a camera can arrive through, and nothing else.
+ */
+function cspFor(req) {
+  if (!/^\/board(\/|$)/.test(req.path)) return CSP;
+  const b = settings.getSection('board');
+  if (!b.camera_enabled || !b.camera_url || b.camera_proxy) return CSP;
+  let origin;
+  try { origin = new URL(b.camera_url).origin; } catch { return CSP; }
+  return CSP
+    .replace("img-src 'self' data: blob:", `img-src 'self' data: blob: ${origin}`)
+    .replace("media-src 'self' blob:", `media-src 'self' blob: ${origin}`)
+    .replace("connect-src 'self'", `connect-src 'self' ${origin}`)
+    .replace("frame-src 'self'", `frame-src 'self' ${origin}`);
+}
+
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'same-origin');
-  res.setHeader('Content-Security-Policy', CSP);
+  res.setHeader('Content-Security-Policy', cspFor(req));
   res.setHeader('X-Frame-Options', 'DENY');
   /*
    * Told only over a connection that is already secure: sending it over plain
@@ -254,6 +277,19 @@ function purgeOldData() {
       run('UPDATE visits SET photo_path = NULL WHERE id = ?', v.id);
     }
   }
+  /*
+   * The licence details go before the visit does. Keeping a licence number for
+   * the same two years as the visit record was never a decision anybody made —
+   * it was just the only window there was. The visit stays; the three ID
+   * fields on it are emptied.
+   */
+  if (p.retain_id_days) {
+    const cutoff = new Date(Date.now() - p.retain_id_days * 864e5).toISOString();
+    const n = run(`UPDATE visits SET id_name = NULL, id_number = NULL, id_state = NULL
+                   WHERE signed_in_at < ? AND (id_name IS NOT NULL OR id_number IS NOT NULL OR id_state IS NOT NULL)`,
+      cutoff).changes;
+    if (n) console.log(`[retention] cleared ID details from ${n} visit(s) older than ${p.retain_id_days} days`);
+  }
   if (p.retain_visits_days) {
     const cutoff = new Date(Date.now() - p.retain_visits_days * 864e5).toISOString();
     const n = run('DELETE FROM visits WHERE signed_in_at < ?', cutoff).changes;
@@ -271,6 +307,20 @@ function purgeOldData() {
 
 setInterval(autoSignOut, 30 * 1000); // checked often so a to-the-minute time is not missed
 setInterval(purgeOldData, 24 * 60 * 60 * 1000);
+
+/*
+ * A nightly copy of the database, kept for a week. The first one is written a
+ * minute after boot rather than waiting a day, so a fresh deploy is never
+ * twenty-four hours away from having any backup at all.
+ */
+const backup = require('./backup');
+setTimeout(() => backup.runDaily(), 60 * 1000).unref();
+setInterval(() => backup.runDaily(), 24 * 60 * 60 * 1000);
+
+// Posts that failed for a reason worth a second go.
+setInterval(() => {
+  require('./notify').retryPending().catch((err) => console.error('[notify] retry sweep:', err.message));
+}, 60 * 1000);
 
 /* ------------------------------------------------------- first-run seed */
 
