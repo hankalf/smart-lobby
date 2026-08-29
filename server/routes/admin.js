@@ -11,6 +11,7 @@ const decks = require('../slides');
 const { nextBadgeNo } = require('../badges');
 const localtime = require('../localtime');
 const deviceSlugs = require('../devices');
+const ratelimit = require('../ratelimit');
 
 const router = express.Router();
 const clean = (v) => (typeof v === 'string' ? v.trim() : v);
@@ -72,7 +73,7 @@ router.get('/bootstrap', (req, res) => {
   });
 });
 
-router.post('/setup', (req, res) => {
+router.post('/setup', ratelimit.limit({ name: 'setup', windowMs: 60 * 60000, max: 10 }), (req, res) => {
   if (auth.anyUsers()) return res.status(400).json({ error: 'already_setup' });
   const { email, password, name, org_name } = req.body || {};
   if (!email || !password || String(password).length < 8) return res.status(400).json({ error: 'weak_credentials' });
@@ -85,9 +86,27 @@ router.post('/setup', (req, res) => {
   res.json({ ok: true, user });
 });
 
-router.post('/login', (req, res) => {
+/*
+ * A password prompt on a public URL. Ten tries a quarter-hour is far more than
+ * a person mistyping their own password needs, and turns guessing from minutes
+ * of work into years of it. Keyed on the account as well as the caller, so a
+ * single account cannot be ground down from a spread of addresses.
+ */
+const loginLimit = [
+  ratelimit.limit({ name: 'login-ip', windowMs: 15 * 60000, max: 20,
+    message: 'Too many sign-in attempts. Please wait a few minutes.' }),
+  ratelimit.limit({ name: 'login-user', windowMs: 15 * 60000, max: 10,
+    keyOn: (req) => String((req.body && req.body.email) || '').toLowerCase(),
+    message: 'Too many sign-in attempts for that account. Please wait a few minutes.' })
+];
+
+router.post('/login', loginLimit, (req, res) => {
   const user = auth.verifyLogin(req.body.email, req.body.password);
   if (!user) return res.status(401).json({ error: 'invalid_credentials' });
+  // Signing in successfully clears the count, so a person who mistyped twice
+  // and then got it right is not left near a limit they cannot see.
+  ratelimit.clear('login-ip', req);
+  ratelimit.clear('login-user', req, (r) => String((r.body && r.body.email) || '').toLowerCase());
   auth.startSession(res, user);
   res.json({ ok: true, user: { id: user.id, email: user.email, name: user.name, role: user.role } });
 });

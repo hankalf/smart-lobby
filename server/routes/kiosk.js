@@ -9,6 +9,7 @@ const accessCtl = require('../access');
 const { nextBadgeNo } = require('../badges');
 const localtime = require('../localtime');
 const devices = require('../devices');
+const ratelimit = require('../ratelimit');
 
 const router = express.Router();
 
@@ -119,6 +120,29 @@ function defaultSite() {
   return get('SELECT * FROM sites WHERE active = 1 ORDER BY id LIMIT 1');
 }
 
+/*
+ * These endpoints answer to anyone, because an iPad in a lobby cannot hold a
+ * secret. The limits are set well above what a real site produces — a lookup
+ * happens once per sign-in, and a busy gate might see one a minute — but far
+ * below what walking a range of phone numbers to harvest names would need.
+ * Several tablets at one site share a public address, hence the headroom.
+ *
+ * The heartbeat is deliberately not limited: every device makes one a minute,
+ * and throttling it would blind the dashboard rather than stop an attacker.
+ */
+const lookupLimit = ratelimit.limit({
+  name: 'kiosk-lookup', windowMs: 60000, max: 30,
+  message: 'Too many attempts from this network. Please wait a moment, or ask reception.'
+});
+const searchLimit = ratelimit.limit({
+  name: 'kiosk-search', windowMs: 60000, max: 40,
+  message: 'Too many searches from this network. Please wait a moment, or ask reception.'
+});
+const writeLimit = ratelimit.limit({
+  name: 'kiosk-write', windowMs: 60000, max: 40,
+  message: 'Too many sign-ins from this network. Please wait a moment, or ask reception.'
+});
+
 /* ---------------------------------------------------------------- config */
 
 router.get('/config', (req, res) => {
@@ -153,7 +177,7 @@ router.get('/config', (req, res) => {
   });
 });
 
-router.get('/staff', (req, res) => {
+router.get('/staff', searchLimit, (req, res) => {
   const q = lower(req.query.q);
   const rows = q
     ? all(`SELECT id, name, department FROM hosts WHERE active = 1 AND (lower(name) LIKE ? OR lower(department) LIKE ?)
@@ -162,9 +186,10 @@ router.get('/staff', (req, res) => {
   res.json(rows);
 });
 
+
 /* --------------------------------------------------------------- lookup */
 
-router.post('/lookup', (req, res) => {
+router.post('/lookup', lookupLimit, (req, res) => {
   const phone = normPhone(req.body.phone);
   const email = lower(req.body.email);
   const visitType = clean(req.body.visit_type) || 'visitor';
@@ -258,7 +283,7 @@ router.get('/agreements/:visitType', (req, res) => {
 
 /* --------------------------------------------------------------- sign in */
 
-router.post('/signin', async (req, res) => {
+router.post('/signin', writeLimit, async (req, res) => {
   try {
     const b = req.body || {};
     const kiosk = settings.getSection('kiosk');
@@ -508,7 +533,7 @@ const withPhotos = (rows) => rows.map((r) => ({
   photo_url: r.photo_path ? `/api/kiosk/visit-photo/${r.id}?t=${photoToken(r.id)}` : null
 }));
 
-router.post('/signout/search', (req, res) => {
+router.post('/signout/search', searchLimit, (req, res) => {
   const q = lower(req.body.q);
   const code = String(req.body.code || '').trim().toUpperCase();
   if (code) {
@@ -526,7 +551,7 @@ router.post('/signout/search', (req, res) => {
      ORDER BY v.signed_in_at DESC LIMIT 25`, `%${q}%`, `%${normPhone(q) || q}%`)));
 });
 
-router.post('/signout', async (req, res) => {
+router.post('/signout', writeLimit, async (req, res) => {
   const id = Number(req.body.visit_id);
   const visit = get("SELECT * FROM visits WHERE id = ? AND status = 'onsite'", id);
   if (!visit) return res.status(404).json({ error: 'not_found' });

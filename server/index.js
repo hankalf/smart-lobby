@@ -16,9 +16,47 @@ app.use(express.json({ limit: '12mb' }));
 app.use(express.urlencoded({ extended: true, limit: '12mb' }));
 
 app.disable('x-powered-by');
+
+/*
+ * Everything the app needs is served from this origin: no CDN, no third-party
+ * fonts or analytics. That makes a tight policy cheap — the only concession is
+ * inline styles, which a handful of elements and the app's own show/hide use.
+ * Scripts are files on this origin only, so a content-injection bug cannot be
+ * turned into script execution.
+ *
+ * frame-ancestors 'none' keeps the dashboard out of somebody else's iframe,
+ * which is what would otherwise let a crafted page trick a signed-in admin
+ * into clicking through it.
+ */
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  // Captured photos and signatures are canvas data: URIs before they are saved.
+  "img-src 'self' data: blob:",
+  "media-src 'self' blob:",
+  "font-src 'self'",
+  "connect-src 'self'",
+  // The kiosk embeds an uploaded PDF when poppler cannot split it into pages.
+  "object-src 'self'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'none'"
+].join('; ');
+
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'same-origin');
+  res.setHeader('Content-Security-Policy', CSP);
+  res.setHeader('X-Frame-Options', 'DENY');
+  /*
+   * Told only over a connection that is already secure: sending it over plain
+   * http would pin a LAN install to a scheme it may not have a certificate
+   * for. Railway terminates TLS ahead of us, hence the forwarded header.
+   */
+  if (req.secure || req.headers['x-forwarded-proto'] === 'https') {
+    res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+  }
   next();
 });
 
