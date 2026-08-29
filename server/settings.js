@@ -111,6 +111,13 @@ const DEFAULTS = {
      */
     badge_format: '{prefix}{yy}{mm}{dd}-{seq}',
     badge_seq_digits: 3,
+    /*
+     * A prefix per visitor type, keyed by type: { contractor: 'CON' }. What
+     * {prefix} becomes for that type; anything not named here falls back to
+     * badge_prefix above, so a site that wants one prefix has nothing to fill
+     * in and a site that wants CON-, VIS- and DRV- can say so.
+     */
+    badge_prefixes: {},
     title_text: 'VISITOR',
     footer_text: 'Please return this badge on exit',
     font_scale: 1

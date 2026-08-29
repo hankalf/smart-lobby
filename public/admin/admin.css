@@ -479,6 +479,8 @@ code.token { background: var(--bg); padding: .15rem .4rem; border-radius: 5px; f
   background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
   padding: .1rem .45rem; font-size: .88rem;
 }
+.bn-prefixes { display: grid; gap: .6rem; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); }
+.bn-prefix span { text-transform: capitalize; }
 
 /* ------------------------------------------------- what auto-save is doing */
 .save-state {

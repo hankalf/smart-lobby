@@ -1667,7 +1667,9 @@
           <p class="muted" style="margin-top:0">Every badge gets a number, counted fresh each day. What that number
             looks like is up to you.</p>
           <div class="form-grid">
-            ${txt('badge.badge_prefix', 'Prefix')}
+            <label class="field"><span>Prefix</span>
+              <input class="input" data-set="badge.badge_prefix" value="${esc(b.badge_prefix ?? '')}">
+              <span class="muted">Used by any type with no prefix of its own</span></label>
             <label class="field"><span>Counter digits</span>
               <input class="input" data-set="badge.badge_seq_digits" type="number" min="1" max="8"
                 value="${esc(b.badge_seq_digits ?? 3)}">
@@ -1676,6 +1678,13 @@
           <label class="field"><span>Format</span>
             <input class="input" data-set="badge.badge_format" value="${esc(b.badge_format || '{prefix}{yy}{mm}{dd}-{seq}')}">
             <span class="muted" id="bn-tokens"></span></label>
+
+          <h4 style="margin:1.2rem 0 .3rem;font-size:.9rem;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em">
+            A prefix per visitor type</h4>
+          <p class="muted" style="margin-top:0">Optional. Leave one empty and it uses the prefix above. Giving a type
+            its own prefix also gives it its own run of numbers, so its first badge of the day is 001.</p>
+          <div class="bn-prefixes" id="bn-prefixes"></div>
+
           <div id="bn-preview"></div>
         </div>
 
@@ -1764,6 +1773,13 @@
           : input.value;
         setPath(patch, input.dataset.set, value);
       });
+      /*
+       * Sent whole rather than merged: clearing a type's prefix has to clear
+       * it, and a merge would leave the old one behind for ever.
+       */
+      if (VIEWS.badges.collectPrefixes) {
+        setPath(patch, 'badge.badge_prefixes', VIEWS.badges.collectPrefixes());
+      }
       SETTINGS = await api('/settings', { method: 'PUT', body: patch });
     });
     autoSaveOn(root, saveBadge, '[data-set^="badge."]');
@@ -1776,20 +1792,61 @@
     let numberTimer = null;
     const drawNumbers = () => { clearTimeout(numberTimer); numberTimer = setTimeout(loadNumbers, 250); };
 
+    /*
+     * The per-type prefixes, read from the boxes rather than from what was
+     * saved, so the sample below follows what is on screen.
+     *
+     * Every box is included, empty ones as an empty string rather than being
+     * left out: settings are merged key by key on the way in, so a prefix
+     * omitted here would keep the one it had and clearing a box would appear
+     * to do nothing. An empty string means "use the general prefix".
+     */
+    const typePrefixes = () => {
+      const out = {};
+      $$('[data-bnprefix]').forEach((el) => { out[el.dataset.bnprefix] = el.value.trim(); });
+      return out;
+    };
+    VIEWS.badges.collectPrefixes = typePrefixes;
+
     async function loadNumbers() {
       const box = $('#bn-preview');
       if (!box) return;
-      const q = new URLSearchParams({
-        format: $('[data-set="badge.badge_format"]').value,
-        digits: $('[data-set="badge.badge_seq_digits"]').value,
-        prefix: $('[data-set="badge.badge_prefix"]').value
-      });
       let data;
-      try { data = await api(`/badges/number-preview?${q}`); }
-      catch (err) {
+      try {
+        data = await api('/badges/number-preview', { method: 'POST', body: {
+          format: $('[data-set="badge.badge_format"]').value,
+          digits: $('[data-set="badge.badge_seq_digits"]').value,
+          prefix: $('[data-set="badge.badge_prefix"]').value,
+          prefixes: typePrefixes()
+        } });
+      } catch (err) {
         if (err.message === 'unauthenticated') return;
         box.innerHTML = `<p class="empty">${esc(err.message)}</p>`;
         return;
+      }
+
+      /*
+       * Drawn once, from the types the server knows about, and then left
+       * alone — rebuilding it on every keystroke would take the focus out of
+       * the box being typed in.
+       */
+      const prefixBox = $('#bn-prefixes');
+      if (prefixBox && !prefixBox.dataset.drawn) {
+        prefixBox.dataset.drawn = '1';
+        const saved = (SETTINGS.badge && SETTINGS.badge.badge_prefixes) || {};
+        prefixBox.innerHTML = data.examples.map((e) => `<label class="field bn-prefix">
+          <span>${esc(e.label)}</span>
+          <input class="input" data-bnprefix="${esc(e.type)}" maxlength="8"
+            value="${esc(saved[e.type] || '')}"></label>`).join('');
+        $$('[data-bnprefix]', prefixBox).forEach((el) => el.addEventListener('input', () => {
+          drawNumbers();
+          saveBadge.soon();
+        }));
+        // Placeholders track the general prefix as it is typed.
+        const follow = () => $$('[data-bnprefix]', prefixBox)
+          .forEach((el) => { el.placeholder = $('[data-set="badge.badge_prefix"]').value || '(none)'; });
+        follow();
+        $('[data-set="badge.badge_prefix"]').addEventListener('input', follow);
       }
 
       const legend = $('#bn-tokens');
@@ -1802,19 +1859,20 @@
 
       box.innerHTML = `<div class="bn-samples">
         ${data.examples.map((e) => `<div class="bn-row">
-          <span class="muted">${esc(e.type)}</span>
+          <span class="muted">${esc(e.label)}</span>
           <span class="bn-nums">${e.numbers.map((n) => `<code>${esc(n)}</code>`).join('')}</span>
         </div>`).join('')}
       </div>
       <p class="muted">${data.separate_series
-        ? 'Each visitor type counts on its own, because the format tells them apart.'
-        : 'Every type shares one run of numbers for the day. Put <code>{type}</code> in the format to give each its own.'}
+        ? 'Each visitor type counts on its own, so every one of them starts the day at 1.'
+        : 'Every type shares one run of numbers for the day. Give a type its own prefix above — or put '
+          + '<code>{type}</code> in the format — to give it its own run.'}
       </p>
       <p class="muted">Changing this leaves badges already printed alone — the counter starts again at 1 under the new
         shape, so avoid changing it partway through a day.</p>`;
     }
 
-    ['badge.badge_format', 'badge.badge_seq_digits', 'badge.badge_prefix'].forEach((path) => {
+    ['badge.badge_format', 'badge.badge_seq_digits', 'badge.badge_prefix'].forEach((path) => {  // eslint-disable-line
       const el = $(`[data-set="${path}"]`);
       if (el) el.addEventListener('input', drawNumbers);
     });

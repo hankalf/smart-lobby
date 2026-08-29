@@ -24,7 +24,7 @@ const settings = require('./settings');
  * printable with no second list to keep in step.
  */
 const TOKENS = [
-  { id: 'prefix', describe: 'The prefix below', value: (ctx) => ctx.prefix },
+  { id: 'prefix', describe: "This visitor type's prefix, or the general one", value: (ctx) => ctx.prefix },
   { id: 'yyyy', describe: 'Year, four digits', value: (ctx) => ctx.day.slice(0, 4) },
   { id: 'yy', describe: 'Year, two digits', value: (ctx) => ctx.day.slice(2, 4) },
   { id: 'mm', describe: 'Month', value: (ctx) => ctx.day.slice(5, 7) },
@@ -46,6 +46,20 @@ function clampDigits(n) {
 }
 
 /**
+ * What `{prefix}` becomes for this visitor type.
+ *
+ * A per-type prefix wins; anything without one falls back to the single
+ * prefix, so a site that wants CON- for contractors and V- for everyone else
+ * fills in one box rather than four. An empty box is not a prefix of "" — it
+ * means "use the general one", which is what leaving it alone should do.
+ */
+function prefixFor(visitType, cfg) {
+  const own = ((cfg && cfg.badge_prefixes) || {})[visitType];
+  const trimmed = own == null ? '' : String(own).trim();
+  return trimmed || cfg.badge_prefix || '';
+}
+
+/**
  * Split a format into the fixed text either side of the counter.
  *
  * Everything before `{seq}` is what a badge from this day and type starts
@@ -61,7 +75,7 @@ function renderFormat(day, visitType, cfg) {
   const type = String(visitType || '');
   const ctx = {
     day: String(day),
-    prefix: cfg.badge_prefix || '',
+    prefix: prefixFor(type, cfg),
     typeLetter: type ? type.charAt(0).toUpperCase() : '',
     typeName: type.toUpperCase()
   };
@@ -110,7 +124,7 @@ function nextBadgeNo(day, visitType) {
 }
 
 module.exports = {
-  nextBadgeNo, sampleBadgeNo, renderFormat,
+  nextBadgeNo, sampleBadgeNo, renderFormat, prefixFor,
   DEFAULT_FORMAT, MIN_DIGITS, MAX_DIGITS,
   TOKENS: TOKENS.map(({ id, describe }) => ({ id, describe }))
 };

@@ -59,6 +59,21 @@ const sample = (over, seq = 1, type = 'contractor') =>
     sample({ badge_format: '{nonsense}{seq}' }, 1) === '{nonsense}001',
     sample({ badge_format: '{nonsense}{seq}' }, 1));
 
+  /* ---- a prefix per visitor type ---- */
+  const perType = { badge_prefixes: { contractor: 'CON', driver: 'DRV' } };
+  ok('a type with its own prefix uses it',
+    sample(perType, 1, 'contractor') === 'CON260829-001', sample(perType, 1, 'contractor'));
+  ok('…and one without falls back to the general prefix',
+    sample(perType, 1, 'interview') === 'V260829-001', sample(perType, 1, 'interview'));
+  ok('an empty per-type prefix means the general one, not no prefix at all',
+    sample({ badge_prefixes: { visitor: '   ' } }, 1, 'visitor') === 'V260829-001',
+    sample({ badge_prefixes: { visitor: '   ' } }, 1, 'visitor'));
+  ok('a per-type prefix gives that type its own run of numbers',
+    badges.renderFormat(DAY, 'contractor', { ...base, ...perType }).prefix
+      !== badges.renderFormat(DAY, 'interview', { ...base, ...perType }).prefix);
+  ok('the general prefix still applies with no per-type list at all',
+    badges.prefixFor('contractor', base) === 'V', badges.prefixFor('contractor', base));
+
   /* ---- a format that separates the types gives each its own prefix ---- */
   const shared = badges.renderFormat(DAY, 'contractor', base).prefix
     === badges.renderFormat(DAY, 'visitor', base).prefix;
@@ -88,6 +103,39 @@ const sample = (over, seq = 1, type = 'contractor') =>
   ok('the preview follows the format on screen, not the saved one',
     /^[A-Z]-001$/.test(r.data.examples[0].numbers[0]), JSON.stringify(r.data.examples[0]));
   ok('…and says each type now counts separately', r.data.separate_series === true);
+
+  r = await req('POST', '/api/admin/badges/number-preview', { prefixes: { contractor: 'CON' } });
+  const contractorRow = r.data.examples.find((e) => e.type === 'contractor');
+  ok('the preview takes a prefix per type', contractorRow && /^CON/.test(contractorRow.numbers[0]),
+    JSON.stringify(contractorRow));
+  ok('…leaving the others on the general prefix',
+    r.data.examples.filter((e) => e.type !== 'contractor').every((e) => /^V/.test(e.numbers[0])),
+    JSON.stringify(r.data.examples.map((e) => e.numbers[0])));
+  ok('…and noticing that they now count separately', r.data.separate_series === true);
+  ok('each row carries the type name for the dashboard to label it with',
+    r.data.examples.every((e) => typeof e.label === 'string' && e.label.length),
+    JSON.stringify(r.data.examples.map((e) => e.label)));
+
+  /* ---- and a real sign-in honours it ---- */
+  await req('PUT', '/api/admin/settings', { badge: { badge_prefixes: { visitor: 'VIS' } } });
+  const prefixed = await req('POST', '/api/kiosk/signin', {
+    full_name: 'Hank Alfred 91', company: 'Badge Co', phone: '415-268-0991',
+    visit_type: 'visitor', client_ref: `badge-prefix-${Date.now()}`
+  });
+  ok('a badge printed for that type carries its own prefix',
+    /^VIS\d{6}-001$/.test(prefixed.data.badge.badge_no), prefixed.data.badge.badge_no);
+  ok('…starting its own run at 1, not continuing the general one',
+    prefixed.data.badge.badge_no.endsWith('-001'), prefixed.data.badge.badge_no);
+
+  // Cleared with an empty string, because settings merge key by key: leaving
+  // it out would keep the old prefix and clearing it would appear to do nothing.
+  await req('PUT', '/api/admin/settings', { badge: { badge_prefixes: { visitor: '' } } });
+  const cleared = await req('POST', '/api/kiosk/signin', {
+    full_name: 'Hank Alfred 92', company: 'Badge Co', phone: '415-268-0992',
+    visit_type: 'visitor', client_ref: `badge-clear-${Date.now()}`
+  });
+  ok('clearing a per-type prefix really clears it',
+    /^V\d{6}-/.test(cleared.data.badge.badge_no), cleared.data.badge.badge_no);
 
   /* ---- real sign-ins, which is where a collision would actually hurt ---- */
   const issued = [];
@@ -129,7 +177,7 @@ const sample = (over, seq = 1, type = 'contractor') =>
   ok('a changed format takes effect on the next badge',
     /^SITE-\d{4}$/.test(reshaped.data.badge.badge_no), reshaped.data.badge.badge_no);
 
-  await req('PUT', '/api/admin/settings', { badge: { ...base } });
+  await req('PUT', '/api/admin/settings', { badge: { ...base, badge_prefixes: {} } });
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

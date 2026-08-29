@@ -1462,20 +1462,28 @@ const boardRoutes = require('./board');
  * Rendered by the same code that numbers a real badge, so the example on the
  * settings page cannot drift from what comes out of the printer.
  */
-router.get('/badges/number-preview', (req, res) => {
+function badgeNumberPreview(over, res) {
   const cfg = { ...settings.getSection('badge') };
-  if (req.query.format !== undefined) cfg.badge_format = String(req.query.format);
-  if (req.query.digits !== undefined) cfg.badge_seq_digits = Number(req.query.digits);
-  if (req.query.prefix !== undefined) cfg.badge_prefix = String(req.query.prefix);
+  if (over.format !== undefined) cfg.badge_format = String(over.format);
+  if (over.digits !== undefined) cfg.badge_seq_digits = Number(over.digits);
+  if (over.prefix !== undefined) cfg.badge_prefix = String(over.prefix);
+  // Whole object, not merged: clearing a per-type prefix has to clear it.
+  if (over.prefixes !== undefined && over.prefixes && typeof over.prefixes === 'object') {
+    cfg.badge_prefixes = over.prefixes;
+  }
 
   const day = localtime.today();
-  const types = ((settings.getAll().types || []).map((t) => t.key).filter(Boolean));
+  const all = (settings.getAll().types || []).filter((t) => t.key);
+  const types = all.map((t) => t.key);
+  const labelFor = (key) => (all.find((t) => t.key === key) || {}).label || key;
   res.json({
     tokens: badges.TOKENS,
     digits: { min: badges.MIN_DIGITS, max: badges.MAX_DIGITS },
     // The first three of the day, so a counter that is too narrow is obvious.
-    examples: (types.length ? types : ['visitor']).slice(0, 4).map((type) => ({
+    examples: (types.length ? types : ['visitor']).slice(0, 6).map((type) => ({
       type,
+      label: labelFor(type),
+      prefix: badges.prefixFor(type, cfg),
       numbers: [1, 2, 3].map((n) => badges.sampleBadgeNo(day, type, cfg, n))
     })),
     /*
@@ -1486,7 +1494,12 @@ router.get('/badges/number-preview', (req, res) => {
     separate_series: new Set((types.length ? types : ['visitor'])
       .map((type) => badges.renderFormat(day, type, cfg).prefix)).size > 1
   });
-});
+}
+
+router.get('/badges/number-preview', (req, res) => badgeNumberPreview(req.query, res));
+// POST as well, because a prefix per visitor type is an object rather than
+// something that reads well in a query string.
+router.post('/badges/number-preview', (req, res) => badgeNumberPreview(req.body || {}, res));
 
 router.get('/board', (req, res) => {
   const b = settings.getSection('board');
