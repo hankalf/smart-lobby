@@ -13,8 +13,8 @@
  */
 'use strict';
 
-const CACHE = 'sl-kiosk-v3';
-const SHELL = ['/kiosk/', '/kiosk/kiosk.js', '/kiosk/aamva.js', '/kiosk/kiosk.css', '/shared/theme.css',
+const CACHE = 'sl-kiosk-v4';
+const SHELL = ['/kiosk/', '/kiosk/kiosk.js', '/kiosk/aamva.js', '/kiosk/phone.js', '/kiosk/kiosk.css', '/shared/theme.css',
   '/kiosk/vendor/jsQR.js'];
 // The PDF417 decoder is 350KB and only some sites scan licences, so it is not
 // pre-cached — the network-first rule below keeps a copy once it has been used.

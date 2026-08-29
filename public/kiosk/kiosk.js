@@ -1023,7 +1023,8 @@
         $('#f-name').value = value;
         return startFlow();
       }
-      showIdentityChoices(r.matches, () => { $('#f-name').value = value; });
+      showIdentityChoices(r.matches, () => { $('#f-name').value = value; }, null,
+        { token: r.choice_token, ids: r.matches.map((m) => m.id) });
       return;
     }
 
@@ -1038,7 +1039,8 @@
       if (r.multiple && r.matches && r.matches.length) {
         showIdentityChoices(r.matches,
           () => { if (isEmail) $('#f-email').value = value; else $('#f-phone').value = value; },
-          t('That number is used by more than one person — who are you?'));
+          t('That number is used by more than one person — who are you?'),
+          { token: r.choice_token, ids: r.matches.map((m) => m.id) });
         return;
       }
       state.induction = r.induction || { required: false, slideshow: null };
@@ -1074,7 +1076,12 @@
    * them. Used when a typed name matches several people, and when a phone
    * number turns out to be shared — `heading` says why they are being asked.
    */
-  function showIdentityChoices(matches, onNotListed, heading) {
+  /*
+   * `proof` is the signed list the server just handed back. It goes with the
+   * choice so the server knows this tablet was actually offered these people —
+   * without it an id alone would be enough to read anybody's details.
+   */
+  function showIdentityChoices(matches, onNotListed, heading, proof) {
     const box = $('#identify-matches');
     box.innerHTML = (heading ? `<p class="lead">${escapeHtml(heading)}</p>` : '')
       + matches.map((m) => `<div class="result">
@@ -1085,7 +1092,8 @@
         </div>`).join('')
       + `<div class="actions"><button class="btn ghost" id="not-listed">${t("I'm not on this list")}</button></div>`;
 
-    $$('[data-pick]', box).forEach((b) => b.addEventListener('click', () => pickReturningVisitor(Number(b.dataset.pick))));
+    $$('[data-pick]', box).forEach((b) => b.addEventListener('click',
+      () => pickReturningVisitor(Number(b.dataset.pick), proof)));
     $('#not-listed', box).addEventListener('click', () => {
       box.innerHTML = '';
       if (onNotListed) onNotListed();
@@ -1093,9 +1101,16 @@
     });
   }
 
-  async function pickReturningVisitor(visitorId) {
+  async function pickReturningVisitor(visitorId, proof) {
     try {
-      const r = await api('/lookup', { visitor_id: visitorId, visit_type: state.visitType, language: state.lang });
+      const r = await api('/lookup', {
+        visitor_id: visitorId,
+        // Both halves of the proof: the signature, and the list it covers.
+        choice_token: proof ? proof.token : null,
+        choice_ids: proof ? proof.ids : null,
+        visit_type: state.visitType,
+        language: state.lang
+      });
       $('#identify-matches').innerHTML = '';
       if (r.found && r.visitor) {
         state.visitor = r.visitor;
@@ -1152,6 +1167,12 @@
     reference: '#w-reference', movement: '#w-movement', project: '#w-project',
     id_scan: '#w-id-scan'
   };
+
+  /** The numbering-plan check only applies where the plan does. */
+  function usPhones() {
+    const c = (state.cfg && state.cfg.org && state.cfg.org.phone_country) || 'US';
+    return c === 'US' || c === 'CA';
+  }
 
   function detailFields() {
     const all = (state.cfg && state.cfg.details) || {};
@@ -1225,11 +1246,29 @@
 
   /* --------------------------------------------------------------- details */
 
+  $('#f-phone').addEventListener('input', (e) => {
+    if (!usPhones()) return;
+    const el = e.target;
+    // Only reformat when typing at the end, so editing mid-number is not fought.
+    if (el.selectionStart !== el.value.length) return;
+    el.value = window.Phone.formatAsTyped(el.value);
+  });
+
   $('#details-continue').addEventListener('click', async () => {
     const err = $('#details-error');
     const fields = detailFields();
     if (!$('#f-name').value.trim()) return fail(t('Please enter your name.'));
     if (fields.phone === 'required' && !$('#f-phone').value.trim()) return fail(t('Please enter a contact number.'));
+    /*
+     * Anything typed here is checked against the numbering plan, not just
+     * counted: a number that cannot exist is worth nothing to whoever has to
+     * ring it later, and the person is standing right there to correct it.
+     */
+    if ($('#f-phone').value.trim() && usPhones()) {
+      const seen = window.Phone.check($('#f-phone').value);
+      if (!seen.ok) return fail(t(seen.message) || t('Please check that phone number.'));
+      $('#f-phone').value = seen.formatted;
+    }
     if (fields.email === 'required' && !$('#f-email').value.trim()) return fail(t('Please enter an email address.'));
     if (fields.company === 'required' && !$('#f-company').value.trim()) return fail(t('Please enter your company.'));
     if (fields.staff === 'required' && !$('#f-host-id').value) return fail(t('Please choose who you are here to see.'));

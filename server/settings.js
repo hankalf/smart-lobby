@@ -128,6 +128,9 @@ const DEFAULTS = {
     enabled: true,
     unlock_button_on_kiosk: false,
     unlock_on_signin: false,
+    // Sign-out is reachable by anyone who can reach the kiosk, so releasing a
+    // door on it is off unless a site deliberately turns it on.
+    unlock_on_signout: false,
     require_host_approval: false
   },
   notify: {

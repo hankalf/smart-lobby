@@ -9,6 +9,7 @@ const accessCtl = require('../access');
 const { nextBadgeNo } = require('../badges');
 const localtime = require('../localtime');
 const devices = require('../devices');
+const phoneRules = require('../../public/kiosk/phone');
 const ratelimit = require('../ratelimit');
 
 const router = express.Router();
@@ -139,7 +140,10 @@ const searchLimit = ratelimit.limit({
   message: 'Too many searches from this network. Please wait a moment, or ask reception.'
 });
 const writeLimit = ratelimit.limit({
-  name: 'kiosk-write', windowMs: 60000, max: 40,
+  // Ninety a minute is a sign-in every two-thirds of a second across the whole
+  // site — beyond any real shift change, including several tablets behind one
+  // address — while still bounding what a flood can write to disk.
+  name: 'kiosk-write', windowMs: 60000, max: 90,
   message: 'Too many sign-ins from this network. Please wait a moment, or ask reception.'
 });
 
@@ -187,6 +191,41 @@ router.get('/staff', searchLimit, (req, res) => {
 });
 
 
+
+/*
+ * Picking yourself from a list of people who share a phone number.
+ *
+ * The kiosk has to be able to say "this one, of the three you just showed me",
+ * and that means an endpoint that takes a visitor id. Left open, that endpoint
+ * is the whole visitor table: ask for id 1, 2, 3 and read off every name,
+ * company and number. So the choice list is signed when it is handed out, and
+ * only the ids in a signed, unexpired list can be asked about.
+ */
+const CHOICE_KEY = crypto.randomBytes(32);
+const CHOICE_TTL_MS = 5 * 60 * 1000;
+
+function choiceToken(ids) {
+  const expires = Date.now() + CHOICE_TTL_MS;
+  const body = `${ids.slice().sort((a, b) => a - b).join(',')}.${expires}`;
+  return `${expires}.${crypto.createHmac('sha256', CHOICE_KEY).update(body).digest('hex').slice(0, 32)}`;
+}
+
+/**
+ * Was `id` one of the people this token was issued for, and is it still fresh?
+ * The caller sends back the list it was given; the signature is what makes that
+ * list trustworthy, so a list nobody was offered cannot be presented.
+ */
+function choiceAllows(token, ids, id) {
+  const [expires, mac] = String(token || '').split('.');
+  if (!expires || !mac || !Number(expires) || Number(expires) < Date.now()) return false;
+  const list = (Array.isArray(ids) ? ids : []).map(Number).filter(Number.isFinite);
+  if (!list.includes(Number(id))) return false;
+  const body = `${list.slice().sort((a, b) => a - b).join(',')}.${expires}`;
+  const expected = crypto.createHmac('sha256', CHOICE_KEY).update(body).digest('hex').slice(0, 32);
+  if (mac.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(expected));
+}
+
 /* --------------------------------------------------------------- lookup */
 
 router.post('/lookup', lookupLimit, (req, res) => {
@@ -209,7 +248,7 @@ router.post('/lookup', lookupLimit, (req, res) => {
       `SELECT id, full_name, company FROM visitors
        WHERE blocked = 0 AND lower(full_name) LIKE ?
        ORDER BY last_visit_at DESC LIMIT 8`, `%${name}%`);
-    return res.json({ found: false, matches });
+    return res.json({ found: false, choice_token: choiceToken(matches.map((m) => m.id)), matches });
   }
 
   /*
@@ -226,6 +265,7 @@ router.post('/lookup', lookupLimit, (req, res) => {
     if (sharing.length && !allowed.length) return res.status(403).json({ found: true, blocked: true, message: 'Please see reception.' });
     if (allowed.length > 1) {
       return res.json({ found: false, multiple: true,
+        choice_token: choiceToken(allowed.map((v) => v.id)),
         matches: allowed.map((v) => ({ id: v.id, full_name: v.full_name, company: v.company })) });
     }
     visitor = allowed[0] || null;
@@ -236,11 +276,24 @@ router.post('/lookup', lookupLimit, (req, res) => {
     if (sharing.length && !allowed.length) return res.status(403).json({ found: true, blocked: true, message: 'Please see reception.' });
     if (allowed.length > 1) {
       return res.json({ found: false, multiple: true,
+        choice_token: choiceToken(allowed.map((v) => v.id)),
         matches: allowed.map((v) => ({ id: v.id, full_name: v.full_name, company: v.company })) });
     }
     visitor = allowed[0] || null;
   }
-  if (!visitor && req.body.visitor_id) visitor = get('SELECT * FROM visitors WHERE id = ?', Number(req.body.visitor_id));
+  /*
+   * Only reachable with a token from a choice list this caller was just given,
+   * and only for the people on it. Without that, an id is not enough to learn
+   * anything: the request is refused rather than answered with somebody's
+   * details.
+   */
+  if (!visitor && req.body.visitor_id) {
+    const wanted = Number(req.body.visitor_id);
+    if (!choiceAllows(req.body.choice_token, req.body.choice_ids, wanted)) {
+      return res.status(403).json({ error: 'choice_expired', message: 'Please enter your details again.' });
+    }
+    visitor = get('SELECT * FROM visitors WHERE id = ?', wanted);
+  }
 
   const lang = req.body.language === 'es' ? 'es' : 'en';
   if (!visitor) return res.json({ found: false, induction: inductionStatus(null, visitType, lang) });
@@ -297,6 +350,16 @@ router.post('/signin', writeLimit, async (req, res) => {
     // Which fields this visitor type must supply is configured per type.
     const fields = settings.fieldsFor(visitType);
     if (fields.phone === 'required' && !phone) return res.status(400).json({ error: 'phone_required' });
+    /*
+     * The same check the kiosk makes, applied again here: the tablet is not
+     * trusted, and a queued sign-in from an old app version must not slip an
+     * impossible number past. Only where the numbering plan applies.
+     */
+    const country = String(settings.getSection('org').phone_country || 'US').toUpperCase();
+    if (phone && (country === 'US' || country === 'CA')) {
+      const seen = phoneRules.check(phone, { allowFictional: process.env.NODE_ENV !== 'production' });
+      if (!seen.ok) return res.status(400).json({ error: 'bad_phone', message: seen.message });
+    }
     if (fields.email === 'required' && !email) return res.status(400).json({ error: 'email_required' });
     if (fields.staff === 'required' && !b.host_id) return res.status(400).json({ error: 'host_required' });
     if (fields.company === 'required' && !clean(b.company)) return res.status(400).json({ error: 'company_required' });
@@ -432,8 +495,10 @@ router.post('/signin', writeLimit, async (req, res) => {
     const visitId = Number(visitRes.lastInsertRowid);
 
     // One row per document signed, each with the answers given to its questions.
+    // Capped: each entry writes a signature image, and the array arrives from an
+    // unauthenticated caller. No sign-in legitimately signs more than a handful.
     const signed = Array.isArray(b.documents) && b.documents.length
-      ? b.documents
+      ? b.documents.slice(0, 20)
       : (b.signature || b.answers ? [{ agreement_id: b.agreement_id, signature: b.signature, answers: b.answers }] : []);
 
     for (const doc of signed) {
@@ -524,14 +589,29 @@ router.get('/visit-photo/:id', (req, res) => {
   res.sendFile(abs);
 });
 
-const withPhotos = (rows) => rows.map((r) => ({
-  id: r.id,
-  signed_in_at: r.signed_in_at,
-  full_name: r.full_name,
-  company: r.company,
-  host_name: r.host_name,
-  photo_url: r.photo_path ? `/api/kiosk/visit-photo/${r.id}?t=${photoToken(r.id)}` : null
-}));
+/*
+ * "Hide names on the sign-out list" is a real setting a site can turn on: with
+ * it, somebody signing out sees only enough to recognise their own entry, and a
+ * passer-by learns nothing about who else is in the building.
+ */
+const withPhotos = (rows) => {
+  const hide = !!settings.getSection('privacy').hide_names_on_signout_list;
+  return rows.map((r) => ({
+    id: r.id,
+    signed_in_at: r.signed_in_at,
+    full_name: hide ? maskName(r.full_name) : r.full_name,
+    company: hide ? null : r.company,
+    host_name: hide ? null : r.host_name,
+    photo_url: (!hide && r.photo_path) ? `/api/kiosk/visit-photo/${r.id}?t=${photoToken(r.id)}` : null
+  }));
+};
+
+/** "Jordan Fletcher" -> "Jordan F." — their own row is recognisable, others are not. */
+function maskName(name) {
+  const parts = String(name || '').trim().split(/\s+/);
+  if (parts.length < 2) return parts[0] || '';
+  return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+}
 
 router.post('/signout/search', searchLimit, (req, res) => {
   const q = lower(req.body.q);
@@ -542,13 +622,20 @@ router.post('/signout/search', searchLimit, (req, res) => {
                    WHERE v.checkout_code = ? AND v.status = 'onsite'`, code);
     return res.json(withPhotos(v ? [v] : []));
   }
-  if (!q) return res.json([]);
-  // Matches any part of the name, so a first name, a surname or a phone number all work.
+  /*
+   * Two or fewer characters would list most of the building, which is the whole
+   * on-site roster — names, hosts and faces — to anyone who can reach the
+   * kiosk. Three characters, matched from the start of a name or number, is
+   * enough for somebody signing themselves out and useless for browsing.
+   */
+  if (!q || q.length < 3) return res.json([]);
+  const digits = normPhone(q);
   res.json(withPhotos(all(
     `SELECT v.id, v.signed_in_at, v.photo_path, p.full_name, p.company, h.name AS host_name
      FROM visits v JOIN visitors p ON p.id = v.visitor_id LEFT JOIN hosts h ON h.id = v.host_id
-     WHERE v.status = 'onsite' AND (lower(p.full_name) LIKE ? OR ${PHONE_NORM_SQL.replace(/phone/g, 'p.phone')} LIKE ?)
-     ORDER BY v.signed_in_at DESC LIMIT 25`, `%${q}%`, `%${normPhone(q) || q}%`)));
+     WHERE v.status = 'onsite' AND (lower(p.full_name) LIKE ? OR lower(p.full_name) LIKE ?
+                                    OR ${PHONE_NORM_SQL.replace(/phone/g, 'p.phone')} LIKE ?)
+     ORDER BY v.signed_in_at DESC LIMIT 25`, `${q}%`, `% ${q}%`, `${digits || q}%`)));
 });
 
 router.post('/signout', writeLimit, async (req, res) => {
@@ -557,7 +644,11 @@ router.post('/signout', writeLimit, async (req, res) => {
   if (!visit) return res.status(404).json({ error: 'not_found' });
   run("UPDATE visits SET signed_out_at = ?, status = 'out', signed_out_by = ? WHERE id = ?", nowISO(), 'kiosk', id);
   notify.notifyDeparture(id).catch(() => {});
-  accessCtl.autoUnlock('signout', { visitId: id, actor: 'kiosk', siteId: visit.site_id }).catch(() => {});
+  // Gated, like sign-in: an unauthenticated request must not be able to
+  // release a door simply because somebody was marked as leaving.
+  if (settings.getSection('access').unlock_on_signout) {
+    accessCtl.autoUnlock('signout', { visitId: id, actor: 'kiosk', siteId: visit.site_id }).catch(() => {});
+  }
   res.json({ ok: true, goodbye: settings.getSection('org').goodbye_message });
 });
 

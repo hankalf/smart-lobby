@@ -12,8 +12,13 @@ migrate();
 
 const app = express();
 app.set('trust proxy', 1);
-app.use(express.json({ limit: '12mb' }));
-app.use(express.urlencoded({ extended: true, limit: '12mb' }));
+/*
+ * A sign-in carries a photo and a few signatures as base64, which fits inside
+ * this comfortably. The old 12mb allowed an anonymous caller to make the server
+ * buffer twelve megabytes per request before anything could reject it.
+ */
+app.use(express.json({ limit: '4mb' }));
+app.use(express.urlencoded({ extended: true, limit: '4mb' }));
 
 app.disable('x-powered-by');
 
