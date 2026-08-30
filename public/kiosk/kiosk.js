@@ -32,6 +32,9 @@
     flow: [],
     flowIndex: -1,
     lastResult: null,
+    // The signed token that lets the thank-you screen cancel the sign-in it is
+    // showing, for the few minutes it is good for. Cleared with the screen.
+    undo: null,
     deviceToken: localStorage.getItem('sl_device_token') || '',
     // Which tablet this is, taken from the address: /kiosk/north-gate. The path
     // is the reliable part — see deviceSlug() below.
@@ -140,6 +143,12 @@
       'Confirmo que he visto y entendido la inducción del sitio.',
     "You're signed in": 'Ha registrado su entrada',
     'Signed out': 'Salida registrada',
+    "That's not right — cancel this": 'No es correcto — cancelar',
+    'Cancelled': 'Cancelado',
+    'That sign-in has been cancelled. Please start again.':
+      'Se ha cancelado el registro de entrada. Por favor, empiece de nuevo.',
+    'That can no longer be cancelled here — please see reception.':
+      'Ya no se puede cancelar aquí — por favor, hable con recepción.',
     'Thanks for visiting.': 'Gracias por su visita.',
     'Print badge': 'Imprimir credencial',
     'Done': 'Listo',
@@ -259,7 +268,7 @@
     '#w-id-scan > span', '#id-scan-open', '#id-scan-hint', '#id-scan-cancel', '#id-scan-retry',
     '#deck-prev', '#deck-next',
     '[data-screen="ack"] h2', '#ack-replay', '#ack-confirm',
-    '#btn-print-badge', '[data-screen="done"] [data-go="idle"]',
+    '#btn-print-badge', '[data-screen="done"] [data-go="idle"]', '#btn-undo-signin',
     '[data-screen="signout"] .bar h2', '[data-screen="signout"] .bar button',
     '#btn-scan', '#btn-scan-stop', '#scan-status',
     '[data-screen="delivery"] .bar h2', '[data-screen="delivery"] .bar button',
@@ -528,6 +537,8 @@
     state.deliveryPhoto = null;
     state.induction = { required: false, slideshow: null };
     state.lastResult = null;
+    // The next person must not be able to cancel the last person's sign-in.
+    state.undo = null;
     state.deckIndex = 0;
     state.inductionDone = false;
     state.inductionSignature = null;
@@ -2104,6 +2115,7 @@
     $('#done-qr').innerHTML = '';
     show($('#btn-print-badge'), false);
     show($('#done-badge-note'), false);
+    show($('#btn-undo-signin'), false);
     setScreen('done');
   }
 
@@ -2135,6 +2147,15 @@
     } else {
       show($('#done-badge-note'), false);
     }
+
+    /*
+     * The way back from the wrong button. Only for a sign-in that has just
+     * been made and only while the token the server handed out is good for —
+     * a few minutes — after which the visit is somebody's actual day and the
+     * way out is to sign out like anybody else.
+     */
+    state.undo = result.undo_token ? { visit_id: result.visit.id, token: result.undo_token } : null;
+    show($('#btn-undo-signin'), !!state.undo);
     setScreen('done');
   }
 
@@ -2176,6 +2197,33 @@
 
   $('#btn-print-badge').addEventListener('click', () => window.print());
 
+  /*
+   * "That's not right." The wrong card, the wrong person, a double tap — all
+   * of which used to mean finding a member of staff, while the record stayed
+   * wrong, the wrong person stayed tagged in Teams and the roll call was wrong
+   * in a fire. The record is not destroyed: it is archived like any deleted
+   * visit, so a cancellation made in error can itself be undone.
+   */
+  $('#btn-undo-signin').addEventListener('click', async (e) => {
+    if (!state.undo) return;
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      await api('/signin/undo', { visit_id: state.undo.visit_id, undo_token: state.undo.token });
+      state.undo = null;
+      state.lastResult = null;
+      $('#done-title').textContent = t('Cancelled');
+      $('#done-sub').textContent = t('That sign-in has been cancelled. Please start again.');
+      $('#done-code').textContent = '';
+      $('#done-qr').innerHTML = '';
+      show($('#btn-print-badge'), false);
+      show($('#done-badge-note'), false);
+      show(btn, false);
+    } catch {
+      toast(t('That can no longer be cancelled here — please see reception.'));
+    } finally { btn.disabled = false; }
+  });
+
   /* -------------------------------------------------------------- sign out */
 
   let signoutTimer = null;
@@ -2213,6 +2261,7 @@
         $('#done-qr').innerHTML = '';
         show($('#btn-print-badge'), false);
         show($('#done-badge-note'), false);
+        show($('#btn-undo-signin'), false);
         setScreen('done');
       }));
     }, 140);
@@ -2526,6 +2575,7 @@
       $('#done-qr').innerHTML = '';
       show($('#btn-print-badge'), false);
       show($('#done-badge-note'), false);
+      show($('#btn-undo-signin'), false);
       setScreen('done');
     } catch (e) {
       err.textContent = t('Could not log the delivery. Please see reception.');

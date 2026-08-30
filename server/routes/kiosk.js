@@ -228,6 +228,37 @@ function choiceAllows(token, ids, id) {
   return crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(expected));
 }
 
+/*
+ * "That's not right" on the thank-you screen.
+ *
+ * Somebody taps Visitor instead of Contractor, or signs their mate in, and
+ * notices immediately. Until now the only way back was to find a member of
+ * staff — so the wrong record stayed, the wrong person was tagged in Teams,
+ * and the roll call was wrong in a fire.
+ *
+ * The kiosk is unauthenticated, so this cannot take a visit id on trust: it
+ * takes back the signed token handed out with that one sign-in, which is good
+ * for a few minutes and for nothing else. Without it, anyone who could reach
+ * the tablet's network could cancel any visit by guessing a number.
+ */
+const UNDO_KEY = crypto.randomBytes(32);
+const UNDO_TTL_MS = 5 * 60 * 1000;
+
+function undoToken(visitId) {
+  const expires = Date.now() + UNDO_TTL_MS;
+  const mac = crypto.createHmac('sha256', UNDO_KEY).update(`${visitId}.${expires}`).digest('hex').slice(0, 32);
+  return `${expires}.${mac}`;
+}
+
+function undoAllows(token, visitId) {
+  const [expires, mac] = String(token || '').split('.');
+  if (!expires || !mac || !Number(expires) || Number(expires) < Date.now()) return false;
+  const expected = crypto.createHmac('sha256', UNDO_KEY)
+    .update(`${Number(visitId)}.${expires}`).digest('hex').slice(0, 32);
+  if (mac.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(expected));
+}
+
 /* --------------------------------------------------------------- lookup */
 
 router.post('/lookup', lookupLimit, (req, res) => {
@@ -581,6 +612,9 @@ router.post('/signin', writeLimit, async (req, res) => {
 
     res.json({
       ok: true, visit, badge: badgeCfg.enabled ? { ...badgeCfg, badge_no: badgeNo } : null, checkout_code: code,
+      // Good for a few minutes, so the thank-you screen can offer a way back
+      // from the wrong button without involving anybody.
+      undo_token: undoToken(visitId),
       // Signed in, but with something out of date the desk should chase.
       compliance: papers.ok ? null : { detail: compliance.explain(papers) }
     });
@@ -688,6 +722,48 @@ router.post('/signout', writeLimit, async (req, res) => {
     accessCtl.autoUnlock('signout', { visitId: id, actor: 'kiosk', siteId: visit.site_id }).catch(() => {});
   }
   res.json({ ok: true, goodbye: settings.getSection('org').goodbye_message });
+});
+
+/*
+ * Cancelling the sign-in that has just been made.
+ *
+ * Not a sign-out: a sign-out says somebody was here and has left, which is
+ * exactly the thing that was not true. The record is archived the same way an
+ * administrator's delete archives it — nothing is destroyed, and it can be put
+ * back from Deleted records if the cancelling was itself the mistake.
+ *
+ * Whoever was told about the arrival is told it was cancelled, because a Teams
+ * card saying "your visitor is here" that nobody corrects is worse than no
+ * card at all.
+ */
+router.post('/signin/undo', writeLimit, async (req, res) => {
+  const id = Number(req.body.visit_id);
+  if (!undoAllows(req.body.undo_token, id)) return res.status(403).json({ error: 'expired' });
+
+  const visit = get("SELECT * FROM visits WHERE id = ? AND status = 'onsite'", id);
+  if (!visit) return res.status(404).json({ error: 'not_found' });
+
+  // Only ever the sign-in just made, whatever an old token might allow: a
+  // visit from this morning is somebody's actual day, not a mis-tap.
+  if (Date.now() - Date.parse(visit.signed_in_at) > UNDO_TTL_MS) {
+    return res.status(409).json({ error: 'too_late' });
+  }
+
+  /*
+   * Read the whole record before it goes, because the correction has to name
+   * the person and whoever was tagged — and by the time it is sent there is
+   * no row left to read it from.
+   */
+  const told = get("SELECT COUNT(*) AS n FROM notifications WHERE visit_id = ? AND status = 'sent'", id).n;
+  const detail = told ? notify.detailFor(id) : null;
+
+  if (!require('../archive').archiveVisit(id, { name: 'cancelled at the kiosk' })) {
+    return res.status(500).json({ error: 'undo_failed' });
+  }
+  run('DELETE FROM visits WHERE id = ?', id);
+
+  if (detail) notify.notifyCancelled(detail).catch(() => {});
+  res.json({ ok: true });
 });
 
 /* ------------------------------------------------------------ deliveries */

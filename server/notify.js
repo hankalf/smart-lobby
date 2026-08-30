@@ -388,6 +388,38 @@ async function notifyInduction(visitId) {
   });
 }
 
-module.exports = { notifyArrival, notifyDeparture, notifyDelivery, notifyInduction,
+/**
+ * A sign-in that was cancelled on the kiosk seconds after it was made.
+ *
+ * Takes the record rather than an id, because by the time this is sent the
+ * visit has been archived and there is nothing left to read.
+ *
+ * Deliberately not a card anybody can design. The other four are announcements
+ * and a house style is fine on them; this one exists to contradict a card that
+ * already went out, and it should look like a correction wherever it lands.
+ * It reuses the sign-in card only for who to tag — the people who were told.
+ */
+async function notifyCancelled(v) {
+  const n = settings.getSection('notify');
+  if (!n.on_signin || !v || !typeNotified(v.visit_type)) return;
+  const also = routedStaff(v.visit_type);
+  const model = cards.buildModel('signin', v, n, cardContext({ also, fallbackTitle: v.full_name }));
+
+  model.title = `Cancelled — ${v.full_name} is not signed in`;
+  model.subtitle = 'That sign-in was undone at the kiosk moments after it was made. Please ignore the earlier message.';
+  model.headerStyle = 'attention';
+  model.photoUrl = null;
+  // Nothing to open: the visit is gone, so a link to it would lead nowhere.
+  model.links = [];
+  model.footer = null;
+
+  await sendWebhooks({
+    ownUrl: v.host_webhook, extraUrls: also.map((p) => p.webhook_url),
+    model, visit_id: null
+  });
+}
+
+module.exports = { notifyArrival, notifyDeparture, notifyDelivery, notifyInduction, notifyCancelled,
+  detailFor: visitDetail,
   sendWebhook, sendWebhooks, webhookTargets, baseUrl, boardUrl, cardPhotoUrl, cardContext, visitDetail, fmtTime,
   retryPending, health, RETRY_DELAYS_MS, typeNotified, routedStaff };

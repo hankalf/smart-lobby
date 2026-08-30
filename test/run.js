@@ -56,6 +56,7 @@ const SUITES = [
   { name: 'compliance', file: 'compliance-test.js' },
   { name: 'reports', file: 'reports-test.js' },
   { name: 'visits', file: 'visits-test.js' },
+  { name: 'undo', file: 'undo-test.js' },
   { name: 'notifycards', file: 'notifycards-test.js', browser: true },
   { name: 'board', file: 'board-test.js' },
   { name: 'account', file: 'account-test.js' },
