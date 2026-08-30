@@ -22,6 +22,7 @@ const HERE = __dirname;
 const CSS = fs.readFileSync(path.join(HERE, 'guide.css'), 'utf8');
 
 const GUIDES = [
+  { src: 'setup-guide.html', out: 'Smart Lobby - Setup Guide.pdf', title: 'Smart Lobby — Setup Guide' },
   { src: 'front-desk-guide.html', out: 'Smart Lobby - Front Desk Guide.pdf', title: 'Smart Lobby — Front Desk Guide' },
   { src: 'administrator-guide.html', out: 'Smart Lobby - Administrator Guide.pdf', title: 'Smart Lobby — Administrator Guide' }
 ];

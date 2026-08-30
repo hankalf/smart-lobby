@@ -90,6 +90,11 @@ npm start</code></pre>
   <code>/check/</code> that reports what a given tablet's browser actually allows. Use
   <code>PORT=3010 npm start</code> for a different port.</p>
 
+
+<figure class="narrow">
+  <img src="img/first-run.png" alt="">
+  <figcaption><b>A brand new install.</b> One screen: the organisation, your name, your email and a password. The account it creates is the owner.</figcaption>
+</figure>
 <h2>Shape one: a tablet on your own network</h2>
 
 <p>The tablet runs the kiosk in its browser; the server runs on a small always-on machine on the same
@@ -157,6 +162,11 @@ npm start</code></pre>
   from the dashboard when you are ready. They are flagged in the database rather than matched by
   name, so clearing them can never touch a real visitor who happens to share a name.</p>
 
+
+<figure>
+  <img src="img/day-one-dashboard.png" alt="">
+  <figcaption><b>Day one.</b> Not an empty screen — a fresh install seeds one worked example per visitor type so you can see what each kind of record looks like.</figcaption>
+</figure>
 <h2>The order worth setting things up in</h2>
 
 <ol class="steps">
@@ -194,6 +204,11 @@ npm start</code></pre>
   </tbody>
 </table>
 
+
+<figure>
+  <img src="img/set-users.png" alt="">
+  <figcaption><b>Accounts.</b> A login is granted against somebody already on the staff list, at one of four levels. The owner is the fifth and cannot be demoted.</figcaption>
+</figure>
 <h2>The rules that override the table</h2>
 
 <ul>
@@ -235,6 +250,11 @@ node scripts/reset-password.js you@example.com 'a new password'</code></pre>
 <p><span class="path">Settings → Branding</span> sets the organisation name, the kiosk headline and
   sign-out message, two brand colours, the time zone and the date format.</p>
 
+
+<figure>
+  <img src="img/set-branding.png" alt="">
+  <figcaption><b>Branding.</b> Name, kiosk wording, colours, logo, background photos and — the setting that is painful to change later — the site’s own time zone.</figcaption>
+</figure>
 <h2>The time zone matters more than it looks</h2>
 
 <p>It is the site's own, and everything that names a day or a time uses it: the date on a badge and
@@ -274,6 +294,11 @@ node scripts/reset-password.js you@example.com 'a new password'</code></pre>
 <p>Add a type — a Cleaner card, an Auditor card — and it immediately gains its own form settings,
   document assignments, induction targeting and per-device placement.</p>
 
+
+<figure>
+  <img src="img/vtypes.png" alt="">
+  <figcaption><b>Visitor types.</b> The list on one side, a live preview of the kiosk home screen on the other. Drag the preview to set the order the tablet shows.</figcaption>
+</figure>
 <h2>The icon and the order</h2>
 
 <p>Press the icon to open a picker of emoji chosen for the job: things that read as a delivery driver
@@ -312,6 +337,11 @@ node scripts/reset-password.js you@example.com 'a new password'</code></pre>
 <p>Under <strong>Wording</strong>, rename a field per type — a driver is asked for a haulier, not a
   company — and add a line of help underneath it.</p>
 
+
+<figure>
+  <img src="img/set-form.png" alt="">
+  <figcaption><b>The form, per type.</b> Fields down the side, visitor types across the top, each cell off, optional or required. Hovering highlights the row and the column.</figcaption>
+</figure>
 <h2>The order things are asked</h2>
 
 <p><span class="path">Settings → The order things are asked</span>. Each visitor type has its own
@@ -334,6 +364,11 @@ node scripts/reset-password.js you@example.com 'a new password'</code></pre>
 <p>Each document in <span class="path">Documents</span> is assigned to the categories that must sign
   it, matching the kiosk cards. Deliveries sign nothing.</p>
 
+
+<figure>
+  <img src="img/documents.png" alt="">
+  <figcaption><b>Documents.</b> Assigned to the visitor types that must sign them, each carrying its own version so signed copies stay as they were signed.</figcaption>
+</figure>
 <h2>Typed wording, or an uploaded file</h2>
 
 <p>A document is either wording typed into the dashboard or an uploaded PDF or Word file — also ODT,
@@ -380,6 +415,11 @@ node scripts/reset-password.js you@example.com 'a new password'</code></pre>
 <p><code>/api/health</code> reports which you have, and the Induction decks page says plainly whether
   it can render properly.</p>
 
+
+<figure>
+  <img src="img/induction.png" alt="">
+  <figcaption><b>Induction decks.</b> A deck per language, assigned to visitor types, with an optional minimum time per slide.</figcaption>
+</figure>
 <h2>Who has to watch it</h2>
 
 <ul>
@@ -422,6 +462,11 @@ node scripts/reset-password.js you@example.com 'a new password'</code></pre>
   all, the label stock, what the badge shows, a live preview at real size, a test print and
   reprinting.</p>
 
+
+<figure>
+  <img src="img/badges.png" alt="">
+  <figcaption><b>The badge designer.</b> A live preview at the real label size, a test print, and reprinting for anybody from the last week.</figcaption>
+</figure>
 <h2>Setting up the printer</h2>
 
 <ol class="steps">
@@ -461,6 +506,11 @@ node scripts/reset-password.js you@example.com 'a new password'</code></pre>
     wearing.</p>
 </div>
 
+
+<figure>
+  <img src="img/printers.png" alt="">
+  <figcaption><b>Printers.</b> Which roll is loaded, what colour it prints, how the printer is reached and where it sits.</figcaption>
+</figure>
 <h2>Printers register</h2>
 
 <p><span class="path">Printers</span> records name, model, which roll is loaded and its colour, how the
@@ -490,6 +540,11 @@ node scripts/reset-password.js you@example.com 'a new password'</code></pre>
   <li>An operational mode, and an online status from a heartbeat every minute.</li>
 </ul>
 
+
+<figure>
+  <img src="img/devices.png" alt="">
+  <figcaption><b>Devices.</b> Each tablet with its own address, its own cards in its own order, and an online status from a heartbeat every minute.</figcaption>
+</figure>
 <p>A tablet opened at plain <code>/kiosk/</code> works too, but shows every card.</p>
 
 <!-- =================================================================== 12 -->
@@ -517,6 +572,11 @@ node scripts/reset-password.js you@example.com 'a new password'</code></pre>
 <p>The payload format is detected from the webhook URL, so one host can be on Slack and another on
   Teams. The format dropdown only applies to URLs that are not recognised.</p>
 
+
+<figure>
+  <img src="img/set-notifications.png" alt="">
+  <figcaption><b>Notifications.</b> Six channels, each switchable on its own, each with a test button that can only ever reach your own address.</figcaption>
+</figure>
 <h2>Which events fire</h2>
 
 <p>Arrival, sign-out, induction completed and delivery are separate toggles. SMS has its own arrival
@@ -604,6 +664,11 @@ node scripts/reset-password.js you@example.com 'a new password'</code></pre>
   releases the door as if somebody had pressed the exit button. The panel keeps its own schedules,
   interlocks, fire release and log, and needs nothing added to its software.</p>
 
+
+<figure>
+  <img src="img/doors.png" alt="">
+  <figcaption><b>Doors.</b> Each one an HTTP call, with an unlock audit underneath. A door can be added and left disabled while it is being wired.</figcaption>
+</figure>
 <p>Add a door in <span class="path">Access &amp; doors</span> with a URL, method, optional headers and
   body. These placeholders are filled in at unlock time: <code>{{seconds}}</code>,
   <code>{{door}}</code>, <code>{{actor}}</code>, <code>{{visit_id}}</code>,
@@ -630,6 +695,11 @@ Home Assistant    POST  http://192.168.1.10:8123/api/services/lock/unlock
 <!-- =================================================================== 15 -->
 <h1 class="chapter"><span class="num">Chapter 15</span>Projects, companies and certificates</h1>
 
+
+<figure>
+  <img src="img/projects.png" alt="">
+  <figcaption><b>Projects.</b> The jobs contractors sign in against, which is what makes hours-per-project possible on the reports.</figcaption>
+</figure>
 <h2>Projects</h2>
 
 <p>The jobs a contractor can be on site for, each with a name, an optional Spanish name and a short
@@ -667,6 +737,11 @@ Home Assistant    POST  http://192.168.1.10:8123/api/services/lock/unlock
 <p class="lede">A backup nobody has ever opened is a promise, not a copy. This chapter is about
   turning it into a fact before you need it.</p>
 
+
+<figure>
+  <img src="img/set-backups.png" alt="">
+  <figcaption><b>Backups.</b> Nightly, seven kept, each integrity-checked. Test opens one and says whether it would actually restore.</figcaption>
+</figure>
 <h2>What runs on its own</h2>
 
 <p>A ZIP holding the database <em>and</em> every uploaded file is written nightly to
@@ -760,6 +835,11 @@ Home Assistant    POST  http://192.168.1.10:8123/api/services/lock/unlock
   </tbody>
 </table>
 
+
+<figure>
+  <img src="img/set-retention.png" alt="">
+  <figcaption><b>Data retention.</b> Three windows that run daily — photos, licence details and visit records — plus the privacy notice the kiosk shows.</figcaption>
+</figure>
 <h2>Retention</h2>
 
 <p><span class="path">Settings → Data retention</span> runs daily and has three separate windows:</p>
@@ -776,6 +856,11 @@ Home Assistant    POST  http://192.168.1.10:8123/api/services/lock/unlock
   public. The kiosk shows a privacy notice on the details screen, where the asking happens, rather
   than burying it in a document nobody reads.</p>
 
+
+<figure>
+  <img src="img/set-deleted.png" alt="">
+  <figcaption><b>Deleted records.</b> A deleted visit or visitor is archived whole and can be put back.</figcaption>
+</figure>
 <h2>Deleting does not destroy</h2>
 
 <p>Deleting a visit or a visitor writes the whole record — children and all — to a deleted-records
@@ -802,6 +887,11 @@ Home Assistant    POST  http://192.168.1.10:8123/api/services/lock/unlock
     the real value.</li>
 </ul>
 
+
+<figure>
+  <img src="img/set-activity.png" alt="">
+  <figcaption><b>The activity log.</b> Who changed what, and when. This is the reason to give people their own logins rather than sharing one.</figcaption>
+</figure>
 <h2>Hardening the deployment</h2>
 
 <ul>

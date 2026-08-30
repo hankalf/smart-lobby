@@ -1,13 +1,18 @@
 # The guides
 
-Two PDFs, written for two different people:
+Three PDFs, written for three different people:
 
+- **Setup Guide** — for whoever is standing this up for the first time. From nothing to a
+  tablet at the gate taking real sign-ins, in the order to do it in, with a dress rehearsal
+  before anybody real walks up to it.
 - **Front Desk Guide** — for reception, clerks and anyone working the desk. The day-to-day:
   who is expected, who is on site, deliveries, drivers, the roll call, and what to do when
   somebody cannot sign themselves in.
-- **Administrator Guide** — for whoever owns the installation. Deployment, configuration,
-  notifications and the chat card designer, access levels, doors, backups, recovery and
-  troubleshooting.
+- **Administrator Guide** — the reference. Deployment, configuration, notifications and the
+  chat card designer, access levels, doors, backups, recovery and troubleshooting.
+
+Read in that order, they overlap deliberately: the Setup Guide says do this now, the
+Administrator Guide says here is everything that setting can do.
 
 ## Rebuilding them
 
@@ -58,6 +63,19 @@ BASE_URL=http://localhost:3512 node docs/seed-demo.js    # builds the site
 BASE_URL=http://localhost:3512 node docs/shoot.js        # takes the shots
 npm run docs                                             # rebuilds the PDFs
 ```
+
+Three of them — the first-run screen, the sign-in screen and the day-one dashboard — can only
+be taken against a server nobody has set up yet, so they are a second pass against an empty
+data directory:
+
+```bash
+DATA_DIR=/tmp/fresh PORT=3514 node server/index.js &
+BASE_URL=http://localhost:3514 node docs/shoot.js --fresh
+```
+
+Most shots are a table in `shoot.js` — a page name and where it lives in the menu — rather than
+twenty near-identical functions, so covering a new page is one line. Pass a name fragment to
+retake just that one: `node docs/shoot.js badges`.
 
 `seed-demo.js` puts the demo site on a west-coast clock. That is not decoration:
 the shots are taken whenever they are taken, and a wall clock reading half past

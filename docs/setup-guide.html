@@ -1,0 +1,810 @@
+<section class="cover">
+  <div class="rule-top"></div>
+  <p class="kicker">Smart Lobby</p>
+  <h1>Setup Guide</h1>
+  <p class="sub">Deploying it for the first time: from nothing, to a tablet at the gate taking real
+    sign-ins, in about an afternoon.</p>
+  <div class="meta">
+    <span>For whoever is standing this up</span>
+    <span>Every step in order, with the screen you should be looking at</span>
+  </div>
+</section>
+
+<section class="contents">
+  <h1 class="chapter"><span class="num">Contents</span>The order to do it in</h1>
+  <ol>
+    <li><span class="n">1</span><span class="t">Before you start</span></li>
+    <li><span class="n">2</span><span class="t">Where it should run</span></li>
+    <li><span class="n">3</span><span class="t">Putting it on Railway</span></li>
+    <li><span class="n">4</span><span class="t">Putting it on a machine of your own</span></li>
+    <li><span class="n">5</span><span class="t">The first screen</span></li>
+    <li><span class="n">6</span><span class="t">What you are looking at</span></li>
+    <li><span class="n">7</span><span class="t">Step one — the name, the logo and the clock</span></li>
+    <li><span class="n">8</span><span class="t">Step two — the people visitors ask for</span></li>
+    <li><span class="n">9</span><span class="t">Step three — the jobs, if you run contractors</span></li>
+    <li><span class="n">10</span><span class="t">Step four — the cards on the kiosk</span></li>
+    <li><span class="n">11</span><span class="t">Step five — what you ask people</span></li>
+    <li><span class="n">12</span><span class="t">Step six — the sign-in flow</span></li>
+    <li><span class="n">13</span><span class="t">Step seven — documents to sign</span></li>
+    <li><span class="n">14</span><span class="t">Step eight — the induction</span></li>
+    <li><span class="n">15</span><span class="t">Step nine — badges, if you print them</span></li>
+    <li><span class="n">16</span><span class="t">Step ten — telling somebody a visitor arrived</span></li>
+    <li><span class="n">17</span><span class="t">Step eleven — registering the tablet</span></li>
+    <li><span class="n">18</span><span class="t">Step twelve — setting up the tablet itself</span></li>
+    <li><span class="n">19</span><span class="t">Step thirteen — backups, before you need them</span></li>
+    <li><span class="n">20</span><span class="t">Step fourteen — logins for everyone else</span></li>
+    <li><span class="n">21</span><span class="t">The dress rehearsal</span></li>
+    <li><span class="n">22</span><span class="t">Going live</span></li>
+    <li><span class="n">23</span><span class="t">The first week</span></li>
+    <li><span class="n">24</span><span class="t">If something is wrong</span></li>
+  </ol>
+</section>
+
+<!-- ==================================================================== 1 -->
+<h1 class="chapter"><span class="num">Chapter 1</span>Before you start</h1>
+
+<p class="lede">There is no account to create with anybody, no licence key and no trial. You run it,
+  it is yours. This chapter is the shopping list.</p>
+
+<h2>What you need</h2>
+
+<dl>
+  <dt>Somewhere to run it</dt>
+  <dd>Either a Railway account (about ten minutes, and it handles HTTPS for you) or an always-on
+    machine on your own network — a Mac mini, a small PC, a Raspberry Pi. Not the tablet: a tablet
+    cannot host the server.</dd>
+  <dt>A tablet for the gate</dt>
+  <dd>An iPad is the usual choice. Any tablet with a modern browser works. One per entrance.</dd>
+  <dt>A stand, and power</dt>
+  <dd>Unglamorous and the thing most often forgotten. The tablet needs to be at standing height, and
+    it needs a cable that will not be tripped over.</dd>
+  <dt>About an afternoon</dt>
+  <dd>Getting it running takes minutes. Deciding what you actually want to ask visitors, and finding
+    the site rules document somebody wrote in 2019, is what takes the time.</dd>
+</dl>
+
+<h2>What you do not need</h2>
+
+<ul>
+  <li>A database server. It is one file.</li>
+  <li>A domain name, unless you want one. Railway gives you an address.</li>
+  <li>Anybody's permission. Nothing phones home, and no visitor's data leaves your building.</li>
+</ul>
+
+<div class="note">
+  <span class="label">Decide one thing before you begin</span>
+  <p>Who is going to own this once it is running? Somebody has to be the account that cannot be
+    locked out, and somebody has to notice if the backups stop. It does not have to be you, but it
+    has to be somebody, and it is much easier to set up in their name than to hand over later.</p>
+</div>
+
+<!-- ==================================================================== 2 -->
+<h1 class="chapter"><span class="num">Chapter 2</span>Where it should run</h1>
+
+<p>Two shapes. Pick before you start, because it decides how you do the next chapter.</p>
+
+<table>
+  <thead><tr><th>&nbsp;</th><th>Railway</th><th>Your own machine</th></tr></thead>
+  <tbody>
+    <tr><td>Setup time</td><td>Ten minutes</td><td>Half an hour</td></tr>
+    <tr><td>Kiosk camera</td><td>Works straight away</td><td>Falls back to the tablet’s camera app</td></tr>
+    <tr><td>Works if the internet drops</td><td>Kiosk keeps taking sign-ins and syncs later</td><td>Yes — it is all on your network</td></tr>
+    <tr><td>Data leaves the building</td><td>It sits on Railway’s disk</td><td>No</td></tr>
+    <tr><td>Cost</td><td>A few pounds a month</td><td>The electricity</td></tr>
+    <tr><td>Somebody has to maintain</td><td>Almost nothing</td><td>The machine, and its backups</td></tr>
+  </tbody>
+</table>
+
+<p>Most sites should start with Railway. The one strong reason to run it yourself is a policy that
+  visitor data must not leave the premises — in which case Chapter 4 is yours.</p>
+
+<!-- ==================================================================== 3 -->
+<h1 class="chapter"><span class="num">Chapter 3</span>Putting it on Railway</h1>
+
+<ol class="steps">
+  <li>Push this repository to GitHub, and create a Railway project from it.</li>
+  <li><strong>Add a Volume and mount it at <code>/data</code>.</strong> Do this before the first
+    deploy finishes.</li>
+  <li>Set two variables: <code>NODE_ENV=production</code>, and
+    <code>PUBLIC_URL=https://your-app.up.railway.app</code> — the address Railway gives you.
+    <code>DATA_DIR</code> is not needed; a Railway volume is found automatically.</li>
+  <li>Deploy, and open the address. You should see the screen in Chapter 5.</li>
+</ol>
+
+<div class="warn">
+  <span class="label">The volume is the whole thing</span>
+  <p>Without it, every visitor record, photo and slide is erased on your next deploy. The app will
+    not let this be quiet about it — a banner appears in the dashboard, the sign-in screen says so,
+    <code>/api/health</code> reports <code>"storage":"ephemeral"</code>, and the deploy log warns. If
+    you see any of those, stop and mount the volume.</p>
+</div>
+
+<h2>The first build is slow, on purpose</h2>
+
+<p>The included Dockerfile installs LibreOffice, poppler and metric-compatible fonts so that a
+  PowerPoint induction deck renders exactly as it looks in PowerPoint. That makes the image about a
+  gigabyte and the first build slow. If you would rather have fast builds and are happy to upload
+  PDF exports of your decks instead, delete the Dockerfile before deploying.</p>
+
+<!-- ==================================================================== 4 -->
+<h1 class="chapter"><span class="num">Chapter 4</span>Putting it on a machine of your own</h1>
+
+<ol class="steps">
+  <li>On the machine that will run it: <code>npm install</code>, then <code>npm start</code>.</li>
+  <li>Find that machine’s address on the network — <code>ipconfig</code> on Windows,
+    <code>ifconfig</code> on macOS or Linux. Something like <code>192.168.1.40</code>.</li>
+  <li>Give it a fixed address in your router, so it does not move and break every tablet.</li>
+  <li>Make sure it starts on boot. A visitor system that stops working after a power cut is not a
+    visitor system.</li>
+  <li>Open <code>http://192.168.1.40:3000/admin/</code> from any machine on that network. You should
+    see the screen in Chapter 5.</li>
+</ol>
+
+<div class="note">
+  <span class="label">The camera over a plain address</span>
+  <p>Browsers only allow a live camera preview over <code>https://</code> or on
+    <code>localhost</code>. Over a plain network address the kiosk automatically offers an
+    <strong>Open camera</strong> button instead, which launches the tablet’s own camera app — the
+    photo is captured, cropped and attached identically. Nobody hits a dead end, but the flow is one
+    tap longer. To get the inline preview, put a reverse proxy with a certificate in front; Caddy
+    does it in two lines.</p>
+</div>
+
+<!-- ==================================================================== 5 -->
+<h1 class="chapter"><span class="num">Chapter 5</span>The first screen</h1>
+
+<p class="lede">A brand new install shows exactly one screen, and it is this. There is nothing to
+  configure before it, and nothing to license.</p>
+
+<figure class="narrow">
+  <img src="img/first-run.png" alt="">
+  <figcaption><b>The first run.</b> The organisation name, your name, your email and a password.
+    That is the entire installation.</figcaption>
+</figure>
+
+<p>The account you create here is the <strong>owner</strong>. It is an administrator that cannot
+  later be demoted or deleted, because an install nobody can reach the settings on is an install
+  nobody can fix. Only the owner can create another administrator, and only the owner can restore a
+  backup.</p>
+
+<div class="warn">
+  <span class="label">Put the password somewhere</span>
+  <p>There is no reset email, because there is no supplier to send one. If every login is lost, the
+    way back in is a command run on the machine holding the data — recoverable, but not from your
+    phone at the gate on a Monday morning. Put it in whatever your organisation uses for passwords,
+    now, before you carry on.</p>
+</div>
+
+<p>From then on the same address shows an ordinary sign-in screen.</p>
+
+<figure class="narrow">
+  <img src="img/sign-in-screen.png" alt="">
+  <figcaption><b>Afterwards.</b> The organisation name you typed becomes the heading, so people can
+    see they are in the right place.</figcaption>
+</figure>
+
+<!-- ==================================================================== 6 -->
+<h1 class="chapter"><span class="num">Chapter 6</span>What you are looking at</h1>
+
+<figure>
+  <img src="img/day-one-dashboard.png" alt="">
+  <figcaption><b>Day one.</b> Not an empty screen: a fresh install seeds one worked example per
+    visitor type, so you can see what a visit, a contractor sign-in, an interview and a driver
+    record actually look like before you have any of your own.</figcaption>
+</figure>
+
+<p>The menu down the left is the whole system. Roughly, top to bottom:</p>
+
+<dl>
+  <dt>Dashboard, Expected, Visits, Registry</dt>
+  <dd>What is happening and what has happened. Reception lives here.</dd>
+  <dt>Drivers, Deliveries</dt>
+  <dd>Trucks and parcels, if you have them.</dd>
+  <dt>Staff, Companies, Certificates, Projects</dt>
+  <dd>The lists everything else refers to.</dd>
+  <dt>Sign-in setup</dt>
+  <dd>What the kiosk asks and shows: induction decks, documents, visitor types, badges.</dd>
+  <dt>Reports</dt>
+  <dd>Visits, hours per project, and a printable version.</dd>
+  <dt>Settings</dt>
+  <dd>Everything else, one page per entry — branding, the form, notifications, devices, doors,
+    backups, accounts.</dd>
+</dl>
+
+<div class="note">
+  <span class="label">Everything saves itself</span>
+  <p>The settings pages have no Save button. A change is written as you make it, and a small
+    <em>Saved</em> pill confirms it. If you are used to hunting for a save button, you are not
+    missing one.</p>
+</div>
+
+<p>Leave the examples where they are for now. Chapter 22 clears them, once you have something of
+  your own to look at.</p>
+
+<!-- ==================================================================== 7 -->
+<h1 class="chapter"><span class="num">Chapter 7</span>Step one — the name, the logo and the clock</h1>
+
+<p><span class="path">Settings → Branding</span>. Twenty minutes here is the difference between a
+  kiosk that looks like your site and one that looks like a demo.</p>
+
+<figure>
+  <img src="img/set-branding.png" alt="">
+  <figcaption><b>Branding.</b> The name, the wording on the kiosk, two colours, the logo, background
+    photos, and the time zone. The preview beside it mirrors the tablet.</figcaption>
+</figure>
+
+<h2>Do the time zone now</h2>
+
+<p>This is the one setting that is painful to change later. It is the site's own time zone, and
+  everything that names a day or a time uses it: the date on a badge and inside the badge number,
+  the "today" counts, the charts, and every arrival time on the dashboard.</p>
+
+<div class="warn">
+  <span class="label">Set it before anybody signs in</span>
+  <p>Times are stored as UTC, so changing the zone later re-reads all your existing history in the
+    new one rather than shifting it — which is correct, but means yesterday's badge numbers no longer
+    match yesterday's dates. Set it now and leave it alone unless the site itself moves.</p>
+</div>
+
+<h2>The logo and the background</h2>
+
+<p>A PNG or SVG with a transparent background works best; it appears on the kiosk, on printed
+  badges, in the dashboard sidebar and on the sign-in page.</p>
+
+<p>For the background you can set one photo or several that crossfade on a timer. A slider controls
+  how much they are darkened so the welcome text stays readable, with a live preview beside it.
+  Landscape, 1600px wide or more. Leave it empty for a plain gradient — which looks perfectly fine,
+  and is better than a stretched photo.</p>
+
+<!-- ==================================================================== 8 -->
+<h1 class="chapter"><span class="num">Chapter 8</span>Step two — the people visitors ask for</h1>
+
+<p><span class="path">Staff</span> is the list a visitor picks from when the kiosk asks who they are
+  here to see. Nothing else works properly until this has real people in it.</p>
+
+<figure>
+  <img src="img/staff.png" alt="">
+  <figcaption><b>Staff.</b> Each person can carry an email address, a mobile number and their own
+    chat webhook, so an arrival reaches them rather than a shared inbox.</figcaption>
+</figure>
+
+<h2>Add them from a spreadsheet</h2>
+
+<p>Do not type forty people in by hand. Upload an <code>.xlsx</code> or <code>.csv</code>: the first
+  row should be headings, first and last name in separate columns or one full-name column. Only the
+  name is required, and headings are matched loosely, so "Full name", "Phone", "Mobile" and "Team"
+  all work. A template is downloadable from that panel.</p>
+
+<p>Somebody already on the list is updated rather than duplicated — matched on email, or on name
+  where there is no email — so a corrected sheet can simply be uploaded again.</p>
+
+<div class="note">
+  <span class="label">Email addresses are worth chasing</span>
+  <p>Somebody with no email cannot be notified, and cannot be @-mentioned in a Teams message —
+    a mention Teams cannot resolve renders as raw markup, so it is left off instead. Get the
+    addresses in now.</p>
+</div>
+
+<!-- ==================================================================== 9 -->
+<h1 class="chapter"><span class="num">Chapter 9</span>Step three — the jobs, if you run contractors</h1>
+
+<p>Skip this chapter if nobody signs in against a job.</p>
+
+<figure>
+  <img src="img/projects.png" alt="">
+  <figcaption><b>Projects.</b> Each with a name, an optional Spanish name and a short code.
+    Contractors pick one at sign-in.</figcaption>
+</figure>
+
+<p>The project lands on the visit record, in the visits export, and — the part most sites are
+  actually after — drives <strong>hours on site per project</strong> on the reports. If you want that
+  figure, set the project field to <em>required</em> for contractors in the next chapter but one.</p>
+
+<p>Close a finished job by switching <strong>Active</strong> off: it disappears from the kiosk but
+  keeps its history. A project that has ever been signed in against cannot be deleted, only closed.</p>
+
+<!-- =================================================================== 10 -->
+<h1 class="chapter"><span class="num">Chapter 10</span>Step four — the cards on the kiosk</h1>
+
+<p><span class="path">Sign-in setup → Visitor types</span> decides what a visitor sees when they walk
+  up to the tablet.</p>
+
+<figure>
+  <img src="img/vtypes.png" alt="">
+  <figcaption><b>Visitor types.</b> The list on one side, a live preview of the kiosk home screen on
+    the other. Drag the preview to change the order the tablet shows them in.</figcaption>
+</figure>
+
+<p>Each type carries a name in both languages, an icon, and where it appears: its own card on the
+  home screen, an option behind <strong>Sign in</strong>, both, or hidden. Press the icon to open a
+  picker of emoji chosen for the job — things that read as a delivery driver from six feet away.</p>
+
+<h2>What most sites end up with</h2>
+
+<ul>
+  <li><strong>Sign in</strong> and <strong>Sign out</strong> — always.</li>
+  <li><strong>Contractor</strong> as its own card if you have a crew: it goes straight into a
+    contractor sign-in with no picker in between.</li>
+  <li><strong>Driver</strong> if trucks come to a gate. It asks for the haulier, vehicle, docket and
+    whether they are delivering or collecting, and never asks who they are visiting.</li>
+  <li><strong>Delivery</strong> if couriers leave parcels at reception.</li>
+  <li><strong>Interview</strong> if you want candidates recorded separately from visitors — which HR
+    usually does.</li>
+</ul>
+
+<p>Add your own if none of those fit. A new type immediately gains its own form settings, document
+  assignments, induction targeting and per-device placement.</p>
+
+<figure class="tablet">
+  <img src="img/kiosk-welcome.png" alt="">
+  <figcaption><b>What that produces.</b> Open <code>/kiosk/</code> in another tab while you work —
+    it reloads itself within about twenty seconds of any change you save.</figcaption>
+</figure>
+
+<!-- =================================================================== 11 -->
+<h1 class="chapter"><span class="num">Chapter 11</span>Step five — what you ask people</h1>
+
+<p><span class="path">Settings → Visitor form</span> is a grid: the fields down the side, your
+  visitor types across the top. Every cell is <em>off</em>, <em>optional</em> or <em>required</em>.</p>
+
+<figure>
+  <img src="img/set-form.png" alt="">
+  <figcaption><b>The form, per type.</b> Hovering highlights the whole row and the whole column, so
+    you can see which field and which type a dropdown belongs to before changing it.</figcaption>
+</figure>
+
+<h2>Ask for less than you think</h2>
+
+<p>Every field is another thing somebody types one-handed with a queue behind them. A useful default:</p>
+
+<table>
+  <thead><tr><th>Field</th><th>Visitor</th><th>Contractor</th><th>Driver</th></tr></thead>
+  <tbody>
+    <tr><td>Photo</td><td>Optional</td><td>Optional</td><td>Off</td></tr>
+    <tr><td>Company</td><td>Optional</td><td>Required</td><td>Required</td></tr>
+    <tr><td>Phone</td><td>Required</td><td>Required</td><td>Optional</td></tr>
+    <tr><td>Who they are seeing</td><td>Required</td><td>Off</td><td>Off</td></tr>
+    <tr><td>Project</td><td>Off</td><td>Required</td><td>Off</td></tr>
+    <tr><td>Vehicle, docket, in or out</td><td>Off</td><td>Off</td><td>Required</td></tr>
+  </tbody>
+</table>
+
+<p>Under <strong>Wording</strong> you can rename a field per type — a driver is asked for a haulier,
+  not a company — and add a line of help underneath it.</p>
+
+<div class="note">
+  <span class="label">The phone number earns its place</span>
+  <p>It is how a returning visitor is recognised, and how somebody booked in advance is matched to
+    their booking. A site that does not collect it makes every visitor a stranger every time.</p>
+</div>
+
+<!-- =================================================================== 12 -->
+<h1 class="chapter"><span class="num">Chapter 12</span>Step six — the sign-in flow</h1>
+
+<figure>
+  <img src="img/set-flow.png" alt="">
+  <figcaption><b>The kiosk flow.</b> Whether the cards sit on the welcome screen or behind a "Touch
+    to start" button, whether Spanish is offered, how long before it times out, and what time
+    anybody left on site is signed out.</figcaption>
+</figure>
+
+<p>Three settings here are worth a moment:</p>
+
+<dl>
+  <dt>Offer Spanish</dt>
+  <dd>Turns on an <strong>English / Español</strong> bar on the welcome screen and a small button in
+    the corner of every later screen. The kiosk's own wording is already translated; anything you
+    type gets a Spanish box beside it, and an empty one falls back to English.</dd>
+  <dt>Time out back to the welcome screen</dt>
+  <dd>90 seconds by default. An abandoned sign-in is wiped completely when it fires — every field,
+    the photo, the answers — so nothing of one visitor is left on screen for the next.</dd>
+  <dt>Sign out anyone left on site at</dt>
+  <dd>23:59 by default, in your time zone. People forget to sign out, and a roll call full of people
+    who went home on Tuesday is worse than useless.</dd>
+</dl>
+
+<p>The order the four sign-in steps are asked in — details, photo, documents, induction — is set per
+  visitor type under <span class="path">Settings → The order things are asked</span>. A contractor
+  can watch the induction before signing anything while visitors keep the usual order.</p>
+
+<!-- =================================================================== 13 -->
+<h1 class="chapter"><span class="num">Chapter 13</span>Step seven — documents to sign</h1>
+
+<figure>
+  <img src="img/documents.png" alt="">
+  <figcaption><b>Documents.</b> Each is assigned to the visitor types that must sign it, and carries
+    its own version.</figcaption>
+</figure>
+
+<p>A document is either wording you type here, or an uploaded <strong>PDF or Word file</strong> —
+  which is what most sites want, because the site rules already exist as a document somebody spent a
+  long time on. Save the document first, then reopen it and use <strong>Upload PDF or Word</strong>.</p>
+
+<p>The file is rendered to page images, so it reads on the kiosk exactly as it was drafted. The
+  layout of a safety document is part of what is being agreed to.</p>
+
+<h2>Questions</h2>
+
+<p>A document can carry its own questions, asked just above the signature: yes/no, a short answer, or
+  a choice from your own options. A question can depend on an earlier answer — <em>Only ask this
+  if</em> — so a No opens one follow-up and a Yes opens another.</p>
+
+<p>A document with questions and the signature switched off is a questionnaire: the visitor answers
+  and carries on. Useful for a health declaration where a signature adds nothing.</p>
+
+<div class="note">
+  <span class="label">Versions protect you</span>
+  <p>Editing a document, or uploading a new file, bumps its version. Copies already signed stay
+    exactly as they were signed, and each signature records the version and the language on screen at
+    the time — so it is always known which wording somebody actually agreed to.</p>
+</div>
+
+<!-- =================================================================== 14 -->
+<h1 class="chapter"><span class="num">Chapter 14</span>Step eight — the induction</h1>
+
+<figure>
+  <img src="img/induction.png" alt="">
+  <figcaption><b>Induction decks.</b> Create a deck, drop a PowerPoint, PDF or images onto it, and
+    assign it to the visitor types that must watch it.</figcaption>
+</figure>
+
+<p>First-time visitors always watch it. Returning visitors only watch it again if the deck version
+  changed, or you set "repeat after N days", or you tick "show it every visit". Uploading a new file
+  replaces the slides and bumps the version, which is deliberate: everyone sees the new induction
+  once, including people who watched the old one.</p>
+
+<div class="warn">
+  <span class="label">Upload a PDF if the layout matters</span>
+  <p>PowerPoint shrinks text that overflows its box and stores only the shrink factor; the renderer
+    on the server ignores it and draws the text full size, so a tight slide comes out with words
+    under the pictures. Nothing on the server can undo that. <strong>File → Export → PDF</strong>
+    bakes the layout in, and the PDF is still split into slides, so nothing else about the deck
+    changes. Always check with <strong>Preview</strong> after uploading.</p>
+</div>
+
+<p>If you need proof people actually read it, set <strong>minimum seconds per slide</strong>: Next
+  shows a countdown and only unlocks when the time is up. Completion is stored per person with the
+  version and the seconds taken, and appears on the visit record.</p>
+
+<!-- =================================================================== 15 -->
+<h1 class="chapter"><span class="num">Chapter 15</span>Step nine — badges, if you print them</h1>
+
+<p>Off by default, and plenty of sites never turn it on. Skip this chapter if you do not have a label
+  printer.</p>
+
+<figure>
+  <img src="img/badges.png" alt="">
+  <figcaption><b>The badge designer.</b> A live preview at the real label size, a test print, and
+    reprinting for anybody from the last week.</figcaption>
+</figure>
+
+<ol class="steps">
+  <li>Connect the label printer to the tablet that shows the kiosk — USB, or a network/AirPrint
+    printer — and make it that device’s default printer.</li>
+  <li>Set the label size to match your stock. 62 × 100 mm is a common Brother size.</li>
+  <li>In the browser’s print settings: margins <strong>None</strong>, headers and footers
+    <strong>off</strong>, background graphics <strong>on</strong>.</li>
+  <li>Print a test badge and adjust the width, height and text scale until it lines up.</li>
+</ol>
+
+<p>The badge number is built from tokens, with a live sample as you type. The default
+  <code>{prefix}{yy}{mm}{dd}-{seq}</code> gives <code>NTB260830-004</code>. You can set a different
+  prefix per visitor type so contractors and drivers run separate series.</p>
+
+<div class="warn">
+  <span class="label">Bluetooth printers will not work</span>
+  <p>iPads print over Bluetooth only from the manufacturer’s own app, never from a web page. A
+    Bluetooth-only printer cannot print badges here. Network or Wireless Direct is what you need.</p>
+</div>
+
+<!-- =================================================================== 16 -->
+<h1 class="chapter"><span class="num">Chapter 16</span>Step ten — telling somebody a visitor arrived</h1>
+
+<p>Until you do this, arrivals are recorded and shown on the dashboard but nobody is told. That is a
+  perfectly reasonable place to start; it is also the thing most sites want most.</p>
+
+<figure>
+  <img src="img/set-notifications.png" alt="">
+  <figcaption><b>Notifications.</b> Six channels, each switchable on its own, each with a test button
+    that can only ever reach your own address.</figcaption>
+</figure>
+
+<table>
+  <thead><tr><th>Channel</th><th>What it needs</th><th>Effort</th></tr></thead>
+  <tbody>
+    <tr><td>Microsoft Teams</td><td>A Workflows URL</td><td>Ten minutes, no admin consent</td></tr>
+    <tr><td>Slack</td><td>An incoming webhook URL</td><td>Five minutes</td></tr>
+    <tr><td>Google Chat</td><td>An incoming webhook URL</td><td>Five minutes</td></tr>
+    <tr><td>Email</td><td>SMTP host, port, user, password</td><td>Depends on your mail provider</td></tr>
+    <tr><td>SMS</td><td>A Twilio account</td><td>Twenty minutes, and it costs per text</td></tr>
+    <tr><td>Generic JSON</td><td>Any URL you control</td><td>For driving something else</td></tr>
+  </tbody>
+</table>
+
+<p>Start with one. Teams or Slack is the usual answer, because the message can tag the person being
+  visited and they are already looking at it.</p>
+
+<h2>Two places at once</h2>
+
+<p>Chat notifications go to a <strong>company channel</strong> that sees every arrival, and to each
+  person's <strong>own webhook</strong> for their own visitors. Switch the channel off being
+  always-on and it becomes a fallback for people who have no webhook of their own.</p>
+
+<h2>What the message looks like</h2>
+
+<figure>
+  <img src="img/card-designer.png" alt="">
+  <figcaption><b>The card designer.</b> Title, fields, photo size and placement, colours and footer —
+    separately for arrivals, departures, finished inductions and parcels, with a live preview.</figcaption>
+</figure>
+
+<p>You do not have to touch any of this to get working notifications; the defaults are sensible. Come
+  back to it once arrivals are flowing.</p>
+
+<div class="note">
+  <span class="label">Test messages cannot reach a real person</span>
+  <p>Every test goes to the address in <strong>Send test emails to</strong> and nowhere else. You
+    cannot accidentally send a test arrival to your whole company channel while setting it up.</p>
+</div>
+
+<!-- =================================================================== 17 -->
+<h1 class="chapter"><span class="num">Chapter 17</span>Step eleven — registering the tablet</h1>
+
+<figure>
+  <img src="img/devices.png" alt="">
+  <figcaption><b>Devices.</b> Register each tablet, and it gets its own address with a one-press
+    copy button.</figcaption>
+</figure>
+
+<p>Register the tablet here before you touch the tablet itself. It gets:</p>
+
+<ul>
+  <li><strong>Its own URL</strong> — <code>/kiosk/north-gate-ipad</code>. Because the device is named
+    in the address, a home-screen icon always comes back as that device.</li>
+  <li><strong>Its own cards, in its own order</strong>, independently of every other tablet. The gate
+    tablet can show Contractor and Driver; the reception one can show Visitor and Delivery.</li>
+  <li>A location, a printer, a default camera, and whether it prints badges at all.</li>
+  <li>An online status, from a heartbeat every minute — so you can see from your desk that the gate
+    tablet has been off since Thursday.</li>
+</ul>
+
+<p>Press <strong>Copy link</strong> and send it to yourself; you will need it in a moment.</p>
+
+<!-- =================================================================== 18 -->
+<h1 class="chapter"><span class="num">Chapter 18</span>Step twelve — setting up the tablet itself</h1>
+
+<ol class="steps">
+  <li>Open the device’s own link in the tablet’s browser — Safari on an iPad.</li>
+  <li>Share → <strong>Add to Home Screen</strong>. Launched from the home screen it runs full screen
+    with no browser chrome.</li>
+  <li>Sign in once as a visitor yourself, and allow the camera when it asks.</li>
+  <li>Turn on <strong>Guided Access</strong> (Settings → Accessibility) so visitors cannot leave the
+    app. Set a passcode you will remember.</li>
+  <li>Set the tablet never to sleep, and to auto-lock never, while it is on charge.</li>
+</ol>
+
+<figure class="tablet">
+  <img src="img/kiosk-details.png" alt="">
+  <figcaption><b>What a visitor sees.</b> The fields you chose in Chapter 11, worded how you worded
+    them, with your own privacy note at the foot.</figcaption>
+</figure>
+
+<div class="warn">
+  <span class="label">If no camera prompt ever appears</span>
+  <p>A third-party kiosk browser must both hold the camera permission itself <em>and</em> forward the
+    page’s request. Ones that skip the second part deny it silently, with no prompt at all. Open
+    <code>/check/</code> on that tablet — it reports what that browser actually allows. Safari with
+    Guided Access is the reliable alternative.</p>
+</div>
+
+<!-- =================================================================== 19 -->
+<h1 class="chapter"><span class="num">Chapter 19</span>Step thirteen — backups, before you need them</h1>
+
+<figure>
+  <img src="img/set-backups.png" alt="">
+  <figcaption><b>Backups.</b> A nightly archive of the database and every uploaded file, seven kept,
+    each integrity-checked after it is written.</figcaption>
+</figure>
+
+<p>The nightly backup runs on its own from the moment you install, so there is nothing to switch on.
+  Two things are worth doing today.</p>
+
+<h2>Turn on the off-site copy</h2>
+
+<p>Backups sit on the same volume as the data, so on their own they answer "something corrupted the
+  database" and not "the volume is gone". Posting each new one straight into a <strong>OneDrive</strong>
+  folder is what makes a copy survive losing the machine. The destination is a Power Automate flow —
+  "When an HTTP request is received" → "Create file" — which needs no Azure app registration and no
+  admin consent. Step-by-step instructions are on that page.</p>
+
+<h2>Press Test on a backup</h2>
+
+<p>A backup nobody has ever opened is a promise, not a copy. <strong>Test</strong> opens one, reads
+  the database inside it, and says whether it would actually restore — schema, accounts, and whether
+  the photos the records point at are really in the archive. It changes nothing. Do it now, so you
+  know what a good answer looks like.</p>
+
+<figure>
+  <img src="img/storage.png" alt="">
+  <figcaption><b>Room on the disk.</b> What is using the volume, and roughly how long the space left
+    will last at the rate this site fills it.</figcaption>
+</figure>
+
+<p>Photos are what fill a disk. The pressure valve — under <strong>When it gets tight</strong> — drops
+  the oldest photos before the volume fills, never inside a floor window and never quietly. Leave it
+  on; a full disk stops sign-ins altogether.</p>
+
+<h2>And decide how long you keep things</h2>
+
+<figure>
+  <img src="img/set-retention.png" alt="">
+  <figcaption><b>Data retention.</b> Three separate windows — photos, licence details and visit
+    records — plus the privacy notice the kiosk shows.</figcaption>
+</figure>
+
+<p>The defaults are 90 days for photos, 180 for licence details and two years for visit records. If
+  your organisation has a retention policy, this is where it goes, and it is much easier to set now
+  than to explain later.</p>
+
+<!-- =================================================================== 20 -->
+<h1 class="chapter"><span class="num">Chapter 20</span>Step fourteen — logins for everyone else</h1>
+
+<figure>
+  <img src="img/set-users.png" alt="">
+  <figcaption><b>Accounts.</b> A login is granted against somebody who is already on the staff list,
+    at one of four levels.</figcaption>
+</figure>
+
+<table>
+  <thead><tr><th>Level</th><th>Give it to</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Reception</strong></td><td>The front desk. Visits, expected, the registry, projects and reports.</td></tr>
+    <tr><td><strong>Clerk</strong></td><td>Whoever handles trucks and parcels, and nothing else.</td></tr>
+    <tr><td><strong>Manager</strong></td><td>Both of the above together. Not the settings.</td></tr>
+    <tr><td><strong>Administrator</strong></td><td>Everything, including settings, backups and accounts. Only the owner can grant it.</td></tr>
+  </tbody>
+</table>
+
+<p>Give people their own login rather than sharing one. Every action is recorded against whoever was
+  signed in, and an audit log that names the wrong person is worse than no audit log.</p>
+
+<div class="note">
+  <span class="label">Passwords you set are temporary</span>
+  <p>A password set by somebody else can do exactly two things until it is changed: show who the
+    account is, and change its password. So handing somebody a password does not leave you able to
+    sign in as them afterwards.</p>
+</div>
+
+<!-- =================================================================== 21 -->
+<h1 class="chapter"><span class="num">Chapter 21</span>The dress rehearsal</h1>
+
+<p class="lede">Half an hour, before anybody real walks up to it. Every one of these has caught
+  something on a real install.</p>
+
+<ol class="steps">
+  <li><strong>Sign yourself in at the tablet</strong>, as a visitor, exactly as a visitor would. Do
+    not skip the photo.</li>
+  <li><strong>Check the notification arrived</strong> where you expected it, tagging the right
+    person. If not, open the visit and read the notification log at the foot of the record.</li>
+  <li><strong>Check the dashboard</strong> shows you on site, with the right time in the right time
+    zone.</li>
+  <li><strong>Print a badge</strong>, if you print badges. Look at whether it lines up on the label.</li>
+  <li><strong>Sign out</strong> — first by holding the badge to the scanner, then by name for
+    somebody without one.</li>
+  <li><strong>Sign in as a contractor</strong>, pick a project, and watch the induction the whole way
+    through. Time it. If it takes four minutes, your crew will hate it at seven in the morning.</li>
+  <li><strong>Sign in as the same person again</strong> and confirm they are recognised and skip the
+    induction.</li>
+  <li><strong>Pull the network cable</strong>, or turn off the tablet’s wifi, and sign somebody in
+    offline. Put it back and confirm the sign-in appears.</li>
+  <li><strong>Run an emergency roll call</strong> and print it. Know where that button is before you
+    need it.</li>
+  <li><strong>Press Test on a backup.</strong></li>
+</ol>
+
+<figure class="tablet">
+  <img src="img/kiosk-signout.png" alt="">
+  <figcaption><b>Signing out.</b> The scanner is already running when the screen opens; the name
+    search underneath is for anybody without a badge.</figcaption>
+</figure>
+
+<!-- =================================================================== 22 -->
+<h1 class="chapter"><span class="num">Chapter 22</span>Going live</h1>
+
+<ol class="steps">
+  <li><strong>Clear the examples.</strong> The four sample records a fresh install ships with are
+    cleared from the dashboard in one press. They are flagged in the database rather than matched by
+    name, so clearing them can never touch a real visitor who happens to share one.</li>
+  <li><strong>Book in tomorrow’s visitors</strong> under <span class="path">Expected today</span>, so
+    the first morning demonstrates the thing at its best: somebody walks up, types their number, and
+    the form is already filled in.</li>
+  <li><strong>Tell reception it exists</strong> and hand them the Front Desk Guide.</li>
+  <li><strong>Put a sign on the tablet.</strong> "Please sign in here" in your own words does more
+    for adoption than anything in this guide.</li>
+  <li><strong>Stand next to it for the first hour.</strong> You will learn more about your own
+    configuration in that hour than in a week of settings pages.</li>
+</ol>
+
+<figure>
+  <img src="img/expected.png" alt="">
+  <figcaption><b>Expected today.</b> Booking people in before the first morning is the cheapest way
+    to make the system look like it was worth installing.</figcaption>
+</figure>
+
+<!-- =================================================================== 23 -->
+<h1 class="chapter"><span class="num">Chapter 23</span>The first week</h1>
+
+<p>Five things to look at, once a day, for the first week.</p>
+
+<dl>
+  <dt>Is anybody still on site who went home?</dt>
+  <dd>If the same names appear every evening, sign-out is not sticking. Put a Sign out card on the
+    home screen, or make the badge scanner the first thing people see.</dd>
+  <dt>Did the notifications land?</dt>
+  <dd><span class="path">Settings → Notifications → What has been sent</span> lists the last fifty
+    attempts with the reason for any failure.</dd>
+  <dt>Is the induction too long?</dt>
+  <dd>The visit record stores how many seconds each person took. If everybody is at the minimum, they
+    are waiting rather than reading.</dd>
+  <dt>Are companies arriving spelled three ways?</dt>
+  <dd><span class="path">Companies</span> flags near-duplicates and offers to merge them. Ten minutes
+    in the first week saves a messy report later.</dd>
+  <dt>Did last night’s backup run?</dt>
+  <dd>The Backups page lists them with the time. If the newest is three days old, something is wrong
+    now rather than on the day you need it.</dd>
+</dl>
+
+<figure>
+  <img src="img/dashboard.png" alt="">
+  <figcaption><b>A week in.</b> What a working site looks like: people on site, arrivals through the
+    day, and the count still expected.</figcaption>
+</figure>
+
+<!-- =================================================================== 24 -->
+<h1 class="chapter"><span class="num">Chapter 24</span>If something is wrong</h1>
+
+<h3>The dashboard says storage is not persistent</h3>
+<p>No volume is mounted, and everything will be erased on the next deploy. Stop and fix this before
+  anything else. Chapter 3.</p>
+
+<h3>The tablet shows an old version of the home screen</h3>
+<p>Kiosks check in every 20 seconds and reload when the configuration changes — but one part-way
+  through a sign-in waits until the visitor has finished. If it is genuinely stuck, close the
+  home-screen app and reopen it.</p>
+
+<h3>No camera prompt ever appears on the tablet</h3>
+<p>Open <code>/check/</code> on that tablet. It is almost always a third-party kiosk browser not
+  forwarding the request. Use Safari with Guided Access.</p>
+
+<h3>"Request entry" is ticked but not showing</h3>
+<p>The card appears only once a door exists and is <strong>enabled</strong>. A door left disabled
+  while it is being wired is never offered.</p>
+
+<h3>Teams returns a 400</h3>
+<p>The URL is probably a legacy Office 365 connector rather than a Workflows one. Create the flow
+  again from "When an HTTP request is received".</p>
+
+<h3>An @-mention shows as raw markup</h3>
+<p>That person has no email address on their staff record, or one Teams cannot resolve. Add it under
+  <span class="path">Staff</span>.</p>
+
+<h3>Slides come out with words over the pictures</h3>
+<p>A font the deck used is missing on the server. Export the deck to PDF from PowerPoint and upload
+  that instead — a PDF carries its fonts inside it and is still split into slides.</p>
+
+<h3>Badges print blank or half off the label</h3>
+<p>Margins None, headers and footers off, background graphics on. Then adjust the label size and text
+  scale and print a test.</p>
+
+<h3>Nobody can sign in at all</h3>
+<p>There is no reset email. On the machine holding the data:</p>
+<pre><code>node scripts/reset-password.js                       # lists the accounts
+node scripts/reset-password.js you@example.com 'a new password'</code></pre>
+<p>On Railway that is a one-off command against the service with the volume mounted. It re-enables
+  the account and signs out every session it had.</p>
+
+<hr>
+
+<p><em>Day-to-day operation is in the <b>Front Desk Guide</b>. Everything this guide skipped —
+  doors, printers, locations, the deleted-records archive, the security posture and the test
+  suites — is in the <b>Administrator Guide</b>.</em></p>
