@@ -25,6 +25,22 @@
     return data;
   }
 
+  /**
+   * A list that knows how long it really is. The rows come back as a plain
+   * array with the count in a header, so this hands back both.
+   */
+  async function apiPage(path) {
+    const res = await api(path, { raw: true });
+    const rows = await res.json().catch(() => []);
+    if (!res.ok) throw new Error('failed');
+    const total = Number(res.headers.get('X-Total-Count'));
+    return {
+      rows,
+      total: Number.isFinite(total) ? total : rows.length,
+      offset: Number(res.headers.get('X-Offset')) || 0
+    };
+  }
+
   const upload = async (path, file, field = 'file') => {
     const fd = new FormData();
     fd.append(field, file);
@@ -786,15 +802,26 @@
           </select>
           <button class="btn" id="v-search">Search</button>
           <a class="btn ghost" id="v-csv" href="/api/admin/visits?format=csv">Export CSV</a>
+          <select class="input" id="v-per" style="max-width:9rem" title="Rows per page">
+            <option value="50">50 a page</option><option value="100">100 a page</option>
+            <option value="200" selected>200 a page</option><option value="500">500 a page</option>
+          </select>
         </div>
         <div class="table-wrap" id="v-results"></div>
+        <div class="row" id="v-pager" style="justify-content:space-between;align-items:center"></div>
       </div>`;
+
+    let offset = 0;
+    const per = () => Number($('#v-per').value) || 200;
 
     const load = async () => {
       const params = new URLSearchParams();
       ['q', 'from', 'to', 'status'].forEach((k) => { const v = $(`#v-${k}`).value; if (v) params.set(k, v); });
-      const rows = await api(`/visits?${params}`);
       $('#v-csv').href = `/api/admin/visits?format=csv&${params}`;
+      params.set('limit', String(per()));
+      params.set('offset', String(offset));
+      const { rows, total } = await apiPage(`/visits?${params}`);
+      drawPager(rows.length, total);
       $('#v-results').innerHTML = rows.length ? `<table>
         <thead><tr><th>Name</th><th>Company</th><th>Type</th><th>Staff member</th><th>In</th><th>Out</th><th>Status</th><th></th></tr></thead>
         <tbody>${rows.map((r) => `<tr>
@@ -810,8 +837,32 @@
       $$('[data-visit]').forEach((b) => b.addEventListener('click', () => visitDetail(b.dataset.visit)));
       bindSignoutButtons($('#v-results'), load);
     };
-    $('#v-search').addEventListener('click', load);
-    $('#v-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') load(); });
+
+    /*
+     * Says which slice of what you are looking at. Without it a capped list
+     * reads as the whole list, and an export taken from it looks complete.
+     */
+    function drawPager(shown, total) {
+      const pager = $('#v-pager');
+      if (!total) { pager.innerHTML = ''; return; }
+      const first = total ? offset + 1 : 0;
+      const last = offset + shown;
+      pager.innerHTML = `
+        <span class="muted" id="v-count">Showing ${first.toLocaleString()}–${last.toLocaleString()}
+          of ${total.toLocaleString()} visit${total === 1 ? '' : 's'}</span>
+        <span class="row" style="gap:.4rem">
+          <button class="btn ghost" id="v-prev" ${offset === 0 ? 'disabled' : ''}>Previous</button>
+          <button class="btn ghost" id="v-next" ${last >= total ? 'disabled' : ''}>Next</button>
+        </span>`;
+      $('#v-prev').addEventListener('click', () => { offset = Math.max(0, offset - per()); load(); });
+      $('#v-next').addEventListener('click', () => { offset += per(); load(); });
+    }
+
+    // Any change of filter is a new list, so page one of it.
+    const search = () => { offset = 0; load(); };
+    $('#v-search').addEventListener('click', search);
+    $('#v-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
+    ['from', 'to', 'status', 'per'].forEach((k) => $(`#v-${k}`).addEventListener('change', search));
     load();
   };
 

@@ -395,7 +395,24 @@ router.get('/visits', (req, res) => {
                LEFT JOIN projects j ON j.id = v.project_id
                ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
                ORDER BY v.signed_in_at DESC LIMIT ?`;
-  const rows = all(sql, ...params, Number(req.query.limit) || 500);
+  /*
+   * How many there are, as well as the page being shown.
+   *
+   * The list was capped at 500 with nothing saying so, which reads as "that
+   * is all of them": you would export what you thought was everything and
+   * quietly be missing the rest.
+   */
+  const limit = Math.min(2000, Math.max(1, Number(req.query.limit) || 200));
+  const offset = Math.max(0, Number(req.query.offset) || 0);
+  const total = get(`SELECT COUNT(*) AS n FROM visits v JOIN visitors p ON p.id = v.visitor_id
+                     LEFT JOIN hosts h ON h.id = v.host_id
+                     ${where.length ? 'WHERE ' + where.join(' AND ') : ''}`, ...params).n;
+
+  // A spreadsheet is the whole thing by definition — nobody wants page one.
+  const rows = req.query.format === 'csv'
+    ? all(sql, ...params, 100000)
+    : all(`${sql} OFFSET ?`, ...params, limit, offset);
+
   if (req.query.format === 'csv') {
     const body = csv(rows, [
       { label: 'Name', key: 'full_name' }, { label: 'Company', key: 'company' }, { label: 'Phone', key: 'phone' },
@@ -410,6 +427,13 @@ router.get('/visits', (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="visits-${Date.now()}.csv"`);
     return res.send(body);
   }
+  /*
+   * Still a bare array, with the count in a header. Several suites and a
+   * couple of older call sites index straight into this, and changing the
+   * shape would break them without saying so.
+   */
+  res.setHeader('X-Total-Count', String(total));
+  res.setHeader('X-Offset', String(offset));
   res.json(rows);
 });
 
