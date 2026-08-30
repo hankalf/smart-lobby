@@ -1,0 +1,864 @@
+<section class="cover">
+  <div class="rule-top"></div>
+  <p class="kicker">Smart Lobby</p>
+  <h1>Administrator Guide</h1>
+  <p class="sub">Installing it, setting it up, wiring the notifications, and keeping the data safe on
+    the day something goes wrong.</p>
+  <div class="meta">
+    <span>For whoever owns the installation</span>
+    <span>Covers deployment, configuration, notifications, access levels, backups and recovery</span>
+  </div>
+</section>
+
+<section class="contents">
+  <h1 class="chapter"><span class="num">Contents</span>What is in this guide</h1>
+  <ol>
+    <li><span class="n">1</span><span class="t">How it is put together</span></li>
+    <li><span class="n">2</span><span class="t">Installing it</span></li>
+    <li><span class="n">3</span><span class="t">First run</span></li>
+    <li><span class="n">4</span><span class="t">Access levels and accounts</span></li>
+    <li><span class="n">5</span><span class="t">Branding and the site clock</span></li>
+    <li><span class="n">6</span><span class="t">Visitor types and the kiosk home screen</span></li>
+    <li><span class="n">7</span><span class="t">The details form, per type</span></li>
+    <li><span class="n">8</span><span class="t">Documents and questions</span></li>
+    <li><span class="n">9</span><span class="t">Induction slideshows</span></li>
+    <li><span class="n">10</span><span class="t">Badges and printers</span></li>
+    <li><span class="n">11</span><span class="t">Devices</span></li>
+    <li><span class="n">12</span><span class="t">Notifications</span></li>
+    <li><span class="n">13</span><span class="t">Designing the chat card</span></li>
+    <li><span class="n">14</span><span class="t">Doors and access control</span></li>
+    <li><span class="n">15</span><span class="t">Projects, companies and certificates</span></li>
+    <li><span class="n">16</span><span class="t">Backups and restoring</span></li>
+    <li><span class="n">17</span><span class="t">Disk space and retention</span></li>
+    <li><span class="n">18</span><span class="t">Security posture</span></li>
+    <li><span class="n">19</span><span class="t">Tests</span></li>
+    <li><span class="n">20</span><span class="t">Troubleshooting</span></li>
+  </ol>
+</section>
+
+<!-- ==================================================================== 1 -->
+<h1 class="chapter"><span class="num">Chapter 1</span>How it is put together</h1>
+
+<p class="lede">One Node process and one SQLite file. There is no database server to run, no message
+  queue, no build step, and nothing to rebuild when Node updates.</p>
+
+<pre><code>server/
+  index.js       express app, static hosting, retention and auto-sign-out jobs
+  db.js          SQLite schema and query helpers (node:sqlite, no native modules)
+  settings.js    typed defaults, deep-merged over stored overrides
+  auth.js        cookie sessions, bcrypt passwords
+  roles.js       who can see what — the single place that decides
+  notify.js      email and chat webhooks
+  notify-card.js the chat card model and its renderers
+  expected.js    people booked in before they arrive
+  backup.js      archives, verification, the restore drill
+  storage.js     disk usage and the photo pressure valve
+  badges.js      badge numbering, shared by sign-in and reprinting
+  localtime.js   the site's day, for everything that counts one
+  routes/
+    kiosk.js     public kiosk API
+    admin.js     authenticated dashboard API
+    board.js     the on-site board
+public/
+  kiosk/         the reception app
+  admin/         the dashboard
+  shared/        the common stylesheet</code></pre>
+
+<h2>Where the data lives</h2>
+
+<pre><code>data/smartlobby.db      the database
+data/uploads/public/    logo, induction slides       (served without login)
+data/uploads/private/   photos, signatures, parcels  (login required)
+data/backups/           nightly archives</code></pre>
+
+<p>Back up that folder and you have backed up the system. Copy it to another machine and the system
+  moves with it.</p>
+
+<div class="warn">
+  <span class="label">One instance only</span>
+  <p>The database is a single file. Do not scale to multiple replicas — two processes writing one
+    SQLite file is how a database gets corrupted.</p>
+</div>
+
+<!-- ==================================================================== 2 -->
+<h1 class="chapter"><span class="num">Chapter 2</span>Installing it</h1>
+
+<pre><code>npm install
+npm start</code></pre>
+
+<p>Kiosk at <code>/kiosk/</code>, dashboard at <code>/admin/</code>, and a device check page at
+  <code>/check/</code> that reports what a given tablet's browser actually allows. Use
+  <code>PORT=3010 npm start</code> for a different port.</p>
+
+<h2>Shape one: a tablet on your own network</h2>
+
+<p>The tablet runs the kiosk in its browser; the server runs on a small always-on machine on the same
+  network — a Mac mini, a NUC, an old laptop, a Raspberry Pi. An iPad cannot host the server itself.</p>
+
+<ol class="steps">
+  <li>On the host machine, <code>npm install &amp;&amp; npm start</code>.</li>
+  <li>Find its LAN address, for example <code>192.168.1.40</code>.</li>
+  <li>Register the tablet under <span class="path">Devices</span> and press <strong>Copy link</strong>
+    — it looks like <code>http://192.168.1.40:3000/kiosk/north-gate-ipad</code>.</li>
+  <li>Open that on the tablet, then Share → <strong>Add to Home Screen</strong>. Launched from the
+    home screen it runs full screen, and because the device is named in the address itself the saved
+    icon always comes back showing that device's cards.</li>
+  <li>Turn on <strong>Guided Access</strong> so visitors cannot leave the app.</li>
+</ol>
+
+<div class="note">
+  <span class="label">The camera over plain HTTP</span>
+  <p>Browsers only allow a live camera preview over <code>https://</code> or on
+    <code>localhost</code>. Over a plain LAN address the kiosk automatically falls back to an
+    <strong>Open camera</strong> button that launches the tablet's own camera app — the photo is
+    captured, cropped and attached identically. Nobody hits a dead end. To get the inline preview,
+    put a reverse proxy with a certificate in front (Caddy does it in two lines).</p>
+</div>
+
+<div class="warn">
+  <span class="label">Third-party kiosk browsers</span>
+  <p>A kiosk browser app must both hold the camera permission itself <em>and</em> forward the page's
+    request. Ones that skip the second part deny it silently, with no prompt at all. If no prompt
+    ever appears, that is the cause. Safari with Guided Access is the reliable alternative, and
+    <code>/check/</code> on the tablet confirms it either way.</p>
+</div>
+
+<h2>Shape two: Railway</h2>
+
+<ol class="steps">
+  <li>Push the repository and create a Railway project from it.</li>
+  <li>Add a <strong>Volume</strong> and mount it at <code>/data</code>.</li>
+  <li>Set <code>NODE_ENV=production</code> and <code>PUBLIC_URL=https://your-app.up.railway.app</code>.
+    <code>DATA_DIR</code> is optional — a Railway volume is detected automatically.</li>
+  <li>Deploy. Railway serves HTTPS, so the kiosk camera works out of the box.</li>
+</ol>
+
+<div class="warn">
+  <span class="label">The volume is not optional</span>
+  <p>Without it, the database and every uploaded photo and slide is erased on each deploy. The app
+    refuses to be quiet about this: a banner appears in the dashboard, the login screen says so,
+    <code>/api/health</code> reports <code>"storage":"ephemeral"</code>, and the deploy log prints a
+    warning.</p>
+</div>
+
+<p>The included Dockerfile installs LibreOffice, poppler and metric-compatible fonts, so uploaded
+  PowerPoint decks render as they look in PowerPoint. It makes the image about a gigabyte and the
+  first build slow. Delete it if you would rather have fast builds and are happy uploading PDF
+  exports of your decks instead.</p>
+
+<!-- ==================================================================== 3 -->
+<h1 class="chapter"><span class="num">Chapter 3</span>First run</h1>
+
+<p>The first time you open <code>/admin/</code> it asks you to create the owner account. That is the
+  whole installation — there is nothing else to provision.</p>
+
+<p>A new install is not an empty screen: it seeds one worked example per visitor type so you can see
+  what a visit, a contractor sign-in, an interview and a driver record actually look like. Clear them
+  from the dashboard when you are ready. They are flagged in the database rather than matched by
+  name, so clearing them can never touch a real visitor who happens to share a name.</p>
+
+<h2>The order worth setting things up in</h2>
+
+<ol class="steps">
+  <li><span class="path">Settings → Branding</span> — the name, logo, colours and above all the
+    <strong>time zone</strong>.</li>
+  <li><span class="path">Staff</span> — the people visitors ask for. Bulk import from a spreadsheet.</li>
+  <li><span class="path">Projects</span> — if contractors sign in against jobs.</li>
+  <li><span class="path">Visitor types</span> — which cards the kiosk offers.</li>
+  <li><span class="path">Settings → Visitor form</span> — which fields each type is asked for.</li>
+  <li><span class="path">Documents</span> and <span class="path">Induction decks</span>.</li>
+  <li><span class="path">Settings → Notifications</span> — so arrivals reach somebody.</li>
+  <li><span class="path">Devices</span> — register each tablet and copy its link.</li>
+  <li><span class="path">Settings → Backups</span> — turn on the off-site copy.</li>
+</ol>
+
+<!-- ==================================================================== 4 -->
+<h1 class="chapter"><span class="num">Chapter 4</span>Access levels and accounts</h1>
+
+<p>Logins are granted from <span class="path">Staff</span>, against a person who already exists there.
+  Five levels:</p>
+
+<table>
+  <thead>
+    <tr><th>Area</th><th class="tick">Reception</th><th class="tick">Clerk</th><th class="tick">Manager</th><th class="tick">Admin</th><th class="tick">Owner</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Dashboard</td><td class="tick">✓</td><td class="tick">✓</td><td class="tick">✓</td><td class="tick">✓</td><td class="tick">✓</td></tr>
+    <tr><td>Visits, roll call, expected, staff list</td><td class="tick">✓</td><td class="dash">—</td><td class="tick">✓</td><td class="tick">✓</td><td class="tick">✓</td></tr>
+    <tr><td>Registry, companies, certificates</td><td class="tick">✓</td><td class="dash">—</td><td class="tick">✓</td><td class="tick">✓</td><td class="tick">✓</td></tr>
+    <tr><td>Projects</td><td class="tick">✓</td><td class="dash">—</td><td class="tick">✓</td><td class="tick">✓</td><td class="tick">✓</td></tr>
+    <tr><td>Reports, printable report</td><td class="tick">✓</td><td class="dash">—</td><td class="tick">✓</td><td class="tick">✓</td><td class="tick">✓</td></tr>
+    <tr><td>Drivers</td><td class="dash">—</td><td class="tick">✓</td><td class="tick">✓</td><td class="tick">✓</td><td class="tick">✓</td></tr>
+    <tr><td>Deliveries</td><td class="dash">—</td><td class="tick">✓</td><td class="tick">✓</td><td class="tick">✓</td><td class="tick">✓</td></tr>
+    <tr><td>Settings, backups, devices, accounts, storage</td><td class="dash">—</td><td class="dash">—</td><td class="dash">—</td><td class="tick">✓</td><td class="tick">✓</td></tr>
+  </tbody>
+</table>
+
+<h2>The rules that override the table</h2>
+
+<ul>
+  <li>Anyone signed in can read their own account, change their own password, and read the on-site
+    board's address.</li>
+  <li>The <strong>staff list</strong> is readable by anyone who can open a visit — naming who a visit
+    is for needs it. Editing it is administration, because a login can be granted through it.</li>
+  <li>Reception can read what paperwork is <strong>lapsing</strong>; changing the certificate rules
+    needs the registry area.</li>
+  <li>Anything not classified defaults to administrator, so a route added later is a locked door
+    rather than an open one.</li>
+</ul>
+
+<h2>The owner</h2>
+
+<p>The first account is the owner: an administrator that cannot be demoted or removed, because an
+  install nobody can reach the settings on is an install nobody can fix. Only the owner can create
+  another administrator, and only the owner can stage a restore.</p>
+
+<h2>Temporary passwords</h2>
+
+<p>A password set by somebody else is temporary. Until it is changed that login can do exactly two
+  things — read who it is, and change its password — so whoever typed it does not go on being able to
+  sign in as that person.</p>
+
+<h2>When nobody can sign in</h2>
+
+<p>There is no reset email to send. The way back in is on the machine holding the data:</p>
+
+<pre><code>node scripts/reset-password.js                       # lists the accounts
+node scripts/reset-password.js you@example.com 'a new password'</code></pre>
+
+<p>On Railway that is a one-off command against the service with the volume mounted. It re-enables the
+  account and signs out every session it had.</p>
+
+<!-- ==================================================================== 5 -->
+<h1 class="chapter"><span class="num">Chapter 5</span>Branding and the site clock</h1>
+
+<p><span class="path">Settings → Branding</span> sets the organisation name, the kiosk headline and
+  sign-out message, two brand colours, the time zone and the date format.</p>
+
+<h2>The time zone matters more than it looks</h2>
+
+<p>It is the site's own, and everything that names a day or a time uses it: the date on a badge and
+  inside the badge number, the "today" counts, the activity and busiest-hour charts, and every arrival
+  time on the dashboard.</p>
+
+<p>Times are stored as UTC, so moving a site to a different zone re-reads the existing history in the
+  new one rather than shifting it. Set this before opening a site and then leave it alone, unless the
+  site itself moves.</p>
+
+<h2>Logo and background</h2>
+
+<dl>
+  <dt>Logo</dt>
+  <dd>Appears on the kiosk welcome screen, printed badges, the dashboard sidebar and the sign-in page.
+    PNG or SVG with a transparent background works best.</dd>
+  <dt>Kiosk background</dt>
+  <dd>One photo behind the welcome screen, or several that crossfade on a timer — 8 seconds to 5
+    minutes, up to 20 photos. A slider controls how much they are darkened so the welcome text stays
+    readable, with a live preview beside it. Landscape, 1600px wide or more. Rotation pauses while
+    somebody is signing in.</dd>
+  <dt>Welcome text position</dt>
+  <dd>Place the headline, sub-heading and button left, centre or right and top, middle or bottom, so
+    they sit clear of whatever is in the photo.</dd>
+</dl>
+
+<p>Uploads are checked by their actual bytes rather than their file extension, so a mislabelled file
+  is rejected instead of becoming a broken image on the kiosk.</p>
+
+<!-- ==================================================================== 6 -->
+<h1 class="chapter"><span class="num">Chapter 6</span>Visitor types and the kiosk home screen</h1>
+
+<p><span class="path">Visitor types</span> is where the kiosk's cards are defined. Each type carries a
+  name in both languages, an icon, and where it appears: its own card on the home screen, an option
+  behind <strong>Sign in</strong>, both, or hidden.</p>
+
+<p>Add a type — a Cleaner card, an Auditor card — and it immediately gains its own form settings,
+  document assignments, induction targeting and per-device placement.</p>
+
+<h2>The icon and the order</h2>
+
+<p>Press the icon to open a picker of emoji chosen for the job: things that read as a delivery driver
+  or a contractor from six feet away. Anything not in the list can still be pasted in.</p>
+
+<p>The home-screen preview beside the list can be dragged to set the order the kiosk shows the cards
+  in. What you see in the preview is what appears on the tablet.</p>
+
+<h2>The standard set</h2>
+
+<dl>
+  <dt>Sign in</dt><dd>The general card, offering whichever types sit behind it.</dd>
+  <dt>Sign out</dt><dd>Badge scanner first, name search underneath.</dd>
+  <dt>Contractor</dt><dd>Straight into a contractor sign-in with no picker: name, company, phone and
+    the project they are on. No vehicle is asked for.</dd>
+  <dt>Interview</dt><dd>Candidates, recorded as an interview visit without choosing a type.</dd>
+  <dt>Driver</dt><dd>Haulier, vehicle registration, load or order reference, delivering or collecting.
+    Does not ask who they are visiting.</dd>
+  <dt>Delivery</dt><dd>Courier drop-off with a parcel photo.</dd>
+  <dt>Request entry</dt><dd>Appears only once a door is set up and kiosk unlock is switched on. If you
+    have ticked it and it is not showing, that is why.</dd>
+</dl>
+
+<!-- ==================================================================== 7 -->
+<h1 class="chapter"><span class="num">Chapter 7</span>The details form, per type</h1>
+
+<p><span class="path">Settings → Visitor form</span> is a grid: fields down the side, visitor types
+  across the top. Each cell is off, optional or required. Hovering highlights the whole row and the
+  whole column, so you can see which field and which type a dropdown belongs to before changing it.</p>
+
+<p>Under <strong>Wording</strong>, rename a field per type — a driver is asked for a haulier, not a
+  company — and add a line of help underneath it.</p>
+
+<h2>The order things are asked</h2>
+
+<p><span class="path">Settings → The order things are asked</span>. Each visitor type has its own
+  order for the four steps: their details, the photo, documents and questions, and the induction deck.
+  A contractor can watch the induction before signing anything while visitors keep the usual order.</p>
+
+<p>Finding the visitor always comes first, because it decides whether the induction is needed at all.
+  A step that does not apply is skipped wherever it sits.</p>
+
+<h2>Changes reaching the tablets</h2>
+
+<p>Every saved change bumps a configuration revision. Kiosks check in every 20 seconds and reload when
+  that number moves, so branding, cards, fields, documents and inductions all reach the tablets by
+  themselves. A kiosk part-way through a sign-in waits until the visitor has finished, so nobody has
+  a form rearranged under them mid-typing.</p>
+
+<!-- ==================================================================== 8 -->
+<h1 class="chapter"><span class="num">Chapter 8</span>Documents and questions</h1>
+
+<p>Each document in <span class="path">Documents</span> is assigned to the categories that must sign
+  it, matching the kiosk cards. Deliveries sign nothing.</p>
+
+<h2>Typed wording, or an uploaded file</h2>
+
+<p>A document is either wording typed into the dashboard or an uploaded PDF or Word file — also ODT,
+  RTF, plain text or an image. Save the document first, then reopen it and use <strong>Upload PDF or
+  Word</strong>. The file is rendered to page images so it is read on the kiosk exactly as drafted;
+  the layout of a safety document is part of what is being agreed to.</p>
+
+<p>An uploaded file replaces the typed wording on the kiosk, and <strong>Remove file</strong> goes
+  back to it with the typed text kept meanwhile. Uploading, replacing or removing a file bumps the
+  document's version, so copies already signed stay exactly as they were signed.</p>
+
+<h2>Questions</h2>
+
+<p>A document can carry its own questions, asked just above the signature: <strong>Yes / No</strong>,
+  <strong>short answer</strong>, or <strong>choose one</strong> from your own options.</p>
+
+<p>A question can depend on an earlier answer — <em>Only ask this if</em> — so a No opens one
+  follow-up and a Yes opens another. A question nobody was shown is never required of them, and if
+  they change the answer above it, the abandoned branch is cleared rather than stored.</p>
+
+<p>A document with questions and the signature switched off is a questionnaire: the visitor answers
+  and carries on. The body text can be left empty.</p>
+
+<div class="note">
+  <span class="label">Answers keep their wording</span>
+  <p>Answers are stored against the visit alongside the signature and shown with the wording used at
+    the time, so a later edit to a question never changes what a past answer appears to mean.</p>
+</div>
+
+<!-- ==================================================================== 9 -->
+<h1 class="chapter"><span class="num">Chapter 9</span>Induction slideshows</h1>
+
+<p>Create a deck in <span class="path">Induction decks</span>, then drop a <code>.pptx</code>,
+  <code>.pdf</code> or image onto it. How the file becomes slides, best first:</p>
+
+<ol class="steps">
+  <li><strong>LibreOffice and poppler installed</strong> — each slide rendered to a PNG. Pixel perfect.</li>
+  <li><strong>PowerPoint, no LibreOffice</strong> — the file is unpacked and each slide rebuilt from
+    its text and images. Layout approximate, content all there.</li>
+  <li><strong>PDF, no poppler</strong> — shown as one scrollable embedded document.</li>
+  <li><strong>Images</strong> — one slide each, in upload order.</li>
+</ol>
+
+<p><code>/api/health</code> reports which you have, and the Induction decks page says plainly whether
+  it can render properly.</p>
+
+<h2>Who has to watch it</h2>
+
+<ul>
+  <li>First-time visitors, always.</li>
+  <li>Returning visitors, only if the deck version changed since they last watched, or you set
+    "repeat after N days", or you tick "show it every visit".</li>
+  <li>Reset one person from <span class="path">Visitor registry → Open → Reset induction</span>.</li>
+</ul>
+
+<p>Uploading a new file replaces the slides and bumps the deck version, which is deliberate: everyone
+  sees the new induction once, including people who watched the old one.</p>
+
+<h2>Two languages</h2>
+
+<p>Upload the English and Spanish decks as two decks assigned to the same visitor types, with
+  <strong>Language</strong> set on each. The kiosk plays the one matching the language on screen —
+  switching even at the last moment switches the deck — and falls back to English where no Spanish
+  deck exists. Watching either counts, so nobody sits through the same content twice.</p>
+
+<h2>Proving they read it</h2>
+
+<p>Set <strong>minimum seconds per slide</strong> and Next shows a countdown that only unlocks when
+  the time is up. A slide already sat through stays unlocked, so re-reading an earlier one costs
+  nothing. Completion is stored per person with the deck version and the seconds taken, and appears
+  on the visit record.</p>
+
+<div class="warn">
+  <span class="label">Upload a PDF if layout matters</span>
+  <p>PowerPoint shrinks text that overflows its box and stores only the shrink factor; LibreOffice
+    ignores it and draws the text full size, so a tight slide comes out with words under the pictures.
+    Nothing on the server can undo that. <strong>File → Export → PDF</strong> bakes the layout in, and
+    the PDF is still split into slides. The same applies to any deck built on a brand font, or on
+    Microsoft's Aptos, for which there is no metric-compatible stand-in.</p>
+</div>
+
+<!-- =================================================================== 10 -->
+<h1 class="chapter"><span class="num">Chapter 10</span>Badges and printers</h1>
+
+<p>Badges are off by default. The <span class="path">Badges</span> page holds whether they print at
+  all, the label stock, what the badge shows, a live preview at real size, a test print and
+  reprinting.</p>
+
+<h2>Setting up the printer</h2>
+
+<ol class="steps">
+  <li>Connect the label printer to the device showing the kiosk — USB, or a network/AirPrint printer.</li>
+  <li>Make it the default printer on that device.</li>
+  <li>Set the label size to match your stock. 62 × 100 mm is a common Brother size.</li>
+  <li>In Chrome or Edge print settings: margins <strong>None</strong>, headers and footers
+    <strong>off</strong>, background graphics <strong>on</strong>. On iPad, AirPrint remembers the
+    printer you pick.</li>
+  <li>Print a test badge and adjust width, height and font scale until it lines up.</li>
+</ol>
+
+<h2>The badge number</h2>
+
+<p>Built from tokens, with a live sample beside the field as you type:</p>
+
+<table>
+  <thead><tr><th>Token</th><th>Becomes</th></tr></thead>
+  <tbody>
+    <tr><td><code>{prefix}</code></td><td>The prefix for that visitor type, or the general one</td></tr>
+    <tr><td><code>{yyyy}</code> <code>{yy}</code></td><td>The year, four or two digits</td></tr>
+    <tr><td><code>{mm}</code> <code>{dd}</code></td><td>Month and day, in the site's time zone</td></tr>
+    <tr><td><code>{type}</code> <code>{TYPE}</code></td><td>The visitor type, lower or upper case</td></tr>
+    <tr><td><code>{seq}</code></td><td>The sequence for that day, zero-padded</td></tr>
+  </tbody>
+</table>
+
+<p>The default <code>{prefix}{yy}{mm}{dd}-{seq}</code> gives <code>NTB260825-004</code>. Set a
+  different <strong>prefix per visitor type</strong> so contractors and drivers run separate series —
+  each series counts on independently, which is why two people can hold <code>C…-001</code> and
+  <code>T…-001</code> on the same day without a clash.</p>
+
+<div class="note">
+  <span class="label">Gaps are deliberate</span>
+  <p>The sequence carries on from the highest number already handed out that day, so deleting a visit
+    leaves a gap rather than letting the next arrival be given a number somebody on site is still
+    wearing.</p>
+</div>
+
+<h2>Printers register</h2>
+
+<p><span class="path">Printers</span> records name, model, which roll is loaded and its colour, how the
+  printer is reached, a static IP where there is one, and its location. Each device records which
+  printer sits beside it. How a printer is <em>reached</em> matters most, because printing runs over
+  AirPrint:</p>
+
+<dl>
+  <dt>Network</dt><dd>Printer and tablet on the same Wi-Fi. The normal case.</dd>
+  <dt>Wireless Direct</dt><dd>For a tablet on cellular with no site Wi-Fi: the printer hosts its own
+    network and the tablet joins it, keeping internet over LTE. On a Brother QL-820NWB: Menu → WLAN →
+    Wireless Direct → On.</dd>
+  <dt>Bluetooth</dt><dd>Inventory only. iPads print over Bluetooth solely from the maker's own app,
+    never from a web kiosk, so a Bluetooth-only printer will not print badges.</dd>
+</dl>
+
+<!-- =================================================================== 11 -->
+<h1 class="chapter"><span class="num">Chapter 11</span>Devices</h1>
+
+<p>Register every tablet under <span class="path">Devices</span>. Each gets:</p>
+
+<ul>
+  <li>Its own kiosk URL — <code>/kiosk/north-gate-ipad</code> — with a one-press copy button. Because
+    the device is named in the address, a home-screen icon always comes back as that device.</li>
+  <li>Which cards it shows and in what order, independently of every other tablet.</li>
+  <li>A location, a default camera, a printer, and whether it prints badges at all.</li>
+  <li>An operational mode, and an online status from a heartbeat every minute.</li>
+</ul>
+
+<p>A tablet opened at plain <code>/kiosk/</code> works too, but shows every card.</p>
+
+<!-- =================================================================== 12 -->
+<h1 class="chapter"><span class="num">Chapter 12</span>Notifications</h1>
+
+<p><span class="path">Settings → Notifications</span>. Six channels, each independently switchable,
+  each with a test button:</p>
+
+<table>
+  <thead><tr><th>Channel</th><th>What it needs</th></tr></thead>
+  <tbody>
+    <tr><td>Email</td><td>SMTP host, port, user, password. Any provider. Includes the photo.</td></tr>
+    <tr><td>Slack</td><td>An incoming webhook URL. Photo as a thumbnail.</td></tr>
+    <tr><td>Microsoft Teams</td><td>A Workflows URL. Channel post or a DM to one person.</td></tr>
+    <tr><td>Google Chat</td><td>An incoming webhook URL.</td></tr>
+    <tr><td>Generic JSON</td><td>Any URL. <code>{event, details[], photo_url, timestamp}</code>.</td></tr>
+    <tr><td>SMS</td><td>Twilio SID, auth token and a from-number. Numbers converted to E.164.</td></tr>
+  </tbody>
+</table>
+
+<p>Chat notifications go to two places at once: a company channel that sees every arrival, and each
+  person's own webhook for their own visitors. Switch the channel off being always-on and it becomes a
+  fallback for people who have no webhook of their own.</p>
+
+<p>The payload format is detected from the webhook URL, so one host can be on Slack and another on
+  Teams. The format dropdown only applies to URLs that are not recognised.</p>
+
+<h2>Which events fire</h2>
+
+<p>Arrival, sign-out, induction completed and delivery are separate toggles. SMS has its own arrival
+  and delivery toggles, so texts can be kept for arrivals only.</p>
+
+<h2>What has been sent</h2>
+
+<p><span class="path">Settings → Notifications → What has been sent</span> lists the last 50 attempts
+  on every channel with the address, the result, and the reason for any failure — including ones
+  skipped because a channel is off.</p>
+
+<div class="note">
+  <span class="label">A failing channel never blocks a sign-in</span>
+  <p>The visitor completes, and the reason is recorded against the visit. Failed posts are retried
+    after a minute, five minutes and twenty-five minutes, then given up on — posting an arrival an
+    hour after somebody walked in is worse than not posting it.</p>
+</div>
+
+<div class="warn">
+  <span class="label">Test messages cannot reach a real person</span>
+  <p>Tests go to the address in <strong>Send test emails to</strong> and nowhere else. Secrets — the
+    SMTP password, the Twilio token — are write-only: they come back masked, and the mask is never
+    written back over the real value.</p>
+</div>
+
+<!-- =================================================================== 13 -->
+<h1 class="chapter"><span class="num">Chapter 13</span>Designing the chat card</h1>
+
+<p class="lede">What lands in Teams is designed rather than fixed, per event and per visitor type.</p>
+
+<h2>Per event</h2>
+
+<p>Four events carry their own card: <strong>sign-in</strong>, <strong>sign-out</strong>,
+  <strong>induction finished</strong> and <strong>parcel arrived</strong>. For each you choose:</p>
+
+<ul>
+  <li>The title and sub-heading, written as templates with the visitor's name, company, host and time
+    filled in.</li>
+  <li>Which fields appear, and in what order.</li>
+  <li>Whether the photo shows, its size, its shape, and whether it sits beside the heading or above.</li>
+  <li>The header colour, whether details read as facts or lines, and the footer.</li>
+  <li>Whether the host is tagged, and the wording of the tag.</li>
+</ul>
+
+<p>A live preview shows the card as Teams will render it, so nothing has to be tested by making
+  somebody sign in.</p>
+
+<h2>Per visitor type, on top of that</h2>
+
+<p>Any visitor type can carry its own card for any event. A contractor arrival can look nothing like
+  an interview arrival. Types without their own card fall back to the event's design, so you only
+  override what actually differs.</p>
+
+<h2>Quick links</h2>
+
+<p>Up to four buttons on the card, opening the dashboard, the on-site board, the roll call or that
+  visitor's own record — so somebody reading the message in Teams can act on it without hunting for
+  the tab.</p>
+
+<h2>Who else gets tagged</h2>
+
+<p>Beyond the person being visited, any visitor type can be routed to other staff — a safety officer
+  who wants every contractor, an HR manager who wants every interview. They are picked from
+  checkboxes against the staff you already have, are tagged in the post, and are sent it directly if
+  they have a webhook of their own. Staff marked inactive are dropped automatically.</p>
+
+<div class="note">
+  <span class="label">Tagging only works when Teams can resolve the person</span>
+  <p>A mention needs a name and an email address Teams recognises. Somebody with no email on their
+    staff record is not tagged, because a mention Teams cannot resolve renders as raw markup — which
+    is worse than no tag at all.</p>
+</div>
+
+<!-- =================================================================== 14 -->
+<h1 class="chapter"><span class="num">Chapter 14</span>Doors and access control</h1>
+
+<p>Each door is one HTTP call. That covers smart relays directly — Shelly, Tasmota, ESPHome, Home
+  Assistant — and reaches a proper access panel (Honeywell, Paxton, Net2) through one: Smart Lobby
+  calls a relay, the relay closes a contact across the door's REX or auxiliary input, and the panel
+  releases the door as if somebody had pressed the exit button. The panel keeps its own schedules,
+  interlocks, fire release and log, and needs nothing added to its software.</p>
+
+<p>Add a door in <span class="path">Access &amp; doors</span> with a URL, method, optional headers and
+  body. These placeholders are filled in at unlock time: <code>{{seconds}}</code>,
+  <code>{{door}}</code>, <code>{{actor}}</code>, <code>{{visit_id}}</code>,
+  <code>{{timestamp}}</code>.</p>
+
+<pre><code>Shelly relay      GET   http://192.168.1.50/relay/0?turn=on&amp;timer={{seconds}}
+
+Home Assistant    POST  http://192.168.1.10:8123/api/services/lock/unlock
+                  Headers: {"Authorization":"Bearer YOUR_TOKEN"}
+                  Body:    {"entity_id":"lock.front_door"}</code></pre>
+
+<p>Doors fire automatically on sign-in, on sign-out, from a <strong>Request entry</strong> button on
+  the kiosk, or from <strong>Test unlock</strong> in the dashboard. Every attempt is logged with who,
+  when, why and the result.</p>
+
+<p>A door can be set up before it is wired: add it, write the panel, door and terminals into its
+  wiring notes, and leave it disabled. It stays listed, is offered on no kiosk, and is never called
+  until you tick Enabled.</p>
+
+<p>When an unlock fails, the result says which end to go and look at — whether the relay refused the
+  connection, could not be found, sat on a network this server cannot reach, never answered, or
+  answered and turned the request down. A 401 or 403 is usually a token in the headers.</p>
+
+<!-- =================================================================== 15 -->
+<h1 class="chapter"><span class="num">Chapter 15</span>Projects, companies and certificates</h1>
+
+<h2>Projects</h2>
+
+<p>The jobs a contractor can be on site for, each with a name, an optional Spanish name and a short
+  code. Contractors pick one at sign-in; the project lands on the visit record, in the visits CSV, and
+  drives hours-per-project on the reports.</p>
+
+<p>Close a finished job by switching <strong>Active</strong> off: it disappears from the kiosk but
+  keeps its history. A project that has ever been signed in against cannot be deleted, only closed.</p>
+
+<h2>Companies</h2>
+
+<p>Firms are records rather than free text. Because visitors type their own company name, the same
+  firm arrives spelled several ways — the page flags near-duplicates (one letter apart, or the same
+  name with a suffix like Ltd or LLC) and offers to merge them. Renaming fixes a misspelling
+  everywhere at once, including on the visits that recorded it.</p>
+
+<h2>Certificates</h2>
+
+<p>Insurance, CSCS cards, method statements — held against a person or a company, each with an expiry
+  date. Configure which kinds are required for which visitor types under
+  <span class="path">Settings → Certificates</span>.</p>
+
+<p>A missing or expired certificate can either warn the desk at sign-in or stop the visitor at the
+  kiosk, depending on how you set it. The dashboard shows what is lapsing so it can be chased before
+  somebody is turned away at the gate.</p>
+
+<!-- =================================================================== 16 -->
+<h1 class="chapter"><span class="num">Chapter 16</span>Backups and restoring</h1>
+
+<p class="lede">A backup nobody has ever opened is a promise, not a copy. This chapter is about
+  turning it into a fact before you need it.</p>
+
+<h2>What runs on its own</h2>
+
+<p>A ZIP holding the database <em>and</em> every uploaded file is written nightly to
+  <code>data/backups/</code>, seven kept, each opened and integrity-checked after it is written. The
+  first runs a minute after the server starts, so a fresh deploy is never a day away from having any
+  backup at all.</p>
+
+<div class="warn">
+  <span class="label">They are on the same volume as the data</span>
+  <p>On their own they answer "something corrupted the database", not "the volume is gone". For that
+    you need a copy somewhere else.</p>
+</div>
+
+<h2>The off-site copy</h2>
+
+<p>Each new backup can be posted straight into a <strong>OneDrive</strong> folder. The destination is
+  a Power Automate flow — "When an HTTP request is received" → "Create file" — which needs no Azure
+  app registration and no admin consent. Step-by-step instructions are on the Backups page.</p>
+
+<p>Power Automate refuses a request over about 90 MB, which a site keeping ninety days of photos
+  passes inside a fortnight. Past that size the archive is cut into numbered pieces —
+  <code>…-1of4-database.zip</code>, then the files — each a valid archive on its own. The database
+  goes first, so the most important piece is away even if a later one fails, and the pieces are
+  numbered so a gap in the folder is obvious.</p>
+
+<h2>Testing a backup without restoring it</h2>
+
+<p>Every backup in the list carries a <strong>Test</strong> button. It opens the archive, reads the
+  database inside it and reports whether it would actually restore:</p>
+
+<ul>
+  <li>The database passes SQLite's own integrity check and holds accounts, so somebody could sign in
+    afterwards.</li>
+  <li>It carries every table this version of the app reads, so a restore does not land on a schema
+    from before a migration.</li>
+  <li>The photos and signatures the records point at are actually inside the archive. This is the one
+    that fails quietly: a database-only copy restores perfectly and every face comes back as a broken
+    image.</li>
+</ul>
+
+<p>Nothing is written and nothing live is touched. Run it occasionally — a backup you have tested is
+  the only kind worth having.</p>
+
+<h2>Restoring</h2>
+
+<ol class="steps">
+  <li>Upload the archive on the Backups page. It is checked before anything happens.</li>
+  <li>The current data is backed up first, in case the restore was itself the mistake.</li>
+  <li>The restore is <strong>staged</strong>, not applied — swapping the file out from under an open
+    SQLite handle is how a restore becomes a second disaster.</li>
+  <li>Restart the server. The staged archive is applied on the way up.</li>
+</ol>
+
+<p>A files-only piece of a split backup is different: it holds no database, so there is nothing to
+  swap and it is unpacked immediately.</p>
+
+<!-- =================================================================== 17 -->
+<h1 class="chapter"><span class="num">Chapter 17</span>Disk space and retention</h1>
+
+<p>A full volume has no graceful failure. The database stops writing, the kiosk turns people away, and
+  the backup that would have warned you cannot be written either.</p>
+
+<h2>Knowing where you stand</h2>
+
+<p>The Backups page shows what is using the volume — photos and signatures, the database, backups kept
+  locally — with the percentage used and an estimate of <strong>how many days the space left will
+  last</strong>, worked out from the last thirty days of arrivals at this site rather than a guess at
+  an average one.</p>
+
+<h2>The pressure valve</h2>
+
+<p>Under <strong>When it gets tight</strong>, past a threshold the oldest photos are dropped down to a
+  target. Three things it will not do: touch anything inside the floor window (the last fortnight by
+  default), run at all when switched off, or delete quietly — every sweep goes to the audit log with
+  what went and how much it freed.</p>
+
+<p>The visit itself always stays; only the photo on it goes. <strong>Free up room now</strong> runs it
+  on demand, still respecting the floor.</p>
+
+<table>
+  <thead><tr><th>Setting</th><th>Default</th><th>What it means</th></tr></thead>
+  <tbody>
+    <tr><td>Start at</td><td>90%</td><td>How full before anything is dropped</td></tr>
+    <tr><td>Clear down to</td><td>75%</td><td>Far enough below to buy weeks, not another sweep tomorrow</td></tr>
+    <tr><td>Never touch newer than</td><td>14 days</td><td>The window in which somebody actually looks a face up</td></tr>
+  </tbody>
+</table>
+
+<h2>Retention</h2>
+
+<p><span class="path">Settings → Data retention</span> runs daily and has three separate windows:</p>
+
+<dl>
+  <dt>Photos</dt><dd>Deleted after N days. The visit stays.</dd>
+  <dt>Licence details</dt><dd>A shorter window of their own — a licence number is the most identifying
+    thing held here, and useful for far less time than the visit record it sits on.</dd>
+  <dt>Visit records</dt><dd>Deleted after N days, along with anything in the deleted-records archive
+    past the same window, so the archive never becomes the one place old visitor data lives on.</dd>
+</dl>
+
+<p>Visitor photos and signatures sit behind the admin login; only the logo and induction slides are
+  public. The kiosk shows a privacy notice on the details screen, where the asking happens, rather
+  than burying it in a document nobody reads.</p>
+
+<h2>Deleting does not destroy</h2>
+
+<p>Deleting a visit or a visitor writes the whole record — children and all — to a deleted-records
+  archive first, so one mis-click does not destroy the proof a contractor read the site rules. It can
+  be looked at and put back.</p>
+
+<!-- =================================================================== 18 -->
+<h1 class="chapter"><span class="num">Chapter 18</span>Security posture</h1>
+
+<ul>
+  <li><strong>Sessions</strong> are cookies — HttpOnly, SameSite=Lax, and Secure whenever the request
+    arrived over HTTPS, read from the request itself rather than from an environment variable a host
+    may not set.</li>
+  <li><strong>Passwords</strong> are bcrypt hashes. A password set by somebody else is temporary until
+    changed.</li>
+  <li><strong>Every request</strong> is checked against the role map on the way in. Hiding a menu item
+    from somebody who can still call the endpoint behind it is not a permission system.</li>
+  <li><strong>Rate limits</strong> sit on everything open to the internet: kiosk lookups, searches,
+    sign-in writes, the board, and photo links.</li>
+  <li><strong>Visitor photos</strong> are never public. The kiosk's sign-out list gets a short-lived
+    signed link that works only for that visit, only while they are on site.</li>
+  <li><strong>Uploads</strong> are checked by their actual bytes, not their extension.</li>
+  <li><strong>Secrets</strong> come back from the API masked, and the mask is never written back over
+    the real value.</li>
+</ul>
+
+<h2>Hardening the deployment</h2>
+
+<ul>
+  <li>Serve over HTTPS. On Railway that is automatic.</li>
+  <li>Keep <code>PUBLIC_URL</code> accurate — photo links in notifications are built from it.</li>
+  <li>Give each person their own login rather than sharing one, so the audit log names a person.</li>
+  <li>Reissue the on-site board key if its address gets out further than intended.</li>
+  <li>Keep an off-site backup, and test one occasionally.</li>
+</ul>
+
+<!-- =================================================================== 19 -->
+<h1 class="chapter"><span class="num">Chapter 19</span>Tests</h1>
+
+<pre><code>npm test                    # every suite
+npm test -- board card      # only suites whose name contains one of these
+npm test -- --keep          # leave the test database behind to poke at</code></pre>
+
+<p>Each suite gets a freshly started server against a throwaway database, because the rate limiters
+  are per-process and suites sharing one would start tripping them and failing for reasons that have
+  nothing to do with the code. The order in <code>test/run.js</code> is deliberate rather than
+  alphabetical.</p>
+
+<p>The browser suites need Playwright and are skipped, loudly, without it:</p>
+
+<pre><code>npm install -D playwright &amp;&amp; npx playwright install chromium</code></pre>
+
+<p>Among the suites are an <strong>attack</strong> suite that tries the things an attacker would and
+  fails if any of them work, and a <strong>day</strong> suite that runs forty people through one
+  kiosk in a single day and checks that the dashboard, roll call, on-site board, reports, paged list,
+  CSV export and printed page all agree about them.</p>
+
+<!-- =================================================================== 20 -->
+<h1 class="chapter"><span class="num">Chapter 20</span>Troubleshooting</h1>
+
+<h3>The dashboard says storage is not persistent</h3>
+<p>No volume is mounted. Everything will be erased on the next deploy. Mount one at
+  <code>/data</code> before doing anything else.</p>
+
+<h3>Teams returns a 400</h3>
+<p>Workflows requires an Adaptive Card; the older MessageCard format is refused. Smart Lobby sends
+  Adaptive Cards, so a 400 usually means the URL is a legacy Office 365 connector rather than a
+  Workflows one. Create the flow again from "When an HTTP request is received".</p>
+
+<h3>An @-mention shows as raw markup in Teams</h3>
+<p>The person has no email address on their staff record, or the address is not one Teams can
+  resolve. Add it under <span class="path">Staff</span>.</p>
+
+<h3>Slides come out with words over the pictures</h3>
+<p>A font the deck used is missing on the server, so the text reflowed. Export the deck to PDF from
+  PowerPoint and upload that instead — a PDF carries its fonts inside it and is still split into
+  slides.</p>
+
+<h3>The camera never asks for permission on a tablet</h3>
+<p>Open <code>/check/</code> on that tablet. If it is a third-party kiosk browser, it is almost
+  certainly not forwarding the request. Use Safari with Guided Access.</p>
+
+<h3>Badge prints blank or half off the label</h3>
+<p>Margins must be None, headers and footers off, background graphics on. Then adjust the label size
+  and font scale on the Badges page and print a test.</p>
+
+<h3>"Request entry" is ticked but not showing on the kiosk</h3>
+<p>The card appears only once a door exists and is <strong>enabled</strong>. A door left disabled for
+  wiring is never offered.</p>
+
+<h3>Two visitors with the same badge number</h3>
+<p>Should not happen — the sequence carries on from the highest number issued that day. If it does,
+  check whether the badge prefix was changed mid-day, which starts a fresh series.</p>
+
+<h3>A restore did nothing</h3>
+<p>It is staged, not applied. Restart the server; it is applied on the way up.</p>
+
+<h3>The disk is filling</h3>
+<p>Look at the breakdown on the Backups page. Photos are almost always the answer. Shorten the photo
+  retention window, or leave the pressure valve to handle it — and check that local backups are not
+  the second-largest thing on the volume.</p>
+
+<hr>
+
+<p><em>Day-to-day operation of the desk — expected visitors, deliveries, drivers, the roll call — is in
+  the Front Desk Guide.</em></p>

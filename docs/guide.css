@@ -1,0 +1,305 @@
+/*
+ * The house style for the printed guides.
+ *
+ * Everything here is chosen for paper. Charter is a text face drawn for
+ * low-resolution output and holds up at 10.5pt on a laser printer or a phone
+ * screen showing a PDF; Liberation Sans carries the headings, because a sans
+ * heading over a serif body is what makes a manual scannable. Both are
+ * installed on the machine that builds these, so nothing is fetched at render
+ * time and a guide never comes out in a fallback face nobody chose.
+ *
+ * Running text is held to about 118mm — roughly seventy characters — while
+ * tables and callouts use the full measure, because a table squeezed into a
+ * reading column is worse than a wide one.
+ */
+
+@page {
+  size: A4;
+  margin: 18mm 32mm 20mm 32mm;
+}
+
+:root {
+  --ink: #12211b;
+  --ink-soft: #4a5a53;
+  --ink-faint: #7d8b85;
+  --accent: #2f7d5d;
+  --accent-deep: #123a2c;
+  --wash: #eaf1ed;
+  --warn: #8a5308;
+  --warn-wash: #fbf2e4;
+  --line: #c9d5cf;
+  --line-faint: #e2e9e5;
+  --serif: "Charter", "Bitstream Charter", "Georgia", "Liberation Serif", serif;
+  --sans: "Liberation Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono: "DejaVu Sans Mono", "Liberation Mono", monospace;
+  --measure: 118mm;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 10.5pt;
+  line-height: 1.55;
+  color: var(--ink);
+  background: #fff;
+}
+
+/* ------------------------------------------------------------ cover page */
+
+.cover {
+  page-break-after: always;
+  break-after: page;
+  min-height: 232mm;
+  display: flex;
+  flex-direction: column;
+}
+.cover .rule-top {
+  height: 4mm;
+  background: var(--accent);
+  margin-bottom: 14mm;
+}
+.cover .kicker {
+  font-family: var(--mono);
+  font-size: 8pt;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 6mm;
+}
+.cover h1 {
+  font-family: var(--sans);
+  font-size: 32pt;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -.02em;
+  margin: 0 0 4mm;
+  max-width: 140mm;
+}
+.cover .sub {
+  font-size: 13pt;
+  color: var(--ink-soft);
+  margin: 0 0 auto;
+  max-width: 120mm;
+}
+.cover .meta {
+  font-family: var(--mono);
+  font-size: 8.5pt;
+  color: var(--ink-faint);
+  border-top: 1px solid var(--line);
+  padding-top: 4mm;
+  margin-top: 12mm;
+}
+.cover .meta span { display: block; }
+
+/* --------------------------------------------------------------- contents */
+
+.contents { page-break-after: always; break-after: page; }
+.contents ol { list-style: none; margin: 0; padding: 0; max-width: 140mm; }
+.contents li {
+  display: flex;
+  align-items: baseline;
+  gap: 2mm;
+  padding: 1.6mm 0;
+  border-bottom: 1px dotted var(--line);
+  font-family: var(--sans);
+  font-size: 10pt;
+}
+.contents li .n {
+  font-family: var(--mono);
+  font-size: 8.5pt;
+  color: var(--accent);
+  min-width: 7mm;
+}
+.contents li .t { flex: 1; }
+
+/* ------------------------------------------------------------- structure */
+
+h1.chapter {
+  font-family: var(--sans);
+  font-size: 19pt;
+  font-weight: 700;
+  letter-spacing: -.015em;
+  line-height: 1.15;
+  margin: 0 0 1mm;
+  padding-bottom: 2.5mm;
+  border-bottom: 2px solid var(--ink);
+  page-break-after: avoid;
+  break-after: avoid;
+  page-break-before: always;
+  break-before: page;
+}
+h1.chapter .num {
+  font-family: var(--mono);
+  font-size: 10pt;
+  font-weight: 500;
+  color: var(--accent);
+  display: block;
+  letter-spacing: .12em;
+  margin-bottom: 1.5mm;
+}
+h1.chapter:first-of-type { page-break-before: auto; break-before: auto; }
+
+.lede {
+  font-size: 11pt;
+  color: var(--ink-soft);
+  max-width: var(--measure);
+  margin: 4mm 0 6mm;
+}
+
+h2 {
+  font-family: var(--sans);
+  font-size: 12.5pt;
+  font-weight: 700;
+  letter-spacing: -.005em;
+  margin: 8mm 0 2mm;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+h3 {
+  font-family: var(--sans);
+  font-size: 10.5pt;
+  font-weight: 700;
+  margin: 5mm 0 1.5mm;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+p, ul, ol.steps, dl { max-width: var(--measure); }
+p { margin: 0 0 3mm; }
+
+ul { margin: 0 0 3mm; padding-left: 5mm; }
+li { margin-bottom: 1.2mm; }
+
+ol.steps { counter-reset: step; list-style: none; margin: 0 0 4mm; padding: 0; }
+ol.steps > li {
+  counter-increment: step;
+  position: relative;
+  padding-left: 9mm;
+  margin-bottom: 2.5mm;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+ol.steps > li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: .2mm;
+  width: 5.5mm;
+  height: 5.5mm;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 8pt;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+strong { font-weight: 700; }
+em { font-style: italic; }
+
+code {
+  font-family: var(--mono);
+  font-size: 8.8pt;
+  background: var(--wash);
+  padding: .3mm 1mm;
+  border-radius: 1mm;
+}
+pre {
+  font-family: var(--mono);
+  font-size: 8.5pt;
+  line-height: 1.45;
+  background: var(--wash);
+  border-left: 2px solid var(--accent);
+  padding: 3mm 4mm;
+  margin: 0 0 4mm;
+  overflow-x: auto;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+pre code { background: none; padding: 0; }
+
+/* ------------------------------------------------------------- callouts */
+
+.note, .warn {
+  padding: 3mm 4mm;
+  margin: 0 0 4mm;
+  border-radius: 1.5mm;
+  font-size: 9.8pt;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+.note { background: var(--wash); border-left: 2px solid var(--accent); }
+.warn { background: var(--warn-wash); border-left: 2px solid var(--warn); }
+.note p:last-child, .warn p:last-child { margin-bottom: 0; }
+.note .label, .warn .label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 7.5pt;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  margin-bottom: 1.5mm;
+}
+.note .label { color: var(--accent); }
+.warn .label { color: var(--warn); }
+
+/* --------------------------------------------------------------- tables */
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 9.5pt;
+  margin: 0 0 4mm;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+th, td {
+  text-align: left;
+  vertical-align: top;
+  padding: 1.8mm 2.5mm;
+  border-bottom: 1px solid var(--line-faint);
+}
+thead th {
+  font-family: var(--sans);
+  font-size: 8pt;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+tbody tr:last-child td { border-bottom: 1px solid var(--line); }
+td.tick, th.tick { text-align: center; }
+td.tick { font-family: var(--mono); font-weight: 700; color: var(--accent); }
+td.dash { text-align: center; color: var(--ink-faint); }
+
+/* Definition-style pairs, for "field — what it does" runs. */
+dl { margin: 0 0 4mm; }
+dt {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 10pt;
+  margin-top: 3mm;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+dd { margin: .5mm 0 0; color: var(--ink-soft); }
+
+/* A screen path: Settings > Notifications > Teams */
+.path {
+  font-family: var(--sans);
+  font-weight: 700;
+  font-size: 9.5pt;
+  color: var(--accent-deep);
+  white-space: nowrap;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 6mm 0;
+}

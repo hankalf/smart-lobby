@@ -1,0 +1,44 @@
+# The guides
+
+Two PDFs, written for two different people:
+
+- **Front Desk Guide** — for reception, clerks and anyone working the desk. The day-to-day:
+  who is expected, who is on site, deliveries, drivers, the roll call, and what to do when
+  somebody cannot sign themselves in.
+- **Administrator Guide** — for whoever owns the installation. Deployment, configuration,
+  notifications and the chat card designer, access levels, doors, backups, recovery and
+  troubleshooting.
+
+## Rebuilding them
+
+```bash
+npm run docs
+```
+
+The sources are the `.html` files here — body content only, no `<head>`. `build.js` wraps each
+one in `guide.css` and prints it through Chromium, which is what gives real page breaks, a
+running footer and page numbers. The PDFs are written back into this folder.
+
+It needs Playwright:
+
+```bash
+npm install -D playwright && npx playwright install chromium
+```
+
+## Why HTML rather than a PDF library
+
+The wording is the point, and wording gets edited by people who are not going to open a Python
+file to change a sentence. HTML keeps the text readable in a diff, keeps the styling in one
+stylesheet, and lets Chromium do the typesetting — which it is considerably better at than any
+library that would fit in this repository.
+
+The fonts are the ones installed on the machine, deliberately. Charter for reading and
+Liberation Sans for headings are both present wherever LibreOffice is, which is already a
+requirement for rendering induction decks. A guide that fetches a webfont at render time comes
+out in a fallback face the first day the network is down, and nobody notices until it is
+printed.
+
+## Keeping them honest
+
+These describe behaviour that is covered by the test suites. When a guide and the software
+disagree, one of them is a bug — check `npm test` before assuming it is the guide.

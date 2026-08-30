@@ -1,0 +1,526 @@
+<section class="cover">
+  <div class="rule-top"></div>
+  <p class="kicker">Smart Lobby</p>
+  <h1>Front Desk Guide</h1>
+  <p class="sub">Running the gate day to day: who is expected, who is on site, and what to do when
+    somebody cannot sign themselves in.</p>
+  <div class="meta">
+    <span>For reception, clerks and anyone working the desk</span>
+    <span>Covers the dashboard, expected visitors, deliveries, drivers and the roll call</span>
+  </div>
+</section>
+
+<section class="contents">
+  <h1 class="chapter"><span class="num">Contents</span>What is in this guide</h1>
+  <ol>
+    <li><span class="n">1</span><span class="t">What Smart Lobby is</span></li>
+    <li><span class="n">2</span><span class="t">Signing in to the dashboard</span></li>
+    <li><span class="n">3</span><span class="t">Your day, start to finish</span></li>
+    <li><span class="n">4</span><span class="t">Booking somebody in before they arrive</span></li>
+    <li><span class="n">5</span><span class="t">What a visitor sees at the kiosk</span></li>
+    <li><span class="n">6</span><span class="t">Finding a visit, or a person</span></li>
+    <li><span class="n">7</span><span class="t">Signing people in and out from the desk</span></li>
+    <li><span class="n">8</span><span class="t">Parcels and deliveries</span></li>
+    <li><span class="n">9</span><span class="t">Drivers</span></li>
+    <li><span class="n">10</span><span class="t">Companies and certificates</span></li>
+    <li><span class="n">11</span><span class="t">The emergency roll call</span></li>
+    <li><span class="n">12</span><span class="t">The on-site board</span></li>
+    <li><span class="n">13</span><span class="t">Reports and exports</span></li>
+    <li><span class="n">14</span><span class="t">When something goes wrong at the desk</span></li>
+  </ol>
+</section>
+
+<!-- ==================================================================== 1 -->
+<h1 class="chapter"><span class="num">Chapter 1</span>What Smart Lobby is</h1>
+
+<p class="lede">A visitor book that runs on your own server. It records who is on site, tells the
+  person they are here to see, keeps the paperwork they signed, and can print them a badge.</p>
+
+<p>Everything lives on one machine you control. There is no account with a supplier, nothing is
+  charged per person, and no visitor's photo or phone number leaves the building. That matters most
+  on the day somebody asks who was on site at four o'clock last Tuesday: the answer is in your own
+  database, not in somebody else's cloud.</p>
+
+<p>There are two halves to it, and you will use both:</p>
+
+<dl>
+  <dt>The kiosk</dt>
+  <dd>The tablet on the stand. Visitors sign themselves in on it, sign out again, and couriers log
+    parcels. You will rarely touch it except to help somebody.</dd>
+  <dt>The dashboard</dt>
+  <dd>The screen you work from. Who is here, who is expected, the registry of everyone on file,
+    deliveries, drivers, and the reports.</dd>
+</dl>
+
+<div class="note">
+  <span class="label">Worth knowing</span>
+  <p>The kiosk keeps working when the network drops. A visitor can complete a full sign-in — details,
+    photo, documents, signature, the induction video — with no connection at all. It saves on the
+    tablet and records itself the moment the line comes back. A banner on the kiosk says the
+    connection is down and how many sign-ins are waiting, so you know without being told.</p>
+</div>
+
+<h2>What you will not be able to do</h2>
+
+<p>Your login is scoped to the desk. Reception can see the dashboard, visits, the registry, projects
+  and reports — everything needed to run the front of house. Settings, backups, device setup and
+  other people's accounts belong to an administrator. If a page you need is not in the menu, that is
+  why; ask whoever administers the system rather than looking for a way around it.</p>
+
+<!-- ==================================================================== 2 -->
+<h1 class="chapter"><span class="num">Chapter 2</span>Signing in to the dashboard</h1>
+
+<p>Open the dashboard address in a browser — your administrator will have given it to you. It looks
+  like <code>https://your-site.example.com/admin/</code>. Sign in with your email address and
+  password.</p>
+
+<h2>Your first sign-in</h2>
+
+<p>If somebody else set your password, it is temporary. Until you change it your login can do exactly
+  two things: show you who you are, and change your password. That is deliberate — it means the
+  person who typed your password cannot go on signing in as you. Change it and everything opens up.</p>
+
+<h2>If nobody can sign in at all</h2>
+
+<p>There is no "forgot password" email, because there is no supplier to send one. The way back in is a
+  command run on the machine holding the data, which your administrator can do. Do not spend twenty
+  minutes trying passwords; call them.</p>
+
+<div class="note">
+  <span class="label">Keep it signed in</span>
+  <p>The desk machine can stay signed in all day. If you share the desk with someone on another
+    shift, sign out at the end of yours — every action is recorded against whoever was signed in, and
+    an audit that names the wrong person is worse than no audit.</p>
+</div>
+
+<!-- ==================================================================== 3 -->
+<h1 class="chapter"><span class="num">Chapter 3</span>Your day, start to finish</h1>
+
+<p class="lede">The dashboard is built around the three questions the desk actually gets asked: who
+  is coming, who is here, and has everyone gone home.</p>
+
+<h2>First thing: who is coming today</h2>
+
+<p>Open <span class="path">Expected today</span>. This is the list of people booked in before they
+  arrived — the crew starting a new job, the auditor at ten, the interview at two. Each row shows the
+  day, the time if one was given, who they are here to see, and an arrival code.</p>
+
+<p>The dashboard also carries a <strong>Still expected today</strong> figure at the top, beside who
+  is on site. That number is the one you will be asked for at eight in the morning.</p>
+
+<h2>Through the day: who is here</h2>
+
+<p>The dashboard's <strong>On site now</strong> list updates as people sign in. Each row carries the
+  name, company, who they are visiting, what time they arrived and their badge number. From here you
+  can sign somebody out, reprint their badge, or open the full visit record.</p>
+
+<p>Arrivals also go out as notifications — an email, a Teams message or a text — to the person being
+  visited, so most of the time nobody needs to be fetched. If somebody is standing at your desk
+  because their host has not appeared, open the visit record and check the notification log at the
+  bottom: it says whether the message was sent, and why if it was not.</p>
+
+<h2>End of the day: has everyone gone</h2>
+
+<p>People forget to sign out. Two things handle it:</p>
+
+<ul>
+  <li><strong>Sign out everyone</strong> on the dashboard clears the site in one action, when you know
+    the site is empty.</li>
+  <li><strong>Automatic sign-out</strong> runs at a time your administrator sets — 23:59 by default —
+    and closes anybody still showing as on site. It runs in your own time zone, and only during that
+    one minute, so somebody arriving late is not signed straight back out again.</li>
+</ul>
+
+<div class="warn">
+  <span class="label">Before you sweep</span>
+  <p>Signing out everyone marks every open visit as having left <em>now</em>. If a night shift is
+    genuinely still on site, do not use it — their hours will be wrong on the report. It is for the
+    end of a day when you know the place is empty.</p>
+</div>
+
+<!-- ==================================================================== 4 -->
+<h1 class="chapter"><span class="num">Chapter 4</span>Booking somebody in before they arrive</h1>
+
+<p class="lede">A site knows about most of its visitors the day before. Booking them in means the
+  kiosk already knows them, and you can answer "who is coming today" without asking around.</p>
+
+<h2>Making a booking</h2>
+
+<ol class="steps">
+  <li>Open <span class="path">Expected today</span> and press <strong>Book somebody in</strong>.</li>
+  <li>Fill in the name. Everything else is optional, but the <strong>phone number</strong> is what
+    makes the kiosk recognise them, so it is worth having.</li>
+  <li>Set the day, and a time if you know it. The day defaults to today.</li>
+  <li>Choose the visitor type — visitor, contractor, interview, driver — and who they are here to
+    see. For a contractor, pick the project as well.</li>
+  <li>Save. You will be given a short <strong>arrival code</strong>.</li>
+</ol>
+
+<h2>What happens when they turn up</h2>
+
+<p>They sign in at the kiosk exactly like anybody else. When they type the phone number you recorded,
+  the kiosk recognises the booking and fills in what it already knows — name, company, who they are
+  seeing, which job, the reason for the visit. The screen says <em>You're expected</em>. They check
+  it, add anything missing, and carry on.</p>
+
+<p>The booking marks itself <strong>arrived</strong> against the visit that did it, so your list
+  empties itself as the day goes on. Nothing needs ticking off.</p>
+
+<div class="note">
+  <span class="label">The arrival code</span>
+  <p>Six characters, with no letter O or digit 0 in it because somebody reads it off a phone screen.
+    Pass it on to the visitor or their host if you like — but it is a convenience, not a password.
+    The phone number works just as well, and the code stops working the moment it is used.</p>
+</div>
+
+<h2>Changing or cancelling a booking</h2>
+
+<p>Edit any booking that has not been walked in on. To cancel, open it and set the status to
+  <strong>Cancelled</strong> — a cancelled booking greets nobody at the kiosk. <strong>Remove</strong>
+  deletes it outright; nobody is signed in or out by either, because a booking is only ever a plan.</p>
+
+<p>Once somebody has arrived, the booking becomes history and cannot be edited. That is on purpose:
+  it is now a record of a visit that happened, and editing it to say something else is not an edit.</p>
+
+<h2>Yesterday's no-shows</h2>
+
+<p>A booking nobody came to is marked <strong>Did not come</strong> the next day rather than being
+  deleted. Filter the list by that status to see them. On a contractor site, "we booked them in and
+  they never turned up" is a conversation somebody has to have, and the record is what makes it
+  possible.</p>
+
+<div class="warn">
+  <span class="label">A booking is not an arrival</span>
+  <p>Nobody on the expected list appears on the roll call, the on-site board, or the count of who is
+    here. They are not on site until they sign in. In a fire that distinction is the whole point.</p>
+</div>
+
+<!-- ==================================================================== 5 -->
+<h1 class="chapter"><span class="num">Chapter 5</span>What a visitor sees at the kiosk</h1>
+
+<p class="lede">Worth knowing in outline, because when somebody gets stuck you will be the one
+  standing beside them.</p>
+
+<h2>The order of it</h2>
+
+<p>Welcome screen, then a card for what they are doing — sign in, sign out, contractor, interview,
+  driver, delivery. Then their details, a photo, any documents to sign, the induction slideshow if
+  they need it, and finally a thank-you screen with a badge if you print them.</p>
+
+<p>The exact order of the middle steps can differ per visitor type: a contractor might watch the
+  induction before signing anything. A step that does not apply is skipped.</p>
+
+<h2>Returning visitors</h2>
+
+<p>One box takes a phone number, an email address or a name. If it recognises them, their details
+  come back filled in and they skip the induction — unless the deck has changed since they watched
+  it, or it is set to repeat.</p>
+
+<p>A number shared by several people — a crew on the foreman's phone — never guesses. The kiosk shows
+  the names and asks which of them they are, showing only a name and company, never somebody else's
+  phone number.</p>
+
+<h2>The photo</h2>
+
+<p>Over a secure address the camera preview appears in the page. Over a plain network address the
+  browser will not allow a live preview, so the kiosk shows an <strong>Open camera</strong> button
+  that launches the tablet's own camera app instead. The photo ends up in exactly the same place. If
+  somebody says "the camera isn't working", check which of these they are looking at before assuming
+  it is broken.</p>
+
+<h2>Documents and questions</h2>
+
+<p>Site rules, NDAs and declarations appear one after another, titled "Site rules (1 of 2)" and so
+  on. Some carry questions above the signature — yes/no, a short answer, or a choice. A question can
+  depend on an earlier answer, so answering No can open a different follow-up than answering Yes.</p>
+
+<h2>Spanish</h2>
+
+<p>If Spanish is switched on, the choice appears on the welcome screen and as a small button in the
+  corner of every later screen — so somebody who realises halfway through can still switch, and
+  everything they have already typed, answered and signed is kept.</p>
+
+<h2>Signing out</h2>
+
+<p>The sign-out screen opens with the badge scanner already running, so a badge can be held up to the
+  camera. Underneath is a name search: matches appear from the first letter, each with the photo
+  taken at sign-in, so people pick themselves out at a glance.</p>
+
+<h2>If they tap the wrong thing</h2>
+
+<p>The thank-you screen carries <strong>That's not right — cancel this</strong>. It cancels the
+  sign-in just made, for a few minutes afterwards, and tells anyone who was already notified that it
+  was cancelled. Nothing is destroyed — the record is archived and an administrator can put it
+  back — so it is safe to use.</p>
+
+<div class="note">
+  <span class="label">If a visitor is blocked</span>
+  <p>Somebody blocked in the registry is stopped at the kiosk with a neutral <em>please see
+    reception</em> message, and nothing more. The kiosk never says why, and never says so in front of
+    other people. Handle it at the desk.</p>
+</div>
+
+<!-- ==================================================================== 6 -->
+<h1 class="chapter"><span class="num">Chapter 6</span>Finding a visit, or a person</h1>
+
+<h2>Visits</h2>
+
+<p><span class="path">Visits</span> is every sign-in ever recorded. Search by name, company or the
+  staff member they came to see, narrow it to a date range, and filter to who is on site or who has
+  gone.</p>
+
+<p>The list shows a page at a time and tells you the truth about how many there are — <em>Showing
+  1–200 of 3,200</em> — with Previous and Next underneath, and a control for how many rows to a
+  page. Changing any filter takes you back to page one.</p>
+
+<div class="note">
+  <span class="label">Exports are always complete</span>
+  <p><strong>Export CSV</strong> gives you every visit matching your filters, not the page on screen.
+    You cannot accidentally export two hundred rows and think you have three thousand.</p>
+</div>
+
+<h2>What is on a visit record</h2>
+
+<p>Open any visit with <strong>View</strong>:</p>
+
+<ul>
+  <li>The photo taken at sign-in, their details, the project, badge number and vehicle.</li>
+  <li>Every document they signed, with the questions and answers, the signature image, and the
+    version and language of the wording they actually saw.</li>
+  <li>The induction: which deck, which version, when they finished it and how many seconds it took.</li>
+  <li>The notification log — every message sent about this arrival, where it went, and the reason for
+    any that failed.</li>
+</ul>
+
+<h2>People</h2>
+
+<p><span class="path">Visitor registry</span> is everyone ever on file rather than every visit. Each
+  person shows how many times they have been, when they last came, and whether they have completed
+  the induction.</p>
+
+<p>Opening somebody lets you correct their name, company, phone or email, add internal notes, block
+  them, or reset their induction so they watch the deck again next time.</p>
+
+<div class="warn">
+  <span class="label">Editing a person is not editing history</span>
+  <p>Correcting a spelling here updates the person. It does not change what any past visit recorded
+    at the time, and it does not change any signed document. That is what makes a signature worth
+    anything.</p>
+</div>
+
+<!-- ==================================================================== 7 -->
+<h1 class="chapter"><span class="num">Chapter 7</span>Signing people in and out from the desk</h1>
+
+<h2>Signing somebody out</h2>
+
+<p>From the dashboard's on-site list, or from Visits, press <strong>Sign out</strong> beside their
+  name. It records the time and, if sign-out notifications are on, tells their host they have left.</p>
+
+<h2>Putting somebody back on site</h2>
+
+<p>Signed the wrong person out? A visit that has been closed carries <strong>Back on site</strong>,
+  which reopens it rather than creating a second visit. Use that instead of signing them in again —
+  two visits for one arrival makes the hours wrong and puts them on the roll call twice.</p>
+
+<h2>Reprinting a badge</h2>
+
+<p>Beside anyone on site, and on the Badges page for anybody from the last week, there is a
+  <strong>Reprint</strong> button. If the visit never had a number — badges were switched off when
+  they arrived — one is issued at that point rather than printing a blank space.</p>
+
+<!-- ==================================================================== 8 -->
+<h1 class="chapter"><span class="num">Chapter 8</span>Parcels and deliveries</h1>
+
+<h2>What the courier does</h2>
+
+<p>They tap <strong>Delivery</strong> on the kiosk, give their name and company, choose who the parcel
+  is for, add how many parcels and a tracking number, and photograph the parcel. The recipient is
+  notified straight away.</p>
+
+<p>The photo can be made compulsory. Where it is, the kiosk will not accept the delivery without one
+  — which is the point, because a parcel with no photograph is a parcel nobody can later prove
+  arrived.</p>
+
+<h2>What you do</h2>
+
+<p><span class="path">Deliveries</span> lists parcels waiting. When somebody comes to collect, press
+  <strong>Collect</strong>, take their name and a signature, and it is closed. If the recipient never
+  came, <strong>Re-notify</strong> sends the message again.</p>
+
+<p>Everything exports to CSV, so a month of parcels is one download.</p>
+
+<!-- ==================================================================== 9 -->
+<h1 class="chapter"><span class="num">Chapter 9</span>Drivers</h1>
+
+<p>A driver signing in at the kiosk is asked for the haulier, the vehicle registration, the load or
+  order reference, and whether they are delivering or collecting. They are not asked who they are
+  here to see, because they are not here to see anybody.</p>
+
+<p><span class="path">Drivers</span> shows who is on site now with an editable door number — so you
+  can send a truck to bay 4 and have it written down — and the full log underneath, searchable by
+  driver, haulier, vehicle or reference, with turnaround times and a CSV export.</p>
+
+<div class="note">
+  <span class="label">Turnaround time</span>
+  <p>Measured from signing in to signing out. If drivers routinely forget to sign out, the figure is
+    meaningless — it is worth making the sign-out step part of handing back paperwork.</p>
+</div>
+
+<!-- =================================================================== 10 -->
+<h1 class="chapter"><span class="num">Chapter 10</span>Companies and certificates</h1>
+
+<h2>Companies</h2>
+
+<p>Firms are real records, not just text typed at the kiosk. <span class="path">Companies</span> lists
+  them with how many people and visits each has.</p>
+
+<p>Because visitors type their own company name, the same firm arrives spelled three ways. The page
+  flags near-duplicates — one letter different, or the same name with "Ltd" on the end — and offers
+  to <strong>merge</strong> them. Merging moves everybody onto one record; <strong>rename</strong>
+  fixes a misspelling everywhere at once, including on the visits that recorded it.</p>
+
+<h2>Certificates</h2>
+
+<p><span class="path">Certificates</span> holds the paperwork a contractor has to have — insurance, a
+  CSCS card, a method statement — against a person or against their company, each with an expiry
+  date.</p>
+
+<p>The page shows what is lapsing soon and what has already expired, which is the list to work
+  through. Depending on how your site is set up, an expired certificate can also stop somebody at the
+  kiosk or simply warn the desk.</p>
+
+<div class="warn">
+  <span class="label">Chase before it lapses</span>
+  <p>The point of the expiry list is to give you a fortnight's warning. Once a certificate has
+    expired and the kiosk is gating on it, the conversation happens at the gate with the person's van
+    already on site — which is the worst possible time to have it.</p>
+</div>
+
+<!-- =================================================================== 11 -->
+<h1 class="chapter"><span class="num">Chapter 11</span>The emergency roll call</h1>
+
+<p class="lede">The one thing this system must never get wrong. Learn where the button is before you
+  need it.</p>
+
+<ol class="steps">
+  <li>On the dashboard, press <strong>Emergency roll call</strong>.</li>
+  <li>A full-screen list appears: everyone showing as on site, with their company, who they were
+    visiting and what time they arrived.</li>
+  <li>Print it, or export it, and take it to the assembly point.</li>
+</ol>
+
+<p>The list is exactly the people who signed in and have not signed out. It does not include anybody
+  booked in but not arrived, and it does not include anybody already signed out.</p>
+
+<div class="warn">
+  <span class="label">It is only as good as the sign-outs</span>
+  <p>Somebody who left without signing out is still on that list, and you will spend an evacuation
+    looking for them. That is the real argument for the automatic end-of-day sign-out, and for making
+    sign-out easy — the badge scanner on the kiosk exists for this reason.</p>
+</div>
+
+<p>The roll call can also be exported as a CSV from the same place, which is useful for handing to a
+  fire marshal on a phone rather than a printout.</p>
+
+<!-- =================================================================== 12 -->
+<h1 class="chapter"><span class="num">Chapter 12</span>The on-site board</h1>
+
+<p>A screen on the office wall, showing who is here right now and who has just left, without needing
+  anybody signed in on it. It has its own address, given to you by your administrator, and refreshes
+  itself.</p>
+
+<p>It can also show a camera view of the gate beside the list, if one is set up.</p>
+
+<p>The board is on the sidebar of your dashboard as well, so you can open it from where you are.</p>
+
+<div class="note">
+  <span class="label">It has its own key</span>
+  <p>Anyone with the address can see the board, which is why it shows names and companies but is not
+    the dashboard. If the address gets out further than you wanted, an administrator can reissue the
+    key and the old address stops working.</p>
+</div>
+
+<!-- =================================================================== 13 -->
+<h1 class="chapter"><span class="num">Chapter 13</span>Reports and exports</h1>
+
+<p><span class="path">Reports</span> answers the questions that get asked at the end of a month.</p>
+
+<h2>Choosing the window</h2>
+
+<p>Pick last 7, 30 or 90 days, the last 12 months, or two dates of your own. Narrow it to one project
+  or one visitor type. Your choice is remembered, so the page comes back the way you left it.</p>
+
+<h2>What it shows</h2>
+
+<ul>
+  <li>Total visits, average time on site, visits per day.</li>
+  <li><strong>Hours on site per project</strong> — counted between signing in and signing out, with
+    the average per visit and how many are still on site. Anybody still here is counted in the visits
+    but not yet in the hours, because their day is not finished.</li>
+  <li>Busiest hosts, top companies, arrivals by hour, and the split by visitor type.</li>
+</ul>
+
+<h2>Putting it in front of somebody</h2>
+
+<p><strong>Printable report</strong> opens the same figures on your organisation's own letterhead as
+  a single page. Print it, or save it as a PDF from the print dialogue, and it is ready to hand to a
+  client or an auditor. The filters travel with it and are named on the report, so there is no
+  question which window it covers.</p>
+
+<div class="note">
+  <span class="label">It cannot disagree with the screen</span>
+  <p>The printed page is generated from the same figures as the dashboard, not recalculated. If the
+    screen says forty visits, so does the paper.</p>
+</div>
+
+<h2>CSV exports</h2>
+
+<p>Visits for your window or every visit ever, the driver log, deliveries, and the current roll call.
+  Every export is the complete set matching your filters.</p>
+
+<!-- =================================================================== 14 -->
+<h1 class="chapter"><span class="num">Chapter 14</span>When something goes wrong at the desk</h1>
+
+<h2>The kiosk shows "connection is down"</h2>
+
+<p>Nothing is lost. Visitors can still sign in completely; each one is saved on the tablet and
+  recorded when the connection returns. The banner says how many are waiting.</p>
+
+<p>What genuinely needs the server waits for it: recognising returning visitors (they will use "I'm
+  new here"), badge numbers, and signing out — the kiosk will tell somebody trying to sign out to see
+  reception. Take their name on paper and sign them out from the dashboard when you are back.</p>
+
+<h2>A visitor cannot get past the photo step</h2>
+
+<p>If no camera permission prompt ever appears, the tablet's browser is blocking it silently. Open
+  <code>/check/</code> on that tablet — it reports what that browser actually allows. Tell your
+  administrator what it says.</p>
+
+<h2>Their host says they were never told</h2>
+
+<p>Open the visit and look at the notification log at the foot of the record. It names every channel
+  tried, where the message went, and the reason for any failure. If it says <em>skipped</em>, that
+  channel is switched off. Either way, it is a settings question for your administrator rather than
+  something to solve at the desk.</p>
+
+<h2>Somebody is on the on-site list who definitely went home</h2>
+
+<p>Sign them out from the dashboard. If it keeps happening with the same people, the sign-out step is
+  not sticking — the badge scanner on the kiosk, or a sign-out card on the home screen, usually fixes
+  it. Worth raising rather than correcting by hand every evening.</p>
+
+<h2>Two records for the same firm</h2>
+
+<p>Go to <span class="path">Companies</span> and merge them. The page will usually have spotted the
+  pair itself.</p>
+
+<h2>The wrong person was signed in</h2>
+
+<p>If it just happened, the visitor can cancel it themselves on the kiosk's thank-you screen. If that
+  moment has passed, sign the visit out and note what happened — or ask an administrator to delete
+  it, which archives rather than destroys the record so it can be recovered.</p>
+
+<hr>
+
+<p><em>Anything not covered here — settings, notifications, badge design, backups, devices — is in the
+  Administrator Guide.</em></p>

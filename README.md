@@ -34,14 +34,20 @@ To use a different port: `PORT=3010 npm start`.
 
 ### Access levels
 
-Logins are granted from the **Staff** tab, against the person who already exists there. Four levels:
+Logins are granted from the **Staff** tab, against the person who already exists there. Four levels
+to choose from, plus the owner:
 
 | | Sees |
 |---|---|
-| Reception | Dashboard, Visits, Visitor registry, Projects, Reports |
+| Reception | Dashboard, Visits, Expected, Visitor registry, Companies, Certificates, Projects, Reports |
 | Clerk | Dashboard, Drivers, Deliveries |
 | Manager | Everything reception and clerk can do |
-| Administrator | Everything, including settings, backups, accounts and deleted records |
+| Administrator | Everything, including settings, backups, storage, accounts and deleted records |
+
+A few rules override the plain mapping: the staff list is readable by anyone who can open a visit but
+editing it is administration (a login can be granted through it), reception reads what paperwork is
+lapsing but not the certificate rules, and anyone signed in can reach their own account and the
+on-site board's address.
 
 The first account is the **owner** — an administrator that cannot be demoted or removed, because an
 install nobody can reach the settings on is an install nobody can fix. Only the owner can grant
