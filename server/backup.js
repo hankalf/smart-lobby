@@ -240,6 +240,106 @@ function inspect(buffer) {
 }
 
 /**
+ * Prove a backup would restore, without restoring it.
+ *
+ * A backup that has never been opened is a promise, not a copy. Everything up
+ * to now says the archive is *readable* — this says it would actually put the
+ * site back, which is a different question and the only one that matters at
+ * the moment you need it:
+ *
+ *   - the database inside passes SQLite's own integrity check, and holds
+ *     accounts, so somebody could sign in afterwards;
+ *   - it carries every table this version of the app reads, so a restore does
+ *     not land on a schema from before a migration and fail at the first
+ *     query;
+ *   - the photos and signatures the database points at are actually in the
+ *     archive. This is the one that quietly fails: a database-only copy
+ *     restores perfectly and every face on it is a broken link.
+ *
+ * Nothing is written and nothing live is touched — the database is unpacked to
+ * a scratch file, opened read-only, and deleted again.
+ */
+function drill(file) {
+  const full = pathOf(file);
+  if (!full) return { ok: false, error: 'There is no backup by that name.' };
+
+  let buffer;
+  try { buffer = fs.readFileSync(full); } catch (err) {
+    return { ok: false, error: `The file could not be read (${err.message}).` };
+  }
+  const seen = inspect(buffer);
+  if (!seen.ok) return seen;
+  if (seen.files_only) {
+    return { ok: true, file, files_only: true, media_present: seen.media_files, warnings: [],
+      summary: `A files-only piece holding ${seen.media_files} file(s). There is no database in it to test.` };
+  }
+
+  const entries = unzip.readZip(buffer);
+  const scratch = path.join(DATA_DIR, `.drill-${Date.now()}.db`);
+  const warnings = [];
+  try {
+    fs.writeFileSync(scratch, entries.get('smartlobby.db'));
+    const copy = new DatabaseSync(scratch, { readOnly: true });
+    try {
+      /* ---- would this version of the app run against it? ---- */
+      const inBackup = new Set(copy.prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+        .all().map((r) => r.name));
+      const live = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all()
+        .map((r) => r.name).filter((n) => !n.startsWith('sqlite_'));
+      const missingTables = live.filter((n) => !inBackup.has(n));
+      if (missingTables.length) {
+        warnings.push(`Taken before ${missingTables.length} table(s) existed: ${missingTables.join(', ')}. `
+          + 'Restoring it would roll the site back to that version of the data.');
+      }
+
+      /* ---- are the files it points at actually in here? ---- */
+      const referenced = [];
+      const collect = (sql, column) => {
+        try { copy.prepare(sql).all().forEach((r) => { if (r[column]) referenced.push(r[column]); }); }
+        catch { /* a table this backup predates; already reported above */ }
+      };
+      collect('SELECT photo_path FROM visits WHERE photo_path IS NOT NULL', 'photo_path');
+      collect('SELECT signature_path FROM signatures WHERE signature_path IS NOT NULL', 'signature_path');
+      collect('SELECT image_path FROM slides WHERE image_path IS NOT NULL', 'image_path');
+
+      const held = new Set([...entries.keys()]);
+      const missingFiles = referenced.filter((p) => !held.has(`uploads/${String(p).replace(/^\/media\//, '')}`));
+      if (missingFiles.length) {
+        warnings.push(`${missingFiles.length} of ${referenced.length} photo(s) and signature(s) the records point `
+          + 'at are not in this archive, so they would come back as broken images.');
+      }
+
+      const span = copy.prepare('SELECT MIN(signed_in_at) AS first, MAX(signed_in_at) AS last FROM visits').get();
+
+      return {
+        ok: true,
+        file,
+        restorable: true,
+        counts: seen.counts,
+        created_at: seen.created_at || null,
+        media_files: seen.media_files,
+        referenced_files: referenced.length,
+        missing_files: missingFiles.length,
+        missing_tables: missingTables,
+        first_visit: span && span.first,
+        last_visit: span && span.last,
+        warnings,
+        summary: warnings.length
+          ? `It would restore, with ${warnings.length} thing(s) worth knowing first.`
+          : `It would restore cleanly: ${seen.counts.visits} visit(s), ${seen.counts.visitors} people, `
+            + `${seen.counts.users} account(s), and every file the records point at.`
+      };
+    } finally {
+      try { copy.close(); } catch { /* already gone */ }
+    }
+  } catch (err) {
+    return { ok: false, error: `It did not survive being opened — ${String(err.message || err).slice(0, 160)}` };
+  } finally {
+    try { fs.unlinkSync(scratch); } catch { /* already gone */ }
+  }
+}
+
+/**
  * Unpack the uploads from a files-only piece, over whatever is there.
  *
  * Overwriting rather than merging carefully: the names are content paths the
@@ -423,5 +523,5 @@ function createParts({ maxBytes }) {
 
 module.exports = {
   BACKUP_DIR, KEEP, create, createParts, list, prune, pathOf, runDaily, verify, health, totalBytes,
-  inspect, stageRestore, pendingRestore, cancelRestore
+  inspect, drill, stageRestore, pendingRestore, cancelRestore, restoreMediaOnly
 };

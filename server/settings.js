@@ -307,6 +307,31 @@ const DEFAULTS = {
     notice_enabled: true,
     notice_text: '',
     notice_text_es: ''
+  },
+  /*
+   * What to do when the volume is nearly full.
+   *
+   * A full disk does not degrade gracefully: the database stops writing, the
+   * kiosk stops taking sign-ins, and the backup that would have warned you
+   * cannot be written either. Photos are what fill it, and the oldest of them
+   * are the least useful thing on the disk — so when it gets tight they go
+   * early, before anything that matters starts failing.
+   */
+  storage: {
+    shed_enabled: true,
+    // Nine tenths full is the point at which waiting stops being an option.
+    shed_at_percent: 90,
+    // Far enough below to buy weeks, not another sweep tomorrow.
+    shed_to_percent: 75,
+    /*
+     * Whatever the pressure, the last fortnight of faces stays. That is the
+     * window in which somebody actually looks one up — an incident, a
+     * disputed timesheet, a "who was that" from Tuesday.
+     */
+    shed_floor_days: 14,
+    shed_last_at: '',
+    shed_last_freed: 0,
+    shed_last_photos: 0
   }
 };
 

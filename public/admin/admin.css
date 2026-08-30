@@ -6,6 +6,9 @@
 .muted { color: var(--ink-soft); font-size: .9rem; }
 .notice { padding: .7rem .9rem; border-radius: 10px; background: var(--brand-soft); color: var(--brand-dark); margin-bottom: 1rem; font-size: .9rem; }
 .notice.error { background: #fdecea; color: var(--danger); }
+/* A result that passed, and one that passed with something worth reading. */
+.notice.ok { background: #e7f5ec; color: #10693a; }
+.notice.warn { background: #fdf3e0; color: #8a5a08; }
 
 /* ----------------------------------------------------------------- shell */
 /*

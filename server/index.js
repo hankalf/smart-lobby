@@ -312,10 +312,21 @@ function purgeOldData() {
     if (archived) console.log(`[retention] purged ${archived} deleted record(s) past the retention window`);
   }
   auth.purgeExpired();
+  require('./storage').shed();
 }
 
 setInterval(autoSignOut, 30 * 1000); // checked often so a to-the-minute time is not missed
 setInterval(purgeOldData, 24 * 60 * 60 * 1000);
+
+/*
+ * The disk is watched more often than the daily clear-out, because it does not
+ * fill on a daily schedule: a busy Monday can cross the mark by lunchtime, and
+ * the cost of noticing a day late is the kiosk turning people away. Checking
+ * costs a statfs, and does nothing at all while there is room.
+ */
+setInterval(() => {
+  try { require('./storage').shed(); } catch (err) { console.error('[storage]', err.message); }
+}, 60 * 60 * 1000).unref?.();
 
 /*
  * A nightly copy of the database, kept for a week. The first one is written a

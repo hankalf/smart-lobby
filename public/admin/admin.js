@@ -4354,6 +4354,19 @@
           the one that would have told you.</p>
         <div id="storage-use"><p class="muted">Loading…</p></div>
 
+        <h4 style="margin-bottom:.25rem">When it gets tight</h4>
+        <p class="muted" style="margin-top:0">Rather than let the disk fill and take the kiosk down with it, the
+          oldest photos can be dropped early. They are the least useful thing on the disk and by far the largest —
+          and losing one costs a look-up nobody was going to do, against a site that stops taking sign-ins.</p>
+        ${chk('storage.shed_enabled', 'Drop the oldest photos before the disk fills')}
+        <div class="form-grid">
+          ${txt('storage.shed_at_percent', 'Start when the disk is this full (%)', 'number')}
+          ${txt('storage.shed_to_percent', 'Clear back down to (%)', 'number')}
+          ${txt('storage.shed_floor_days', 'Never touch photos newer than (days)', 'number')}
+        </div>
+        <div class="row"><button class="btn subtle" id="shed-now" type="button">Free up room now</button>
+          <span class="muted" id="shed-last"></span></div>
+
         <h3>Copy each backup to OneDrive</h3>
         <p class="muted" style="margin-top:0">A backup sitting on the same volume as the data does not survive losing
           the volume. This posts each new one straight into a OneDrive folder as it is written, so there is always a
@@ -5206,6 +5219,15 @@
             How long they are kept is set under <b>Data retention &amp; privacy</b>; shortening it is usually the
             quickest room to find.</p>` : ''}`;
       }
+      const shedNote = $('#shed-last');
+      if (shedNote) {
+        shedNote.textContent = st.shed_last_at
+          ? `Last freed ${sizeOf(st.shed_last_freed)} on ${fmtDate(st.shed_last_at)}, `
+            + `${st.shed_last_photos} photo${st.shed_last_photos === 1 ? '' : 's'}.`
+          : st.shedding
+            ? `Has not needed to run — it starts at ${st.shed_at_percent || 90}% full.`
+            : 'Switched off, so a full disk will stop sign-ins instead.';
+      }
 
       wrap.innerHTML = data.backups.length ? `<div class="table-wrap"><table>
         <thead><tr><th>Taken</th><th>Size</th><th>Holds</th><th></th></tr></thead>
@@ -5214,12 +5236,46 @@
           <td>${b.complete ? 'Database and files'
             : '<span class="muted">Database only — photos and signatures will not come back from this one</span>'}</td>
           <td style="white-space:nowrap">
+            <button class="btn ghost" data-bktest="${esc(b.file)}">Test</button>
             <a class="btn ghost" href="/api/admin/backups/${encodeURIComponent(b.file)}">Download</a>
             ${(h.offsite && h.offsite.enabled) ? `<button class="btn ghost" data-bksend="${esc(b.file)}">Send</button>` : ''}
             <button class="btn ghost" data-bkdel="${esc(b.file)}">Delete</button></td>
         </tr>`).join('')}</tbody></table></div>`
         : '<p class="empty">No backup written yet — the first runs a minute after the server starts.</p>';
 
+      /*
+       * The drill. A backup nobody has ever opened is a promise, and the day
+       * you find out otherwise is the worst possible day — so this opens one
+       * and says what it would actually put back, changing nothing.
+       */
+      $$('[data-bktest]', wrap).forEach((b) => b.addEventListener('click', async () => {
+        const file = b.dataset.bktest;
+        const was = b.textContent;
+        b.disabled = true;
+        b.textContent = 'Testing…';
+        try {
+          const r = await api(`/backups/${encodeURIComponent(file)}/drill`, { method: 'POST' });
+          modal('Backup test', `
+            <p class="notice ${r.warnings && r.warnings.length ? 'warn' : 'ok'}"
+               style="font-size:1rem">${esc(r.summary)}</p>
+            ${r.files_only ? '' : `<table><tbody>
+              <tr><td>Visits</td><td><b>${(r.counts.visits || 0).toLocaleString()}</b></td></tr>
+              <tr><td>People</td><td><b>${(r.counts.visitors || 0).toLocaleString()}</b></td></tr>
+              <tr><td>Signed documents</td><td><b>${(r.counts.signatures || 0).toLocaleString()}</b></td></tr>
+              <tr><td>Accounts able to sign in</td><td><b>${(r.counts.users || 0).toLocaleString()}</b></td></tr>
+              <tr><td>Photos and signatures held</td><td><b>${(r.media_files || 0).toLocaleString()}</b>
+                ${r.missing_files ? `<span class="muted"> — ${r.missing_files} referenced but missing</span>` : ''}</td></tr>
+              ${r.first_visit ? `<tr><td>Covers</td><td>${fmtDay(r.first_visit)} → ${fmtDay(r.last_visit)}</td></tr>` : ''}
+            </tbody></table>`}
+            ${(r.warnings || []).map((w) => `<p class="muted">• ${esc(w)}</p>`).join('')}
+            <p class="muted">Nothing was changed. This opened the archive, read the database inside it and put
+              it down again.</p>`, null);
+        } catch (err) {
+          modal('Backup test', `<p class="notice error" style="font-size:1rem">This backup would not restore.</p>
+            <p class="muted">${esc((err.data && err.data.error) || 'It could not be opened at all.')}</p>
+            <p class="muted">Take a fresh one, and do not delete any older backup until it tests clean.</p>`, null);
+        } finally { b.disabled = false; b.textContent = was; }
+      }));
       $$('[data-bksend]', wrap).forEach((b) => b.addEventListener('click', async () => {
         b.disabled = true;
         try {
@@ -5323,6 +5379,31 @@
         await drawBackups();
       } catch (err) {
         toast((err.data && err.data.message) || 'Could not write a backup', 5000);
+      } finally { btn.disabled = false; }
+    });
+
+    /*
+     * Freeing room by hand. It deletes photos, so it asks first and says
+     * exactly which ones — anything newer than the floor is never in reach,
+     * however hard the button is pressed.
+     */
+    $('#shed-now').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      const days = Number(getPath(SETTINGS, 'storage.shed_floor_days')) || 14;
+      const down = Number(getPath(SETTINGS, 'storage.shed_to_percent')) || 75;
+      if (!confirm(`Delete the oldest visitor photos until the disk is ${down}% full?\n\n`
+        + `Photos from the last ${days} days are never touched. The visits themselves stay; `
+        + 'only the photo on them goes, and it cannot be brought back.')) return;
+      btn.disabled = true;
+      try {
+        const r = await api('/storage/shed', { method: 'POST', body: { force: true } });
+        toast(r.photos
+          ? `Freed ${sizeOf(r.freed)} — ${r.photos} photo${r.photos === 1 ? '' : 's'} dropped, `
+            + `now ${r.percent_used}% full`
+          : `Nothing to free — ${r.why || 'there is room'}.`, 5000);
+        await drawBackups();
+      } catch {
+        toast('Could not free up room', 5000);
       } finally { btn.disabled = false; }
     });
 

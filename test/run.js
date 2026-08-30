@@ -61,6 +61,7 @@ const SUITES = [
   { name: 'account', file: 'account-test.js' },
   { name: 'backup', file: 'backup-test.js' },
   { name: 'offsite', file: 'offsite-test.js' },
+  { name: 'storage', file: 'storage-test.js' },
   { name: 'roles', file: 'roles-test.js' },
   { name: 'roles-ui', file: 'roles-ui-test.js', browser: true },
   { name: 'vtypes', file: 'vtypes-test.js', browser: true },

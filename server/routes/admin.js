@@ -1564,7 +1564,19 @@ router.get('/backups', (req, res) =>
     health: { ...backup.health(), offsite: require('../offsite').health() },
     // What is using the room, so a full volume is a breakdown rather than a
     // mystery: photos are almost always the answer.
-    storage: require('../storage').usage()
+    storage: (() => {
+      const s = settings.getSection('storage');
+      return {
+        ...require('../storage').usage(),
+        // So the panel can say what the valve is set to and when it last ran,
+        // rather than the reader having to infer it from the photo count.
+        shedding: s.shed_enabled !== false,
+        shed_at_percent: Number(s.shed_at_percent) || 90,
+        shed_last_at: s.shed_last_at || '',
+        shed_last_freed: Number(s.shed_last_freed) || 0,
+        shed_last_photos: Number(s.shed_last_photos) || 0
+      };
+    })()
   }));
 
 router.post('/backups', async (req, res) => {
@@ -1581,6 +1593,22 @@ router.post('/backups', async (req, res) => {
   } catch (err) {
     res.status(500).json({ ok: false, message: `Could not write a backup: ${err.message}` });
   }
+});
+
+/*
+ * Free up room now, rather than waiting for the hourly check.
+ *
+ * `force` is what the button sends: somebody looking at a nearly-full disk who
+ * wants the room back this minute, without first editing the threshold down
+ * and then putting it back. The floor still holds — the last fortnight of
+ * faces is never in reach, whoever is asking.
+ */
+router.post('/storage/shed', (req, res) => {
+  const storage = require('../storage');
+  const by = { userId: req.user ? req.user.id : null };
+  const result = storage.shed(req.body && req.body.force
+    ? { ...by, shed_enabled: true, shed_at_percent: 0 } : by);
+  res.json({ ok: true, ...result, storage: storage.usage() });
 });
 
 /* ----------------------------------------------- copying it off the machine */
@@ -1604,6 +1632,22 @@ router.post('/backups/:file/offsite', async (req, res) => {
   const result = await offsite.send(full, req.params.file);
   audit(req, 'offsite_send', 'backup', null, { file: req.params.file, ok: result.ok });
   res.json(result);
+});
+
+/*
+ * "Test this backup" — the drill, without the disaster.
+ *
+ * A backup nobody has ever opened is a promise. This opens one, reads the
+ * database inside it, and says whether it would actually put the site back —
+ * schema and all the files the records point at included — while changing
+ * nothing. It sits above the download route because that one matches any
+ * :file, this one included.
+ */
+router.post('/backups/:file/drill', (req, res) => {
+  const result = backup.drill(req.params.file);
+  audit(req, 'backup_drill', 'database', null,
+    { file: req.params.file, ok: result.ok, warnings: (result.warnings || []).length });
+  res.status(result.ok ? 200 : 400).json(result);
 });
 
 /*

@@ -14,7 +14,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { DATA_DIR, get } = require('./db');
+const { DATA_DIR, get, all, run } = require('./db');
 
 /** Bytes under a directory, following nothing and forgiving what has gone. */
 function sizeOf(dir) {
@@ -104,17 +104,123 @@ function daysLeft(freeBytes) {
   return days > 900 ? null : days;
 }
 
+/**
+ * The pressure valve: drop the oldest photos before the disk fills.
+ *
+ * The retention window says how long photos are kept as a matter of policy.
+ * This is the other thing — what happens when policy and the size of the
+ * volume disagree, and the volume is about to win. A site keeping ninety days
+ * of faces at a busy gate can pass a small volume well inside that window, and
+ * everything that fails then fails badly: the database cannot write, the kiosk
+ * turns people away, and the nightly backup that would have said so cannot be
+ * written either.
+ *
+ * So the oldest faces go early. They are the least useful bytes on the disk,
+ * they are the only ones there are a lot of, and losing them costs a look-up
+ * nobody was going to do — against a site that stops working.
+ *
+ * Three things it will not do: touch anything inside the floor window, run at
+ * all when it is switched off, or delete quietly. Every sweep is written to
+ * the audit log with what went and how much it freed.
+ */
+function shed(opts = {}) {
+  const settings = require('./settings');
+  const files = require('./files');
+  const cfg = { ...settings.getSection('storage'), ...opts };
+  const numberOr = (v, dflt) => (v === '' || v == null || !Number.isFinite(Number(v)) ? dflt : Number(v));
+  const at = numberOr(cfg.shed_at_percent, 90);
+  const to = numberOr(cfg.shed_to_percent, 75);
+  const floorDays = Math.max(1, numberOr(cfg.shed_floor_days, 14));
+
+  const before = usage();
+  const skip = (why) => ({ ran: false, why, percent_used: before.percent_used ?? null, freed: 0, photos: 0 });
+  if (cfg.shed_enabled === false) return skip('switched off');
+  if (!before.volume_size) return skip('the volume size is not known here');
+  /*
+   * Both marks have to be passed. The mark it starts at is what makes this a
+   * last resort rather than a second retention policy; the mark it clears to
+   * is what stops the button on the Backups page — which drops the first
+   * mark to nothing — from taking every photo it can reach.
+   */
+  if (before.percent_used < at || before.percent_used <= to) return skip('there is room');
+
+  /*
+   * Oldest first, in batches, stopping the moment there is room again — a
+   * site that is barely over loses a handful of photos, not a year of them.
+   * The floor is applied in the query, so nothing recent can be reached even
+   * if the disk never comes back under the mark.
+   */
+  const floor = new Date(Date.now() - floorDays * 864e5).toISOString();
+  let freed = 0;
+  let photos = 0;
+  let oldest = null;
+  let newest = null;
+
+  for (;;) {
+    const batch = all(`SELECT id, photo_path, signed_in_at FROM visits
+                       WHERE photo_path IS NOT NULL AND signed_in_at < ?
+                       ORDER BY signed_in_at ASC LIMIT 200`, floor);
+    if (!batch.length) break;
+    for (const v of batch) {
+      const full = files.absoluteFor(v.photo_path);
+      let size = 0;
+      try { if (full) size = fs.statSync(full).size; } catch { /* already gone */ }
+      files.removeFile(v.photo_path);
+      run('UPDATE visits SET photo_path = NULL WHERE id = ?', v.id);
+      freed += size;
+      photos++;
+      if (!oldest) oldest = v.signed_in_at;
+      newest = v.signed_in_at;
+    }
+    const now = usage();
+    if (!now.volume_size || now.percent_used <= to) break;
+  }
+
+  const after = usage();
+  const result = {
+    ran: true,
+    photos,
+    freed,
+    from: oldest,
+    to: newest,
+    floor_days: floorDays,
+    percent_before: before.percent_used,
+    percent_used: after.percent_used,
+    // Said plainly, because "it ran" and "it worked" are not the same thing:
+    // a site whose disk is full of something other than photos stays full.
+    enough: after.percent_used != null && after.percent_used <= to
+  };
+
+  if (photos) {
+    run(`INSERT INTO audit_log (user_id, action, entity, entity_id, detail, created_at)
+         VALUES (?, 'storage.shed', 'storage', NULL, ?, ?)`,
+      opts.userId || null, JSON.stringify(result), new Date().toISOString());
+    settings.setSection('storage', {
+      shed_last_at: new Date().toISOString(), shed_last_freed: freed, shed_last_photos: photos
+    });
+    console.log(`[storage] ${before.percent_used}% full — dropped ${photos} photo(s) older than `
+      + `${floorDays} days, freeing ${Math.round(freed / 1048576)}MB (now ${after.percent_used}%)`);
+  }
+  return result;
+}
+
 /** The short version, for the dashboard's health banner. */
 function health() {
   const u = usage();
   if (!u.volume_size) return { known: false };
+  const cfg = require('./settings').getSection('storage');
   return {
     known: true,
     level: u.level,
     percent_used: u.percent_used,
     free: u.volume_free,
-    days_left: u.days_left
+    days_left: u.days_left,
+    shedding: cfg.shed_enabled !== false,
+    shed_at_percent: Number(cfg.shed_at_percent) || 90,
+    shed_last_at: cfg.shed_last_at || '',
+    shed_last_freed: Number(cfg.shed_last_freed) || 0,
+    shed_last_photos: Number(cfg.shed_last_photos) || 0
   };
 }
 
-module.exports = { usage, health, sizeOf };
+module.exports = { usage, health, sizeOf, shed };

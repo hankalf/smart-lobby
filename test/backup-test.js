@@ -70,6 +70,50 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
   ok('the manifest counts match the database', manifest.counts.visits === made.data.counts.visits,
     JSON.stringify(manifest.counts));
 
+  /*
+   * ---- the drill: proving it would restore, without restoring it ----
+   *
+   * Everything above says the archive is readable. This is the other question,
+   * and the only one that matters on the day: would it actually put the site
+   * back? Schema, accounts, and the photos the records point at included.
+   */
+  const countBefore = (await req('GET', '/api/admin/backups')).data.backups.length;
+  const drill = await req('POST', `/api/admin/backups/${encodeURIComponent(made.data.file)}/drill`);
+  ok('a backup can be tested without being restored',
+    drill.status === 200 && drill.data.ok === true, JSON.stringify(drill.data).slice(0, 140));
+  ok('…and says it would restore', drill.data.restorable === true);
+  ok('…with nothing worth warning about, on one just taken',
+    (drill.data.warnings || []).length === 0, JSON.stringify(drill.data.warnings));
+  ok('…naming what would come back', drill.data.counts.visits > 0 && drill.data.counts.users > 0,
+    JSON.stringify(drill.data.counts));
+  ok('…and that every file the records point at is in the archive',
+    drill.data.referenced_files > 0 && drill.data.missing_files === 0,
+    `${drill.data.missing_files} missing of ${drill.data.referenced_files}`);
+  ok('…and how far back it goes', !!drill.data.first_visit && !!drill.data.last_visit,
+    `${drill.data.first_visit} → ${drill.data.last_visit}`);
+
+  const after = (await req('GET', '/api/admin/backups')).data;
+  ok('testing a backup changes nothing — no restore is staged',
+    !after.health.pending_restore, 'a restore was staged');
+  ok('…and no safety copy was written as a side effect, the way staging one does',
+    after.backups.length === countBefore, `${countBefore} before, ${after.backups.length} after`);
+
+  const missing = await req('POST', '/api/admin/backups/no-such-backup.zip/drill');
+  ok('testing a backup that is not there says so rather than throwing',
+    missing.status === 400 && missing.data.ok === false, JSON.stringify(missing.data).slice(0, 90));
+
+  /*
+   * A database-only copy is the trap this is really for: it restores
+   * perfectly, and every face on it comes back as a broken image.
+   */
+  const dbOnly = require('../server/backup').create({ includeMedia: false });
+  const thin = require('../server/backup').drill(dbOnly.file);
+  ok('a database-only copy is still reported as restorable', thin.ok && thin.restorable === true,
+    JSON.stringify(thin).slice(0, 120));
+  ok('…but warns that the photos would come back broken',
+    thin.missing_files > 0 && thin.warnings.some((w) => /not in this archive/.test(w)),
+    JSON.stringify(thin.warnings));
+
   /* ---- reading one back, without changing anything ---- */
   let look = await upload('/api/admin/restore/check', archive);
   ok('a real backup is recognised', look.status === 200 && look.data.ok === true, JSON.stringify(look.data).slice(0, 90));
