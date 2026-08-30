@@ -42,3 +42,31 @@ printed.
 
 These describe behaviour that is covered by the test suites. When a guide and the software
 disagree, one of them is a bug — check `npm test` before assuming it is the guide.
+
+## The screenshots
+
+`img/` holds the shots the guides use. They are taken against a seeded demo
+site — invented firms, invented people, invented jobs — for the obvious reason:
+these end up in a PDF that gets sent to people, and a real site's dashboard is a
+list of real visitors' names, companies and arrival times.
+
+To retake them:
+
+```bash
+DATA_DIR=/tmp/demo PORT=3512 node server/index.js &
+BASE_URL=http://localhost:3512 node docs/seed-demo.js    # builds the site
+BASE_URL=http://localhost:3512 node docs/shoot.js        # takes the shots
+npm run docs                                             # rebuilds the PDFs
+```
+
+`seed-demo.js` puts the demo site on a west-coast clock. That is not decoration:
+the shots are taken whenever they are taken, and a wall clock reading half past
+eleven at night above a list of people who arrived at seven in the morning is the
+first thing a reader would notice.
+
+The visitor photos are initials on a soft field rather than faces. A stock
+photograph of a person in a visitor record teaches exactly the wrong lesson about
+what this system holds.
+
+`build.js` fails the build if any figure does not load, because a broken image in
+a PDF has nowhere to report itself.

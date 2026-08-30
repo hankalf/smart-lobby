@@ -81,8 +81,24 @@ const footer = (title) => `
 
   for (const guide of GUIDES) {
     const body = fs.readFileSync(path.join(HERE, guide.src), 'utf8');
+    /*
+     * Written into this folder and opened as a file, rather than pushed in
+     * with setContent: a page with no address of its own cannot reach the
+     * screenshots in `img/`, and Chromium refuses the file:// reads without
+     * saying why. Opening a real file here makes the relative paths ordinary.
+     */
+    const scratch = path.join(HERE, `.building-${path.basename(guide.src)}`);
+    fs.writeFileSync(scratch, page(guide.title, body));
     const tab = await browser.newPage();
-    await tab.setContent(page(guide.title, body), { waitUntil: 'load' });
+    await tab.goto(`file://${scratch}`, { waitUntil: 'load' });
+    // Every figure drawn before the PDF is taken, and loudly if one is not.
+    const broken = await tab.evaluate(() => [...document.images]
+      .filter((im) => !im.complete || im.naturalWidth === 0)
+      .map((im) => im.getAttribute('src')));
+    if (broken.length) {
+      console.error(`  ${guide.out}: ${broken.length} image(s) did not load — ${broken.join(', ')}`);
+      process.exitCode = 1;
+    }
     await tab.pdf({
       path: path.join(HERE, guide.out),
       format: 'A4',
@@ -95,6 +111,7 @@ const footer = (title) => `
       margin: { top: '18mm', bottom: '20mm', left: '32mm', right: '32mm' }
     });
     await tab.close();
+    fs.unlinkSync(scratch);
     const size = fs.statSync(path.join(HERE, guide.out)).size;
     console.log(`  ${guide.out.padEnd(42)} ${Math.round(size / 1024)}KB`);
   }

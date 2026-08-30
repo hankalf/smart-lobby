@@ -282,6 +282,11 @@ node scripts/reset-password.js you@example.com 'a new password'</code></pre>
 <p>The home-screen preview beside the list can be dragged to set the order the kiosk shows the cards
   in. What you see in the preview is what appears on the tablet.</p>
 
+
+<figure class="tablet">
+  <img src="img/kiosk-welcome.png" alt="">
+  <figcaption><b>The home screen this produces.</b> Four cards, each one a visitor type placed on the home screen rather than behind Sign in.</figcaption>
+</figure>
 <h2>The standard set</h2>
 
 <dl>
@@ -559,6 +564,11 @@ node scripts/reset-password.js you@example.com 'a new password'</code></pre>
 <p>A live preview shows the card as Teams will render it, so nothing has to be tested by making
   somebody sign in.</p>
 
+
+<figure>
+  <img src="img/card-designer.png" alt="">
+  <figcaption><b>The card designer.</b> The controls on one side, the card as Teams will render it on the other — so nothing has to be tested by making somebody sign in.</figcaption>
+</figure>
 <h2>Per visitor type, on top of that</h2>
 
 <p>Any visitor type can carry its own card for any event. A contractor arrival can look nothing like
@@ -636,6 +646,11 @@ Home Assistant    POST  http://192.168.1.10:8123/api/services/lock/unlock
   name with a suffix like Ltd or LLC) and offers to merge them. Renaming fixes a misspelling
   everywhere at once, including on the visits that recorded it.</p>
 
+
+<figure>
+  <img src="img/companies.png" alt="">
+  <figcaption><b>Companies.</b> Real records rather than free text, with names close enough to be worth a look offered for merging.</figcaption>
+</figure>
 <h2>Certificates</h2>
 
 <p>Insurance, CSCS cards, method statements — held against a person or a company, each with an expiry
@@ -721,6 +736,11 @@ Home Assistant    POST  http://192.168.1.10:8123/api/services/lock/unlock
   last</strong>, worked out from the last thirty days of arrivals at this site rather than a guess at
   an average one.</p>
 
+
+<figure>
+  <img src="img/storage.png" alt="">
+  <figcaption><b>Room on the disk.</b> What is using the volume, how long the space left will last at this site’s rate, and the thresholds the valve works to.</figcaption>
+</figure>
 <h2>The pressure valve</h2>
 
 <p>Under <strong>When it gets tight</strong>, past a threshold the oldest photos are dropped down to a

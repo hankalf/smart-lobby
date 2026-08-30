@@ -303,3 +303,40 @@ hr {
   border-top: 1px solid var(--line);
   margin: 6mm 0;
 }
+
+/* --------------------------------------------------------------- figures */
+/*
+ * Screenshots run the full measure rather than the reading column — a
+ * dashboard squeezed to seventy characters wide is unreadable, and the point
+ * of showing it is that somebody can recognise it on their own screen.
+ *
+ * The hairline border matters more than it looks: several of these screens are
+ * mostly white, and without it a screenshot bleeds into the page and stops
+ * reading as a picture of something.
+ */
+figure {
+  margin: 0 0 5mm;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 1.5mm;
+}
+/* A shot of a dark screen needs no border to hold its edge. */
+figure.dark img { border-color: transparent; }
+figcaption {
+  font-family: var(--sans);
+  font-size: 8.5pt;
+  color: var(--ink-faint);
+  margin-top: 1.5mm;
+  max-width: var(--measure);
+}
+figcaption b { color: var(--ink-soft); font-weight: 700; }
+
+/* Narrow shots — a dialogue, a phone-shaped panel — sit at their own size. */
+figure.narrow img { max-width: 100mm; }
+figure.tablet img { max-width: 132mm; }
