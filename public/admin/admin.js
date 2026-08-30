@@ -3614,6 +3614,11 @@
     // different from the page it was downloaded from.
     const exportQuery = new URLSearchParams({ from: s.from, to: s.to, format: 'csv' });
     if (s.project_id) exportQuery.set('project_id', String(s.project_id));
+    // The printed report has to be the window on screen, filters and all, or
+    // it says something different from the page it was printed from.
+    const printQuery = new URLSearchParams({ from: s.from, to: s.to });
+    if (s.project_id) printQuery.set('project_id', String(s.project_id));
+    if (s.visit_type) printQuery.set('visit_type', s.visit_type);
 
     root.innerHTML = `
       <h1 class="page">Reports</h1>
@@ -3643,6 +3648,12 @@
               ${s.visit_type === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}
           </select>
           <button class="btn ghost" id="rp-reset">Reset</button>
+          <!--
+            The same figures on the site's own letterhead, for a client or an
+            auditor who is not going to be handed a screenshot of a dashboard.
+          -->
+          <a class="btn subtle" id="rp-print" target="_blank" rel="noopener"
+             href="/api/admin/stats/print?${printQuery}">Printable report</a>
         </div>
         <p class="muted" style="margin:.6rem 0 0">${esc(fmtDay(s.from))} to ${esc(fmtDay(s.to))} —
           ${s.days} day${s.days === 1 ? '' : 's'}${s.project_id ? ', one project' : ''}.</p>

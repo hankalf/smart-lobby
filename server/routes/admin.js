@@ -1982,8 +1982,15 @@ router.post('/users/:id/password', (req, res) => {
  * One window applies to the lot now, so the tiles, the chart and the tables
  * all describe the same span rather than three different ones.
  */
-router.get('/stats', (req, res) => {
-  const q = req.query || {};
+/*
+ * The figures behind the Reports page.
+ *
+ * Split out from the route because the printable version has to be the same
+ * numbers as the screen — computing them twice in two places is how a report
+ * ends up disagreeing with the page it was printed from.
+ */
+function statsFor(query) {
+  const q = query || {};
   const days = Math.min(731, Math.max(1, Number(q.days) || 30));
   // An explicit from/to wins; otherwise the last N days ending today.
   const to = clean(q.to) || localtime.today();
@@ -2015,7 +2022,7 @@ router.get('/stats', (req, res) => {
      ${scope} GROUP BY j.id ORDER BY hours DESC`)
     .map((r) => ({ ...r, hours: Math.round((r.hours || 0) * 10) / 10 }));
 
-  res.json({
+  return {
     from,
     to,
     days: span,
@@ -2044,7 +2051,31 @@ router.get('/stats', (req, res) => {
     projects: all('SELECT id, name FROM projects ORDER BY name'),
     types: all('SELECT DISTINCT visit_type FROM visits WHERE visit_type IS NOT NULL ORDER BY visit_type')
       .map((r) => r.visit_type)
+  };
+}
+
+router.get('/stats', (req, res) => res.json(statsFor(req.query)));
+
+/*
+ * The same report, on paper.
+ *
+ * Hours per project is the number a contractor operation bills and audits
+ * against, and "here is a screenshot of a dashboard" is not what anybody wants
+ * to put in front of a client or an auditor. This is a plain page with the
+ * site's own letterhead that prints — and so saves as a PDF — from any
+ * browser, with no export step and nothing to reformat.
+ */
+router.get('/stats/print', (req, res) => {
+  const stats = statsFor(req.query);
+  const page = require('../report-print').render(stats, {
+    org: settings.getSection('org'),
+    project: stats.project_id
+      ? (get('SELECT name FROM projects WHERE id = ?', stats.project_id) || {}).name : null,
+    by: req.user ? (req.user.name || req.user.email) : null,
+    now: nowISO()
   });
+  audit(req, 'report_print', 'report', null, { from: stats.from, to: stats.to, project_id: stats.project_id });
+  res.type('html').send(page);
 });
 
 module.exports = router;
