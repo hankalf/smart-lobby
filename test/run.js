@@ -59,6 +59,8 @@ const SUITES = [
   { name: 'visits', file: 'visits-test.js' },
   { name: 'undo', file: 'undo-test.js' },
   { name: 'expected', file: 'expected-test.js' },
+  // Forty people through one gate in one day, and every view of them agreeing.
+  { name: 'day', file: 'day-test.js' },
   { name: 'notifycards', file: 'notifycards-test.js', browser: true },
   { name: 'board', file: 'board-test.js' },
   { name: 'account', file: 'account-test.js' },
