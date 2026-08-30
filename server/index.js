@@ -312,6 +312,12 @@ function purgeOldData() {
     if (archived) console.log(`[retention] purged ${archived} deleted record(s) past the retention window`);
   }
   auth.purgeExpired();
+  /*
+   * Yesterday's bookings that nobody walked in on. Marked rather than deleted,
+   * so "we booked them in and they never came" stays answerable.
+   */
+  const missed = require('./expected').closeOldDays();
+  if (missed) console.log(`[expected] ${missed} booking(s) passed without anybody arriving`);
   require('./storage').shed();
 }
 

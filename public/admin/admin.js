@@ -684,7 +684,8 @@
         <b>Storage is not persistent.</b> ${esc(d.storage_warning)}</div>` : ''}
       ${healthNotices(d.health)}
       <div class="grid cards" style="margin-bottom:1.25rem">
-        ${[['On site now', d.stats.onsite], ['Signed in today', d.stats.today_in], ['Signed out today', d.stats.today_out],
+        ${[['On site now', d.stats.onsite], ['Still expected today', d.stats.expected_today || 0],
+           ['Signed in today', d.stats.today_in], ['Signed out today', d.stats.today_out],
            ['Parcels waiting', d.stats.deliveries_waiting], ['Inductions today', d.stats.inductions_today],
            ['People on file', d.stats.visitors_total]]
           .map(([l, n]) => `<div class="card stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('')}
@@ -784,6 +785,162 @@
     });
     actions.prepend(csv);
     actions.prepend(print);
+  }
+
+  /* ------------------------------------------------------------- expected */
+
+  /*
+   * Who is coming, before they arrive.
+   *
+   * The list a site actually wants at eight in the morning: who is due, who
+   * has walked in, and who has not. Kept apart from Visits on purpose — a
+   * booking is a plan, and a plan must never put somebody on the roll call.
+   */
+  VIEWS.expected = async (root) => {
+    const STATUS = {
+      expected: ['Due', 'off'], arrived: ['Arrived', 'on'],
+      cancelled: ['Cancelled', 'off'], no_show: ['Did not come', 'off']
+    };
+
+    root.innerHTML = `
+      <h1 class="page">Expected</h1>
+      <p class="page-sub">Book somebody in before they arrive and the kiosk knows them: their details are already
+        filled in, and reception can answer “who is coming today” without asking around.</p>
+      <div class="card section">
+        <div class="row">
+          <input class="input" id="ex-day" type="date" style="max-width:11rem">
+          <select class="input" id="ex-status" style="max-width:11rem">
+            <option value="">Any status</option>
+            ${Object.entries(STATUS).map(([k, [l]]) => `<option value="${k}">${l}</option>`).join('')}
+          </select>
+          <button class="btn ghost" id="ex-all">Everything ahead</button>
+          <button class="btn" id="ex-add">Book somebody in</button>
+        </div>
+        <p class="muted" id="ex-summary" style="margin:.6rem 0 0"></p>
+        <div class="table-wrap" id="ex-results"></div>
+      </div>`;
+
+    const load = async () => {
+      const params = new URLSearchParams();
+      if ($('#ex-day').value) params.set('on', $('#ex-day').value);
+      if ($('#ex-status').value) params.set('status', $('#ex-status').value);
+      const data = await api(`/expected?${params}`);
+      const rows = data.rows || [];
+
+      $('#ex-summary').textContent = `Today: ${data.expected} still to come, ${data.arrived} arrived`
+        + `${data.cancelled ? `, ${data.cancelled} cancelled` : ''}.`;
+
+      $('#ex-results').innerHTML = rows.length ? `<table>
+        <thead><tr><th>When</th><th>Name</th><th>Company</th><th>Type</th><th>Seeing</th>
+          <th>Code</th><th>Status</th><th></th></tr></thead>
+        <tbody>${rows.map((r) => {
+        const [label, pill] = STATUS[r.status] || [r.status, 'off'];
+        return `<tr>
+          <td>${esc(fmtDay(r.expected_on))}${r.expected_at ? `<br><span class="muted">${esc(r.expected_at)}</span>` : ''}</td>
+          <td><b>${esc(r.full_name)}</b></td><td>${esc(r.company || '')}</td>
+          <td>${esc(r.visit_type)}</td><td>${esc(r.host_name || '')}</td>
+          <td>${r.status === 'expected' ? `<code class="token">${esc(r.code)}</code>` : ''}</td>
+          <td><span class="pill ${pill}">${label}</span></td>
+          <td style="white-space:nowrap">
+            ${r.status === 'arrived'
+            ? `<button class="btn ghost" data-exvisit="${r.visit_id}">Open visit</button>`
+            : `<button class="btn ghost" data-exedit="${r.id}">Edit</button>
+               <button class="btn ghost" data-exdel="${r.id}">Remove</button>`}
+          </td></tr>`;
+      }).join('')}</tbody></table>`
+        : '<p class="empty">Nobody is booked in for this. Use “Book somebody in” for a visitor you already '
+          + 'know is coming — the crew starting Monday, the auditor at ten.</p>';
+
+      $$('[data-exedit]').forEach((b) => b.addEventListener('click',
+        () => bookingForm(rows.find((r) => String(r.id) === b.dataset.exedit), load)));
+      $$('[data-exvisit]').forEach((b) => b.addEventListener('click', () => visitDetail(b.dataset.exvisit)));
+      $$('[data-exdel]').forEach((b) => b.addEventListener('click', async () => {
+        if (!confirm('Remove this booking? Nobody is signed in or out by this — it is only the plan.')) return;
+        await api(`/expected/${b.dataset.exdel}`, { method: 'DELETE' });
+        await load();
+      }));
+    };
+
+    $('#ex-day').addEventListener('change', load);
+    $('#ex-status').addEventListener('change', load);
+    $('#ex-all').addEventListener('click', () => { $('#ex-day').value = ''; $('#ex-status').value = ''; load(); });
+    $('#ex-add').addEventListener('click', () => bookingForm(null, load));
+    load();
+  };
+
+  async function bookingForm(existing, after) {
+    const staff = (await api('/staff').catch(() => [])).filter((h) => h.active !== 0);
+    const projects = await api('/projects').catch(() => []);
+    const types = ((SETTINGS && SETTINGS.types) || []).filter((t) => t.key)
+      .map((t) => ({ key: t.key, label: t.label || t.key }));
+    if (!types.length) types.push({ key: 'visitor', label: 'visitor' });
+    const e = existing || {};
+    /*
+     * The site's own today, asked of the server. A dashboard open on a laptop
+     * in another time zone would otherwise default the booking to its own
+     * date — which for a site east of it is yesterday, and a booking for
+     * yesterday is one nobody is ever expected on.
+     */
+    const today = (await api('/expected?limit=1').catch(() => ({}))).day
+      || new Date().toISOString().slice(0, 10);
+    const m = modal(existing ? `Expected — ${existing.full_name}` : 'Book somebody in', `
+      <div class="form-grid">
+        <label class="field"><span>Name</span><input class="input" id="ex-name" value="${esc(e.full_name || '')}"></label>
+        <label class="field"><span>Company</span><input class="input" id="ex-company" value="${esc(e.company || '')}"></label>
+        <label class="field"><span>Phone</span><input class="input" id="ex-phone" value="${esc(e.phone || '')}">
+          <span class="muted">How the kiosk recognises them — the same number they will type in.</span></label>
+        <label class="field"><span>Email</span><input class="input" id="ex-email" value="${esc(e.email || '')}"></label>
+        <label class="field"><span>Day</span><input class="input" id="ex-on" type="date"
+          value="${esc(e.expected_on || today)}"></label>
+        <label class="field"><span>Time (optional)</span><input class="input" id="ex-at" type="time"
+          value="${esc(e.expected_at || '')}"></label>
+        <label class="field"><span>Visitor type</span><select class="input" id="ex-type">
+          ${types.map((t) => `<option value="${esc(t.key)}"
+            ${(e.visit_type || 'visitor') === t.key ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}
+        </select></label>
+        <label class="field"><span>Who they are seeing</span><select class="input" id="ex-host">
+          <option value="">—</option>
+          ${staff.map((h) => `<option value="${h.id}" ${String(e.host_id) === String(h.id) ? 'selected' : ''}>${esc(h.name)}</option>`).join('')}
+        </select></label>
+        <label class="field"><span>Project</span><select class="input" id="ex-project">
+          <option value="">—</option>
+          ${projects.map((p) => `<option value="${p.id}" ${String(e.project_id) === String(p.id) ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
+        </select></label>
+      </div>
+      <label class="field"><span>Reason for visit</span><input class="input" id="ex-purpose" value="${esc(e.purpose || '')}"></label>
+      <label class="field"><span>Notes for reception</span><textarea class="input" id="ex-notes" rows="2">${esc(e.notes || '')}</textarea></label>
+      ${e.code ? `<p class="muted">Arrival code: <code class="token">${esc(e.code)}</code> — they can give this at the
+        desk, or simply type the phone number above.</p>` : ''}`,
+    async (bg, close) => {
+      const body = {
+        full_name: $('#ex-name').value.trim(),
+        company: $('#ex-company').value.trim(),
+        phone: $('#ex-phone').value.trim(),
+        email: $('#ex-email').value.trim(),
+        expected_on: $('#ex-on').value,
+        expected_at: $('#ex-at').value,
+        visit_type: $('#ex-type').value,
+        host_id: $('#ex-host').value || null,
+        project_id: $('#ex-project').value || null,
+        purpose: $('#ex-purpose').value.trim(),
+        notes: $('#ex-notes').value.trim()
+      };
+      if (!body.full_name) return toast('A name is needed.');
+      let saved;
+      try {
+        saved = existing
+          ? await api(`/expected/${existing.id}`, { method: 'PATCH', body })
+          : await api('/expected', { method: 'POST', body });
+      } catch (err) {
+        return toast((err.data && err.data.message) || 'That could not be saved.', 5000);
+      }
+      close();
+      // The code is what a host forwards to their visitor, so it is worth
+      // saying rather than leaving to be found in the table.
+      if (!existing && saved.code) toast(`Booked in. Arrival code ${saved.code}`, 6000);
+      await after();
+    });
+    return m;
   }
 
   /* --------------------------------------------------------------- visits */

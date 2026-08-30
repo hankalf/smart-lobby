@@ -14,6 +14,7 @@ const localtime = require('../localtime');
 const deviceSlugs = require('../devices');
 const ratelimit = require('../ratelimit');
 const archive = require('../archive');
+const expected = require('../expected');
 const cards = require('../notify-card');
 const roles = require('../roles');
 
@@ -207,7 +208,11 @@ router.get('/dashboard', (req, res) => {
     today_out: get('SELECT COUNT(*) AS n FROM visits WHERE signed_out_at >= ? AND signed_out_at < ?', day.start, day.end).n,
     deliveries_waiting: get("SELECT COUNT(*) AS n FROM deliveries WHERE status = 'awaiting'").n,
     visitors_total: get('SELECT COUNT(*) AS n FROM visitors').n,
-    inductions_today: get('SELECT COUNT(*) AS n FROM slide_views WHERE completed_at >= ? AND completed_at < ?', day.start, day.end).n
+    inductions_today: get('SELECT COUNT(*) AS n FROM slide_views WHERE completed_at >= ? AND completed_at < ?', day.start, day.end).n,
+    // Booked in for today and not yet walked in on. The number reception is
+    // actually asked for at eight in the morning.
+    expected_today: get("SELECT COUNT(*) AS n FROM expected_visits WHERE expected_on = ? AND status = 'expected'",
+      localtime.today()).n
   };
   const week = byLocalDay(all(`SELECT signed_in_at FROM visits WHERE signed_in_at >= date('now','-14 days')`)
     .map((r) => r.signed_in_at), 14);
@@ -234,6 +239,52 @@ router.get('/dashboard', (req, res) => {
     recent_deliveries: all(
       `SELECT d.*, h.name AS host_name FROM deliveries d LEFT JOIN hosts h ON h.id = d.recipient_host_id
        ORDER BY d.received_at DESC LIMIT 10`) });
+});
+
+/* ------------------------------------------------------------- expected */
+
+/*
+ * Who is coming. A plan, kept apart from the record of who was actually here
+ * — see the table's own note in db.js for why that separation matters.
+ */
+router.get('/expected', (req, res) => res.json({
+  ...expected.today(),
+  // The whole window asked for, which is not the same as today's summary.
+  rows: expected.list(req.query)
+}));
+
+router.post('/expected', (req, res) => {
+  const made = expected.create(req.body || {}, req.user ? (req.user.name || req.user.email) : null);
+  if (made.error) {
+    return res.status(400).json({
+      error: made.error,
+      message: { name_required: 'A name is needed.', date_invalid: 'That is not a date.' }[made.error]
+        || 'That could not be saved.'
+    });
+  }
+  audit(req, 'create', 'expected_visit', made.id, { name: made.full_name, on: made.expected_on });
+  res.json(made);
+});
+
+router.patch('/expected/:id', (req, res) => {
+  const saved = expected.update(Number(req.params.id), req.body || {});
+  if (!saved) return res.status(404).json({ error: 'not_found' });
+  if (saved.error) {
+    return res.status(saved.error === 'not_found' ? 404 : 409).json({
+      error: saved.error,
+      message: saved.error === 'already_arrived'
+        ? 'They have already arrived, so this is now a record of a visit rather than a plan.'
+        : 'That could not be changed.'
+    });
+  }
+  audit(req, 'update', 'expected_visit', saved.id, { status: saved.status });
+  res.json(saved);
+});
+
+router.delete('/expected/:id', (req, res) => {
+  if (!expected.remove(Number(req.params.id))) return res.status(404).json({ error: 'not_found' });
+  audit(req, 'delete', 'expected_visit', Number(req.params.id), null);
+  res.json({ ok: true });
 });
 
 router.get('/rollcall', (req, res) => {

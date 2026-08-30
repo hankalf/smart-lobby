@@ -72,6 +72,9 @@ const AREA_BY_PREFIX = {
   stats: 'reports',
   rollcall: 'visits',
   visits: 'visits',
+  // Booking somebody in for tomorrow is reception's job, and it belongs with
+  // the visits they will become.
+  expected: 'visits',
   visitors: 'visitors',
   // The firms behind the people, so it sits with the registry.
   companies: 'visitors',

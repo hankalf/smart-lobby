@@ -9,6 +9,7 @@ const accessCtl = require('../access');
 const { nextBadgeNo } = require('../badges');
 const companies = require('../companies');
 const compliance = require('../compliance');
+const expectedVisits = require('../expected');
 const localtime = require('../localtime');
 const devices = require('../devices');
 const phoneRules = require('../../public/kiosk/phone');
@@ -329,7 +330,38 @@ router.post('/lookup', lookupLimit, (req, res) => {
   }
 
   const lang = req.body.language === 'es' ? 'es' : 'en';
-  if (!visitor) return res.json({ found: false, induction: inductionStatus(null, visitType, lang) });
+
+  /*
+   * Were they booked in? Answered whether or not they have ever been here
+   * before, because the crew starting on Monday are strangers to the database
+   * and expected all the same — and it is the same phone number either way.
+   */
+  const booking = expectedVisits.match({
+    code: req.body.code, phone: req.body.phone, email: req.body.email, visit_type: visitType
+  });
+  const expectedPayload = booking ? {
+    id: booking.id,
+    full_name: booking.full_name,
+    company: booking.company,
+    phone: booking.phone,
+    email: booking.email,
+    visit_type: booking.visit_type,
+    host_id: booking.host_id,
+    host_name: booking.host_name,
+    project_id: booking.project_id,
+    project_name: booking.project_name,
+    purpose: booking.purpose,
+    expected_on: booking.expected_on,
+    expected_at: booking.expected_at
+  } : null;
+
+  if (!visitor) {
+    return res.json({
+      found: false,
+      expected: expectedPayload,
+      induction: inductionStatus(null, visitType, lang)
+    });
+  }
   if (visitor.blocked) return res.status(403).json({ found: true, blocked: true, message: 'Please see reception.' });
 
   const openVisit = get("SELECT id, signed_in_at FROM visits WHERE visitor_id = ? AND status = 'onsite' ORDER BY id DESC LIMIT 1", visitor.id);
@@ -345,6 +377,7 @@ router.post('/lookup', lookupLimit, (req, res) => {
       last_visit_at: visitor.last_visit_at
     },
     already_onsite: openVisit || null,
+    expected: expectedPayload,
     induction: inductionStatus(visitor, visitType, lang)
   });
 });
@@ -601,6 +634,17 @@ router.post('/signin', writeLimit, async (req, res) => {
                        LEFT JOIN hosts h ON h.id = v.host_id LEFT JOIN sites s ON s.id = v.site_id
                        LEFT JOIN projects j ON j.id = v.project_id
                        WHERE v.id = ?`, visitId);
+
+    /*
+     * If they were booked in, the booking is now history rather than a plan.
+     * Matched again here rather than trusting the id the tablet sends: a
+     * queued sign-in can arrive hours later, from an app that was told about
+     * a booking somebody has since cancelled.
+     */
+    const booking = expectedVisits.match({
+      code: b.expected_code, phone, email, visit_type: visitType
+    });
+    if (booking) expectedVisits.arrive(booking.id, visitId);
 
     notify.notifyArrival(visitId).catch(() => {});
     // A separate post, off by default: on a busy gate it doubles the traffic,

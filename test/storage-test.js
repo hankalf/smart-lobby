@@ -130,7 +130,7 @@ async function req(method, p, body) {
   const staffPass = 'Reception123!';
   await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
   const rec = (await req('POST', '/api/admin/users', {
-    email: `shed-reception-${Date.now()}@example.com`, name: 'Shed Reception', role: 'reception', password: staffPass
+    email: `shed-reception-${Date.now()}@example.com`, name: 'Shed Reception', role: 'reception', password: staffPass, must_change: false
   })).data;
   if (rec && rec.email) {
     await req('POST', '/api/admin/logout');

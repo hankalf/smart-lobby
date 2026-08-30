@@ -103,18 +103,36 @@ const at = (offset, hour) => `${day(offset)}T${String(hour).padStart(2, '0')}:00
     !escaped.text.includes('<img src=x') && escaped.text.includes('&lt;img src=x'),
     escaped.text.includes('<img src=x') ? 'raw markup made it onto the page' : 'ok');
 
-  /* ---- reception has no business printing the site’s figures ---- */
+  /*
+   * ---- it is guarded exactly as the Reports page is ----
+   *
+   * Reception can already read the figures on screen, so printing them is not
+   * a new door; a clerk, who has deliveries and drivers and nothing else,
+   * must not be able to reach them through this route either.
+   */
   const pw = 'Reception123!';
   const rec = (await req('POST', '/api/admin/users', {
-    email: `print-reception-${Date.now()}@example.com`, name: 'Print Reception', role: 'reception', password: pw
+    email: `print-reception-${Date.now()}@example.com`, name: 'Print Reception', role: 'reception', password: pw, must_change: false
   })).data;
+  const clerk = (await req('POST', '/api/admin/users', {
+    email: `print-clerk-${Date.now()}@example.com`, name: 'Print Clerk', role: 'clerk', password: pw, must_change: false
+  })).data;
+
   await req('POST', '/api/admin/logout');
   await req('POST', '/api/admin/login', { email: rec.email, password: pw });
+  ok('reception can print what they can already read on screen',
+    (await req('GET', `/api/admin/stats/print?${window}`)).status === 200);
+
+  await req('POST', '/api/admin/logout');
+  await req('POST', '/api/admin/login', { email: clerk.email, password: pw });
   const denied = await req('GET', `/api/admin/stats/print?${window}`);
-  ok('reception cannot print the site’s figures', denied.status === 403, String(denied.status));
+  ok('a clerk cannot reach the site’s figures through the printable report',
+    denied.status === 403, String(denied.status));
+
   await req('POST', '/api/admin/logout');
   await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
   await req('DELETE', `/api/admin/users/${rec.id}`);
+  await req('DELETE', `/api/admin/users/${clerk.id}`);
 
   /* ---- put the site back as it was ---- */
   for (const id of mine) await req('DELETE', `/api/admin/visits/${id}`);

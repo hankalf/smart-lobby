@@ -35,6 +35,8 @@
     // The signed token that lets the thank-you screen cancel the sign-in it is
     // showing, for the few minutes it is good for. Cleared with the screen.
     undo: null,
+    // The booking this person turned out to have, if reception made one.
+    expected: null,
     deviceToken: localStorage.getItem('sl_device_token') || '',
     // Which tablet this is, taken from the address: /kiosk/north-gate. The path
     // is the reliable part — see deviceSlug() below.
@@ -539,6 +541,7 @@
     state.lastResult = null;
     // The next person must not be able to cancel the last person's sign-in.
     state.undo = null;
+    state.expected = null;
     state.deckIndex = 0;
     state.inductionDone = false;
     state.inductionSignature = null;
@@ -1062,6 +1065,9 @@
         $('#f-company').value = r.visitor.company || '';
         $('#f-phone').value = r.visitor.phone || '';
         $('#f-email').value = r.visitor.email || '';
+        // A booking says more than the registry does — who they are seeing,
+        // which job, and why — so it is applied over the top.
+        if (r.expected && applyExpected(r.expected)) { setTimeout(() => startFlow(), 900); return; }
         const note = $('#identify-result');
         note.textContent = r.already_onsite
           ? (state.lang === 'es'
@@ -1074,6 +1080,10 @@
         setTimeout(() => startFlow(), 900);
       } else {
         if (isEmail) $('#f-email').value = value; else $('#f-phone').value = value;
+        // Never been here before, but booked in this morning — the crew
+        // starting Monday are strangers to the registry and expected all the
+        // same.
+        if (r.expected) applyExpected(r.expected);
         startFlow();
       }
     } catch (err) {
@@ -1081,6 +1091,39 @@
       startFlow();
     }
   });
+
+  /**
+   * They were booked in before they arrived.
+   *
+   * A site knows about most of its visitors the day before, and until now the
+   * kiosk met every one of them as a stranger — standing typing a name into a
+   * tablet with people waiting behind them. Everything the booking already
+   * knows is filled in; nothing is locked, because the plan can be wrong and
+   * the person standing there is the authority on who they are.
+   */
+  function applyExpected(booking) {
+    if (!booking) return false;
+    state.expected = booking;
+    const fill = (sel, value) => { if (value && !$(sel).value) $(sel).value = value; };
+    fill('#f-name', booking.full_name);
+    fill('#f-company', booking.company);
+    fill('#f-phone', booking.phone);
+    fill('#f-email', booking.email);
+    fill('#f-purpose', booking.purpose);
+    if (booking.host_id && !$('#f-host-id').value) {
+      $('#f-host-id').value = booking.host_id;
+      $('#f-host-search').value = booking.host_name || '';
+    }
+    if (booking.project_id && $('#f-project')) $('#f-project').value = String(booking.project_id);
+
+    const note = $('#identify-result');
+    const when = booking.expected_at ? ` ${state.lang === 'es' ? 'a las' : 'at'} ${booking.expected_at}` : '';
+    note.textContent = state.lang === 'es'
+      ? `Le estábamos esperando${when}.${booking.host_name ? ` ${booking.host_name} le recibirá.` : ''} Hemos rellenado sus datos.`
+      : `You're expected${when}.${booking.host_name ? ` ${booking.host_name} is expecting you.` : ''} We have filled in what we already knew.`;
+    note.classList.remove('hidden');
+    return true;
+  }
 
   /** They picked themselves from the name matches: fetch their details and carry on. */
   /**

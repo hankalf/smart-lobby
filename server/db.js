@@ -398,6 +398,45 @@ function migrate() {
     created_at TEXT NOT NULL
   );
 
+  /*
+   * People who are expected before they turn up.
+   *
+   * A site knows about most of its visitors the day before: the crew starting
+   * Monday, the auditor at ten, the interview at two. Without this the kiosk
+   * meets every one of them as a stranger — they type a name into a tablet
+   * with somebody waiting behind them, and reception cannot answer "who is
+   * coming today" without asking around.
+   *
+   * Deliberately a separate table rather than a visit with a flag. A visit is
+   * a record that somebody was here; an expectation is a plan, and plans get
+   * cancelled, moved and never turned up for. Mixing them would put people on
+   * the roll call who are not on site — which in a fire is the one thing this
+   * system must never get wrong.
+   */
+  CREATE TABLE IF NOT EXISTS expected_visits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    full_name TEXT NOT NULL,
+    company TEXT,
+    phone TEXT,
+    email TEXT,
+    visit_type TEXT NOT NULL DEFAULT 'visitor',
+    host_id INTEGER REFERENCES hosts(id) ON DELETE SET NULL,
+    project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+    site_id INTEGER REFERENCES sites(id) ON DELETE SET NULL,
+    expected_on TEXT NOT NULL,
+    expected_at TEXT,
+    purpose TEXT,
+    notes TEXT,
+    code TEXT,
+    status TEXT NOT NULL DEFAULT 'expected',
+    visit_id INTEGER REFERENCES visits(id) ON DELETE SET NULL,
+    arrived_at TEXT,
+    created_by TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_expected_day ON expected_visits(expected_on, status);
+  CREATE INDEX IF NOT EXISTS idx_expected_code ON expected_visits(code);
+
   CREATE TABLE IF NOT EXISTS sessions (
     token TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
