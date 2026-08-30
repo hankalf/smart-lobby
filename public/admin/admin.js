@@ -4068,7 +4068,9 @@
           all. Each gets its own design. The preview is built by the same code that sends the real thing, so what you
           see here is what lands in the channel.</p>
         <div class="tabs" id="cd-events"></div>
-        <p class="muted" id="cd-event-hint" style="margin:.25rem 0 .75rem"></p>
+        <p class="muted" id="cd-event-hint" style="margin:.25rem 0 .5rem"></p>
+        <div class="tabs subtle" id="cd-types"></div>
+        <div id="cd-type-note"></div>
         <div class="card-design">
           <div>
             <div class="form-grid">
@@ -4471,16 +4473,35 @@
      */
     let CD = null;              // the catalogue: events, their fields, the links
     const cards = {};           // event id -> the design being edited
+    /*
+     * event id -> visitor type -> that type's own design.
+     *
+     * Absent means "the same as every other type", which is what most sites
+     * want and what leaving it alone should mean. An entry here is a whole
+     * design rather than a patch, so the controls edit it directly.
+     */
+    const perType = {};
     let cdEvent = 'signin';
+    let cdType = '';            // '' is the design every type shares
 
     const cdEventDef = () => (CD ? CD.events.find((e) => e.id === cdEvent) : null);
 
     const cdSet = (id, value) => { const el = $(id); if (el) el.value = value ?? ''; };
 
+    /** Whether this event can differ by visitor type at all — a parcel cannot. */
+    const perTypeAllowed = () => !!CD && (CD.per_type_events || []).includes(cdEvent);
+
+    /** The design the controls are editing: the shared one, or a type's own. */
+    const editing = () => (cdType && perType[cdEvent] && perType[cdEvent][cdType])
+      ? perType[cdEvent][cdType]
+      : cards[cdEvent];
+
+    const hasOwn = (type) => !!(perType[cdEvent] && perType[cdEvent][type]);
+
     /** Put one event's design into the controls. */
     function showCard() {
       const def = cdEventDef();
-      const card = cards[cdEvent];
+      const card = editing();
       if (!def || !card) return;
 
       $('#cd-events').innerHTML = CD.events.map((e) => `<button class="tab${e.id === cdEvent ? ' on' : ''}"
@@ -4491,6 +4512,7 @@
         drawCardPreview();
       }));
       $('#cd-event-hint').textContent = def.hint;
+      drawTypeTabs();
       $('#cd-tokens').innerHTML = 'You can use '
         + def.tokens.map(([t, what]) => `<code title="${esc(what)}">{${esc(t)}}</code>`).join(' ')
         + '. Anything empty disappears along with the spacing around it.';
@@ -4515,9 +4537,70 @@
       drawCardLinks();
     }
 
+    /**
+     * The row of visitor types under the event tabs.
+     *
+     * Every type is the usual answer and comes first. A type carrying its own
+     * design is marked, so which of them differ is visible without opening
+     * each one in turn.
+     */
+    function drawTypeTabs() {
+      const row = $('#cd-types');
+      const note = $('#cd-type-note');
+      if (!row) return;
+      if (!perTypeAllowed()) {
+        row.innerHTML = '';
+        note.innerHTML = '';
+        cdType = '';
+        return;
+      }
+      const types = CD.visitor_types || [];
+      row.innerHTML = [
+        `<button class="tab${cdType ? '' : ' on'}" data-cdtype="">Every type</button>`,
+        ...types.map((t) => `<button class="tab${cdType === t.key ? ' on' : ''}" data-cdtype="${esc(t.key)}">
+          ${esc(t.icon)} ${esc(t.label)}${hasOwn(t.key) ? ' <span class="tab-dot" title="Has its own design">●</span>' : ''}
+        </button>`)
+      ].join('');
+      $$('[data-cdtype]', row).forEach((b) => b.addEventListener('click', () => {
+        cdType = b.dataset.cdtype;
+        showCard();
+        drawCardPreview();
+      }));
+
+      note.innerHTML = !cdType
+        ? '<p class="muted" style="margin:.25rem 0 .75rem">This is the card every visitor type gets. Pick a type '
+          + 'above to give that one its own.</p>'
+        : hasOwn(cdType)
+          ? `<div class="notice" style="margin:.4rem 0 .75rem">This type has a card of its own — editing here
+             changes it and nothing else.
+             <button class="btn link" type="button" id="cd-type-drop">Use the same as every type</button></div>`
+          : `<div class="notice" style="margin:.4rem 0 .75rem">Showing the card every type gets. Editing here would
+             change it for everybody.
+             <button class="btn link" type="button" id="cd-type-own">Give this type its own card</button></div>`;
+
+      const own = $('#cd-type-own');
+      if (own) own.addEventListener('click', () => {
+        // Starts as a copy of the shared card, so somebody changing one line
+        // does not lose the other nine.
+        perType[cdEvent] = perType[cdEvent] || {};
+        perType[cdEvent][cdType] = { ...cards[cdEvent] };
+        showCard();
+        saveSettings.soon();
+        drawCardPreview();
+      });
+      const drop = $('#cd-type-drop');
+      if (drop) drop.addEventListener('click', () => {
+        if (!confirm('Drop this type\'s own card and use the shared one? What was designed here is lost.')) return;
+        delete perType[cdEvent][cdType];
+        showCard();
+        saveSettings.soon();
+        drawCardPreview();
+      });
+    }
+
     /** Read the controls back into the design for the event being edited. */
     function readCard() {
-      const card = cards[cdEvent];
+      const card = editing();
       if (!card) return {};
       card.header_style = $('#cd-header').value;
       card.details_style = $('#cd-details').value;
@@ -4542,11 +4625,18 @@
     VIEWS.settings.collectCards = () => {
       if (!CD) return null;
       readCard();
-      return { ...cards };
+      /*
+       * by_type is sent whole every time, empty object included, so dropping
+       * a type's own card actually drops it — settings merge key by key, and
+       * leaving it out would keep the design somebody just deleted.
+       */
+      return Object.fromEntries(Object.entries(cards)
+        .map(([id, card]) => [id, { ...card, by_type: (perType[id] || {}) }]));
     };
     VIEWS.settings.collectCard = () => (CD ? { ...cards.signin } : null);
     /** The design the designer is showing right now, for the test post. */
-    VIEWS.settings.collectCurrent = () => (CD ? { event: cdEvent, card: readCard() } : null);
+    VIEWS.settings.collectCurrent = () =>
+      (CD ? { event: cdEvent, card: readCard(), visit_type: cdType || null } : null);
 
     /*
      * Stored as "false means no", so a visitor type created after this was
@@ -4683,7 +4773,13 @@
         $('#cd-preview').innerHTML = `<p class="empty">Could not load the designer: ${esc(err.message)}</p>`;
         return false;
       }
-      CD.events.forEach((e) => { cards[e.id] = { ...e.defaults, ...(CD.cards[e.id] || {}) }; });
+      CD.events.forEach((e) => {
+        const saved = { ...(CD.cards[e.id] || {}) };
+        // by_type lives in its own map here, not inside the design being edited.
+        delete saved.by_type;
+        cards[e.id] = { ...e.defaults, ...saved };
+        perType[e.id] = { ...((CD.per_type || {})[e.id] || {}) };
+      });
       showCard();
       return true;
     }
@@ -4691,14 +4787,17 @@
     async function loadCardPreview() {
       if (!(await loadCatalogue())) return;
       let data;
-      try { data = await api('/notify/preview', { method: 'POST', body: { event: cdEvent, card: readCard() } }); }
+      try {
+        data = await api('/notify/preview', {
+          method: 'POST', body: { event: cdEvent, card: readCard(), visit_type: cdType || null } });
+      }
       catch (err) {
         if (err.message === 'unauthenticated') return;
         $('#cd-preview').innerHTML = `<p class="empty">Could not draw the preview: ${esc(err.message)}</p>`;
         return;
       }
-      // A slow request for an event nobody is looking at any more.
-      if (data.event !== cdEvent) return;
+      // A slow request for an event, or a type, nobody is looking at any more.
+      if (data.event !== cdEvent || (data.visit_type || '') !== cdType) return;
 
       $('#cd-preview').innerHTML = teamsPreviewHtml(data.model);
       const dump = $('#cd-json');
@@ -4717,7 +4816,7 @@
       const def = cdEventDef();
       warn.innerHTML = (() => {
         if (def.subject === 'delivery') return '';
-        if (!cards[cdEvent].show_photo) {
+        if (!editing().show_photo) {
           return '<div class="notice">No photo on this card — <b>Show the visitor\'s photo</b> is switched off '
             + 'for this notification. Sign-outs and parcels start that way.</div>';
         }

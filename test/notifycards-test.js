@@ -116,6 +116,33 @@ function unit() {
   ok('turning the tag off leaves no <at> behind',
     !/<at>/.test(JSON.stringify(cards.teamsCard(untagged))));
 
+  /* ---- a visitor type with a card of its own ---- */
+  const split = { cards: { signin: {
+    title_template: '{name} has arrived',
+    by_type: { contractor: { title_template: 'CONTRACTOR {name} — {project}', header_style: 'warning' } }
+  } } };
+  ok('a type with its own card gets it',
+    cards.buildModel('signin', { ...VISIT, visit_type: 'contractor' }, split, CTX).title
+      === 'CONTRACTOR John Doe — Lakeview Phase 2',
+    cards.buildModel('signin', { ...VISIT, visit_type: 'contractor' }, split, CTX).title);
+  ok('…and every other type keeps the shared one',
+    cards.buildModel('signin', { ...VISIT, visit_type: 'interview' }, split, CTX).title
+      === 'John Doe has arrived',
+    cards.buildModel('signin', { ...VISIT, visit_type: 'interview' }, split, CTX).title);
+  ok('an override changes only what it names',
+    cards.cardFor('signin', split, 'contractor').header_style === 'warning'
+      && cards.cardFor('signin', split, 'visitor').header_style === 'accent',
+    `${cards.cardFor('signin', split, 'contractor').header_style} / ${cards.cardFor('signin', split, 'visitor').header_style}`);
+  ok('…and leaves the fields it says nothing about alone',
+    cards.cardFor('signin', split, 'contractor').fields.join(',')
+      === cards.cardFor('signin', split, 'visitor').fields.join(','));
+  ok('the designer is told which types have their own',
+    cards.typesWithOwnCard('signin', split).join(',') === 'contractor',
+    JSON.stringify(cards.typesWithOwnCard('signin', split)));
+  ok('…and that the other events have none', cards.typesWithOwnCard('signout', split).length === 0);
+  ok('a parcel has no visitor type, so it cannot vary by one',
+    cards.buildModel('delivery', PARCEL, split, CTX).visitType === null);
+
   /* ---- routing a visitor type to somebody beyond the host ---- */
   const safety = [{ name: 'John Doe', email: 'safety@example.com' }];
   const routed = cards.buildModel('signin', VISIT, empty, { ...CTX, also: safety });
@@ -378,6 +405,44 @@ function unit() {
   const note = await page.textContent('#cd-photo-warning');
   ok('an arrival with nobody photographed says that instead',
     /nobody in the example has one|cannot reach|^\s*$/.test(note), note);
+
+  /* ---- and the same thing in the dashboard ---- */
+  await page.click('#cd-events .tab:nth-child(1)');
+  await page.waitForSelector('#cd-types .tab', { timeout: 10000 });
+  ok('the designer offers the visitor types', (await page.$$('#cd-types .tab')).length >= 2,
+    String((await page.$$('#cd-types .tab')).length));
+  ok('…starting on the card every type gets',
+    /Every type/.test(await page.textContent('#cd-types .tab.on')),
+    await page.textContent('#cd-types .tab.on'));
+
+  await page.click('#cd-types [data-cdtype="contractor"]');
+  await page.waitForTimeout(400);
+  ok('a type with no card of its own says the shared one is showing',
+    /card every type gets/i.test(await page.textContent('#cd-type-note')),
+    (await page.textContent('#cd-type-note')).slice(0, 90));
+
+  await pillGone();
+  await page.click('#cd-type-own');
+  await pillSaved();
+  ok('…and can be given one', /card of its own/i.test(await page.textContent('#cd-type-note')),
+    (await page.textContent('#cd-type-note')).slice(0, 90));
+
+  await pillGone();
+  await page.fill('#cd-title', 'CONTRACTOR {name}');
+  await pillSaved();
+  const bySplit = await page.evaluate(() =>
+    fetch('/api/admin/settings').then((r) => r.json()).then((s) => s.notify.cards.signin));
+  ok('the type\'s own wording is saved under that type',
+    bySplit.by_type.contractor.title_template === 'CONTRACTOR {name}',
+    JSON.stringify(bySplit.by_type));
+  ok('…and the shared card is untouched', bySplit.title_template !== 'CONTRACTOR {name}',
+    bySplit.title_template);
+
+  await page.click('#cd-types [data-cdtype=""]');
+  await page.waitForTimeout(400);
+  ok('going back to Every type shows the shared wording again',
+    (await page.inputValue('#cd-title')) === bySplit.title_template,
+    await page.inputValue('#cd-title'));
 
   ok('no javascript errors anywhere', errors.length === 0, errors.slice(0, 3).join(' | '));
 

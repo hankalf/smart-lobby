@@ -1205,13 +1205,14 @@ router.get('/notifications', (req, res) => {
  */
 router.get('/notify/preview', (req, res) => {
   const event = cards.EVENT_BY_ID[req.query.event] ? req.query.event : 'signin';
-  res.json(buildPreview(event, req.query.card ? safeJson(req.query.card, null) : null));
+  res.json(buildPreview(event, req.query.card ? safeJson(req.query.card, null) : null,
+    clean(req.query.visit_type) || null));
 });
 
 router.post('/notify/preview', (req, res) => {
   const body = req.body || {};
   const event = cards.EVENT_BY_ID[body.event] ? body.event : 'signin';
-  res.json(buildPreview(event, body.card || null));
+  res.json(buildPreview(event, body.card || null, clean(body.visit_type) || null));
 });
 
 function safeJson(text, fallback) {
@@ -1282,11 +1283,23 @@ function sampleDelivery() {
  * has been written — which, with auto-save, is a matter of a second, but the
  * preview should never lag behind the controls.
  */
-function buildPreview(eventId, card) {
+function buildPreview(eventId, card, visitType) {
   const n = settings.getSection('notify');
   const event = cards.EVENT_BY_ID[eventId] || cards.EVENT_BY_ID.signin;
-  // A card passed in is a whole design in its own right, not a patch.
-  const notifyForPreview = card ? { ...n, cards: { ...(n.cards || {}), [event.id]: card } } : n;
+  // A card passed in is a whole design in its own right, not a patch. It is
+  // put where the type being previewed will look for it, so previewing a
+  // contractor's own design shows that design rather than the shared one.
+  const notifyForPreview = card
+    ? {
+      ...n,
+      cards: {
+        ...(n.cards || {}),
+        [event.id]: visitType && event.subject === 'visit'
+          ? { ...(n.cards || {})[event.id], by_type: { ...(((n.cards || {})[event.id] || {}).by_type), [visitType]: card } }
+          : card
+      }
+    }
+    : n;
 
   const { row, real, photoUrl, fallbackTitle } = event.subject === 'delivery'
     ? (() => {
@@ -1308,7 +1321,9 @@ function buildPreview(eventId, card) {
     photoUrl,
     // Whoever this visitor type is routed to, so the preview shows the extra
     // tag line rather than hiding it until the first real arrival.
-    also: event.subject === 'visit' ? notify.routedStaff(row.visit_type) : [],
+    also: event.subject === 'visit' ? notify.routedStaff(visitType || row.visit_type) : [],
+    // The type being designed for, which may not be the sample visit's own.
+    visitType: event.subject === 'visit' ? (visitType || row.visit_type) : null,
     now: new Date().toISOString(),
     fallbackTitle
   });
@@ -1318,7 +1333,8 @@ function buildPreview(eventId, card) {
     model,
     teams: cards.teamsCard(model),
     sample: !real,
-    card: cards.cardFor(event.id, notifyForPreview),
+    visit_type: visitType || null,
+    card: cards.cardFor(event.id, notifyForPreview, visitType),
     /*
      * Whether the example this preview is built from has a face at all.
      * Without it, "the photo is not showing" has three different causes that
@@ -1339,6 +1355,15 @@ router.get('/notify/catalogue', (req, res) => {
     ...cards.catalogue(),
     // What is in force per event, defaults and the older shared design folded in.
     cards: Object.fromEntries(cards.EVENTS.map((e) => [e.id, cards.cardFor(e.id, n)])),
+    /*
+     * And the visitor types that have a card of their own, per event, so the
+     * designer can mark them without guessing from a merged object which
+     * values came from an override.
+     */
+    per_type: Object.fromEntries(cards.EVENTS.map((e) => [e.id, Object.fromEntries(
+      cards.typesWithOwnCard(e.id, n).map((type) => [type, cards.cardFor(e.id, n, type)]))])),
+    visitor_types: (settings.getAll().types || [])
+      .filter((t) => t.key).map((t) => ({ key: t.key, label: t.label || t.key, icon: t.icon || '👤' })),
     board_url: notify.boardUrl()
   });
 });
@@ -1357,7 +1382,7 @@ router.post('/settings/test-webhook', async (req, res) => {
    */
   const body = req.body || {};
   const event = cards.EVENT_BY_ID[body.event] ? body.event : 'signin';
-  const preview = buildPreview(event, body.card || null);
+  const preview = buildPreview(event, body.card || null, clean(body.visit_type) || null);
   const model = { ...preview.model, title: `${preview.model.title} — test`, mention: null, mentionTemplate: null };
   const result = await notify.sendWebhook({ url: req.body.url, model });
   res.json({

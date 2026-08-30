@@ -203,14 +203,36 @@ const DEFAULT_CARD = cardDefaults('signin');
  * defaults rather than inheriting an arrival's wording, which would have them
  * announcing that a parcel had arrived to see somebody.
  */
-function cardFor(eventId, notify) {
+function cardFor(eventId, notify, visitType) {
   const base = cardDefaults(eventId);
   const own = notify && notify.cards && notify.cards[eventId];
-  const merged = (own && typeof own === 'object') ? { ...base, ...own }
+  let merged = (own && typeof own === 'object') ? { ...base, ...own }
     : (eventId === 'signin' && notify && notify.card) ? { ...base, ...notify.card }
       : base;
+
+  /*
+   * And one more layer, for a visitor type that wants its own card.
+   *
+   * A contractor arriving and somebody here for an interview are not the same
+   * message: one wants the project and a hard hat colour, the other wants
+   * discretion. Most sites need one design per event and never touch this, so
+   * an override exists only where somebody made one — absent means "the same
+   * as every other type", which is what leaving it alone should mean.
+   */
+  const byType = own && own.by_type;
+  const forType = visitType && byType && typeof byType === 'object' ? byType[visitType] : null;
+  if (forType && typeof forType === 'object') merged = { ...merged, ...forType };
+
   // Resolved here, once, so the designer shows the same buttons that send.
   return { ...merged, links: linkIds(merged) };
+}
+
+/** Which visitor types have a design of their own, for this event. */
+function typesWithOwnCard(eventId, notify) {
+  const own = notify && notify.cards && notify.cards[eventId];
+  const byType = own && own.by_type;
+  if (!byType || typeof byType !== 'object') return [];
+  return Object.keys(byType).filter((k) => byType[k] && typeof byType[k] === 'object');
 }
 
 /**
@@ -327,7 +349,9 @@ function deliveryTokens(d, ctx) {
  */
 function buildModel(eventId, row, notify, ctx) {
   const event = EVENT_BY_ID[eventId] || EVENT_BY_ID.signin;
-  const c = cardFor(event.id, notify);
+  // A parcel has no visitor type, so only the visit events can vary by one.
+  const visitType = event.subject === 'visit' ? (ctx.visitType || row.visit_type) : null;
+  const c = cardFor(event.id, notify, visitType);
   const tokens = event.subject === 'delivery' ? deliveryTokens(row, ctx) : visitTokens(row, ctx);
 
   const byId = Object.fromEntries(event.fields.map((f) => [f.id, f]));
@@ -359,6 +383,7 @@ function buildModel(eventId, row, notify, ctx) {
 
   return {
     event: event.id,
+    visitType: visitType || null,
     title: fill(c.title_template, tokens) || ctx.fallbackTitle || tokens.name || event.label,
     subtitle: fill(c.subtitle_template, tokens) || null,
     fields,
@@ -557,6 +582,8 @@ const catalogue = () => ({
     tokens: TOKENS[e.subject]
   })),
   links: LINKS.map(({ id, label, needs }) => ({ id, label, needs: needs || null })),
+  // Only the visit events can differ by visitor type; a parcel has none.
+  per_type_events: EVENTS.filter((e) => e.subject === 'visit').map((e) => e.id),
   photo_sizes: PHOTO_SIZES.map((key) => ({ key, px: PHOTO_PX[key] })),
   links_max: LINKS_MAX,
   header_styles: HEADER_STYLES
@@ -564,7 +591,8 @@ const catalogue = () => ({
 
 module.exports = {
   VISIT_FIELDS, DELIVERY_FIELDS, EVENTS, EVENT_BY_ID, LINKS, LINKS_MAX,
-  DEFAULT_CARD, CARD_BASE, HEADER_STYLES, PHOTO_PX, PHOTO_SIZES, cardDefaults, cardFor, catalogue,
+  DEFAULT_CARD, CARD_BASE, HEADER_STYLES, PHOTO_PX, PHOTO_SIZES, cardDefaults, cardFor,
+  typesWithOwnCard, catalogue,
   buildModel, render, teamsCard,
   // Older name, older shape: one shared design and a list of ready-made lines.
   FIELDS: VISIT_FIELDS, FIELD_BY_ID: Object.fromEntries(VISIT_FIELDS.map((f) => [f.id, f]))
