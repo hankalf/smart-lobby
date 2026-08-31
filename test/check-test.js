@@ -43,6 +43,21 @@ const ok = (n, c, x) => { if (c) { pass++; console.log(`  ok  ${n}`); } else { f
   ok('it says what browser it is looking at',
     (await page.textContent('#ua') || '').length > 20);
 
+  /*
+   * The page's own dead-man's switch. The notice is in the HTML and the script
+   * removes it, so its absence is the proof the script ran — and its presence,
+   * on a page where the script was blocked, is what tells the person holding
+   * the tablet that the buttons are not going to work.
+   */
+  ok('the “these checks did not run” notice is cleared once they have',
+    await page.evaluate(() => !document.getElementById('did-not-run')));
+
+  /* ---- which build is answering ---- */
+  await page.waitForFunction(() => !/Checking/.test(document.querySelector('#build-note').textContent),
+    null, { timeout: 8000 }).catch(() => {});
+  const build = await page.textContent('#build-note');
+  ok('it says which build the server is running', /running since/i.test(build), build.slice(0, 90));
+
   /* ---- reaching the server, the test a tablet on a printer's wifi needs ---- */
   await page.click('#test-reach');
   await page.waitForFunction(() => !/Not checked|Asking/.test(document.querySelector('#reach-note').textContent),

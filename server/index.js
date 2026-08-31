@@ -143,10 +143,29 @@ app.get('/api/qr', async (req, res) => {
   }
 });
 
+/*
+ * Which build this is.
+ *
+ * Worked out once at start-up, because the question it answers is always
+ * "did my deploy actually land?" and the answer has to be about the running
+ * process rather than about the disk it was read from.
+ *
+ * It exists because of an afternoon spent staring at a page that would not
+ * work, unable to tell whether the fix had reached the server or not — a
+ * question nothing on the site could answer. Railway supplies the commit; a
+ * machine running it by hand gets the start time, which is enough to see a
+ * restart happen.
+ */
+const BUILD = {
+  commit: (process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_COMMIT || '').slice(0, 7) || null,
+  started_at: nowISO()
+};
+
 app.get('/api/health', (req, res) => {
   res.json({
     ok: true,
     time: nowISO(),
+    build: BUILD,
     onsite: get("SELECT COUNT(*) AS n FROM visits WHERE status='onsite'").n,
     storage: STORAGE.ephemeral ? 'ephemeral' : 'persistent',
     // Whether uploaded PowerPoint decks can be rendered slide-for-slide here.

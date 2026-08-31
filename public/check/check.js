@@ -12,6 +12,33 @@
  */
 (() => {
   const results = document.getElementById('results');
+
+  /*
+   * First thing, before anything that could throw: clear the "did not run"
+   * notice. Its whole job is to still be there if this line is never reached.
+   */
+  const notice = document.getElementById('did-not-run');
+  if (notice) notice.remove();
+
+  /*
+   * Which build is answering. The common question after a deploy is not "is
+   * the server up" but "is it running the version I just pushed", and until
+   * this was here nothing on the site could tell you.
+   */
+  fetch('/api/health', { cache: 'no-store' })
+    .then((r) => r.json())
+    .then((h) => {
+      const build = h.build || {};
+      document.getElementById('build-note').innerHTML = build.commit
+        ? `Build <code>${build.commit}</code>, running since ${new Date(build.started_at).toLocaleString()}.`
+        : `Running since ${new Date(build.started_at || Date.now()).toLocaleString()}. `
+          + 'No build id — this server was not deployed from a git checkout.';
+    })
+    .catch(() => {
+      document.getElementById('build-note').textContent =
+        'Could not ask the server which version it is — see the connection test below.';
+    });
+
   const add = (state, what, why) => {
     const mark = state === 'pass' ? '✓' : state === 'fail' ? '✕' : '!';
     results.insertAdjacentHTML('beforeend',

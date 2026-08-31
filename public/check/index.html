@@ -56,7 +56,30 @@
 <p class="lead">Open this on the tablet you plan to use as a kiosk. It tests what this browser actually allows,
   which is the quickest way to find out whether a kiosk app is getting in the way.</p>
 
-<div class="card" id="results"></div>
+<!--
+  The message below is what this page says before its own script has run, and
+  the script's first act is to clear it. So if the checks are ever blocked
+  again — a stricter policy, a kiosk browser refusing scripts — the page says
+  that plainly instead of looking like a page that simply found nothing wrong.
+  A diagnostic that fails silently is worse than no diagnostic, because it is
+  believed.
+-->
+<div class="card" id="results">
+  <div class="row" id="did-not-run">
+    <div class="mark fail">✕</div>
+    <div>
+      <div class="what">The checks on this page did not run</div>
+      <div class="why">This browser did not execute the page's script, so nothing below can be trusted —
+        including the buttons, which will do nothing when pressed. If this is a kiosk browser, try Safari.
+        If it happens in Safari too, it is a fault on the server rather than on this tablet.</div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0;font-size:1rem">Which version this is</h2>
+  <p class="why" id="build-note">Checking…</p>
+</div>
 
 <div class="card">
   <button class="btn" id="test-camera">Test the camera</button>
