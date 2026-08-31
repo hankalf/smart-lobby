@@ -40,6 +40,42 @@
   .badge-qr img { width: 100%; height: auto; }
   .badge-foot { font-size: calc(2.6mm * var(--badge-scale, 1)); margin-top: 1.5mm; }
 
+  /*
+   * The rulers. Sized in real units and deliberately not scaled by
+   * --badge-scale: they are a measuring instrument, and one that moved with
+   * the text size would measure nothing.
+   */
+  .badge-card { position: relative; }
+  .corner { position: absolute; width: 4mm; height: 4mm; border: 0 solid #000; }
+  .corner.tl { top: 0; left: 0; border-top-width: .6mm; border-left-width: .6mm; }
+  .corner.tr { top: 0; right: 0; border-top-width: .6mm; border-right-width: .6mm; }
+  .corner.bl { bottom: 0; left: 0; border-bottom-width: .6mm; border-left-width: .6mm; }
+  .corner.br { bottom: 0; right: 0; border-bottom-width: .6mm; border-right-width: .6mm; }
+
+  .ruler-block { margin-top: 2mm; width: 100%; }
+  .ruler-label { font-size: 2.4mm; margin-bottom: .5mm; }
+  /*
+   * Two details, both learned by getting them wrong, and both the difference
+   * between a ruler and a decoration:
+   *
+   * flex-shrink is off. A ruler inside a flex row is squeezed to fit a narrow
+   * label without complaint, and one that quietly resizes itself would report
+   * a scaling fault on a printer behaving perfectly. Too narrow to hold it and
+   * it should overflow visibly instead.
+   *
+   * Each tick carries its line on its *left*, and the row ends with a
+   * zero-width tick, so the distance from the first line to the last is
+   * exactly the number claimed. With the line on the right, the border widths
+   * accumulate: a 50 mm rule printed 51.3 mm, which reads as 2.6% of scaling
+   * that was never there.
+   */
+  .ruler { display: flex; width: max-content; max-width: none; height: 3mm; margin-bottom: 1.5mm; }
+  .ruler i { display: block; box-sizing: border-box; flex: 0 0 auto; border-left: .3mm solid #000; height: 100%; }
+  .ruler.mm i { width: 10mm; }
+  .ruler.inch i { width: 1in; }
+  .ruler i.end { width: 0; }
+  .intended { font-size: 2.4mm; margin-top: 1mm; }
+
   @media print {
     @page { size: var(--badge-w, 62mm) var(--badge-h, 100mm); margin: 0; }
     body > *:not(#badge-sheet) { display: none !important; }
@@ -111,14 +147,39 @@
   <p class="why" id="reach-note">Not checked yet.</p>
 </div>
 
+<!--
+  The test badge measures itself.
+
+  "It came out the wrong size" is not a fault report anybody can act on —
+  AirPrint can rotate a badge, scale it to the media, or both, and the result
+  is a label that is wrong in a way you cannot name. So the badge carries two
+  rulers and says what it believes it is. Measure the rulers on the label and
+  the arithmetic is done for you: a 50 mm rule measuring 55 mm is a 1.1x scale,
+  and a rule that comes out along the roll instead of across it means the badge
+  was turned.
+
+  The corner marks are printed hard against the edges. If one is missing, the
+  badge was cropped rather than scaled, which is a different problem.
+-->
 <div id="badge-sheet" hidden>
   <div class="badge-card">
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
     <div class="badge-top">
       <div class="badge-type">TEST BADGE</div>
     </div>
     <div class="badge-name">Test Print</div>
     <div class="badge-company">Device check</div>
     <div class="badge-meta"></div>
+
+    <div class="ruler-block">
+      <div class="ruler-label">Should measure <b id="ruler-mm-say">50 mm</b> across</div>
+      <div class="ruler mm"><i></i><i></i><i></i><i></i><i></i><i class="end"></i></div>
+      <div class="ruler-label">Should measure <b>2 inches</b> across</div>
+      <div class="ruler inch"><i></i><i></i><i class="end"></i></div>
+      <div class="intended">Asked for <b id="intended-size">—</b></div>
+    </div>
+
     <div class="badge-qr"></div>
     <div class="badge-foot"></div>
   </div>

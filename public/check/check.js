@@ -155,6 +155,17 @@
     const when = new Date();
     sheet.querySelector('.badge-meta').innerHTML =
       `${when.toLocaleDateString()}<br>${when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+    /*
+     * Printed on the badge itself, so a label found on a desk a week later
+     * still says what it was meant to be. Inches alongside millimetres because
+     * label stock is sold in both and the person holding the ruler has one or
+     * the other.
+     */
+    const inches = (mm) => (mm / 25.4).toFixed(2);
+    document.getElementById('intended-size').textContent =
+      `${setup.w} × ${setup.h} mm (${inches(setup.w)} × ${inches(setup.h)} in)`
+      + `${setup.landscape ? ', turned sideways' : ''}`;
     sheet.querySelector('.badge-foot').textContent = 'Device check — not a real visitor';
     // The QR is the slowest part of a real badge and the thing most likely to
     // come out blank, so the test badge carries one too.
@@ -171,8 +182,15 @@
 
     printNote.innerHTML = `Printing at <b>${setup.w} × ${setup.h} mm</b>`
       + `${setup.landscape ? ', turned sideways' : ''}. In the dialog: margins <b>None</b>, `
-      + 'headers and footers <b>off</b>. Measure what comes out — if it is not that size, '
-      + 'the label roll and the settings disagree.';
+      + 'headers and footers <b>off</b>, and <b>no scaling</b> if it is offered.'
+      + '<br><br><b>Then measure the two rulers on the label</b>, not the label itself:'
+      + '<br>• Both correct — the badge is printing true, and any leftover label is just the roll.'
+      + '<br>• Both long or both short by the same amount — it is being scaled. Divide to get the'
+      + ' factor and set the label size to match your real stock.'
+      + '<br>• The rulers run <i>along</i> the roll instead of across it — the printer turned the'
+      + ' badge. Switch <b>Which way it prints</b> under Badges, rather than swapping the numbers.'
+      + '<br>• A corner mark missing — it is being cropped, not scaled. The badge is bigger than'
+      + ' the printable area.';
 
     sheet.hidden = false;
     sheet.setAttribute('data-printing', '');

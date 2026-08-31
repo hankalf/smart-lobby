@@ -74,16 +74,64 @@ const ok = (n, c, x) => { if (c) { pass++; console.log(`  ok  ${n}`); } else { f
       window.__print.calls++;
       window.__print.armed = !sheet.hidden && sheet.hasAttribute('data-printing');
       window.__print.size = getComputedStyle(document.documentElement).getPropertyValue('--badge-w').trim();
+
+      /*
+       * The rulers are measured here and nowhere else: this is the one instant
+       * the badge is actually on the page, and it is the state that goes to
+       * the printer. Measured after the sheet is put away, everything is zero.
+       */
+      const toMm = (px) => (px / 96) * 25.4;
+      const span = (sel) => {
+        const ticks = [...document.querySelectorAll(`${sel} i`)];
+        if (ticks.length < 2) return null;
+        return toMm(ticks[ticks.length - 1].getBoundingClientRect().left
+          - ticks[0].getBoundingClientRect().left);
+      };
+      const card = document.querySelector('.badge-card').getBoundingClientRect();
+      const inch = document.querySelector('.ruler.inch').getBoundingClientRect();
+      window.__print.rules = {
+        mm: span('.ruler.mm'), inch: span('.ruler.inch'), overflows: inch.right > card.right + 0.5
+      };
     };
   });
-  await page.click('#test-badge');
+  /*
+   * Driven under print media, because that is the only place the badge is laid
+   * out at all — on screen the sheet stays display:none, and measuring it
+   * there returns zeroes for everything. It is also the honest place to
+   * measure: print media is what the printer is handed.
+   *
+   * Clicked through the DOM rather than by a real click, since under print
+   * media the button itself is hidden.
+   */
+  await page.emulateMedia({ media: 'print' });
+  await page.evaluate(() => document.getElementById('test-badge').click());
   await page.waitForFunction(() => window.__print.calls > 0, null, { timeout: 10000 }).catch(() => {});
   const printed = await page.evaluate(() => window.__print);
+  await page.emulateMedia({ media: null });
 
   ok('pressing “print a test badge” reaches the print dialog', printed.calls === 1, JSON.stringify(printed));
   ok('…with the badge on the page when it does', printed.armed === true, JSON.stringify(printed));
   ok('…at the label size this site is configured for, not a default',
     printed.size === '62mm', printed.size);
+
+  /*
+   * The rulers are the instrument the whole test rests on: somebody holds a
+   * tape against the printed label and concludes from it whether the printer
+   * is scaling. A rule that is itself 3% out sends them to change settings on
+   * a printer that was doing nothing wrong, so its accuracy is worth pinning
+   * to a tenth of a millimetre.
+   *
+   * Measured between the first line and the last, which is how a person
+   * measures it — not by the element's box, which includes borders it should
+   * not be judged on.
+   */
+  const rules = printed.rules || {};
+
+  ok('the 50 mm rule on the test badge really is 50 mm',
+    rules.mm !== null && Math.abs(rules.mm - 50) < 0.2, `${(rules.mm || 0).toFixed(2)} mm`);
+  ok('the 2 inch rule on the test badge really is 2 inches',
+    rules.inch !== null && Math.abs(rules.inch - 50.8) < 0.2, `${(rules.inch || 0).toFixed(2)} mm`);
+  ok('…and both fit on the label rather than being squeezed to it', !rules.overflows);
 
   const qr = await page.evaluate(() => {
     const img = document.querySelector('.badge-qr img');
