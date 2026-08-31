@@ -1912,9 +1912,20 @@
 
   /* --------------------------------------------------------------- badges */
 
-  // Common label stock, so nobody has to measure their own roll.
+  /*
+   * Common label stock, so nobody has to measure their own roll. Listed by the
+   * only thing the badge layout actually cares about — millimetres. Which roll
+   * is loaded is inventory, and lives on the printer record.
+   *
+   * DK-2251 is first because it is the usual choice for a visitor badge: 62 mm
+   * wide and continuous, so the length is yours rather than the roll's. It is
+   * the same page size as the die-cut DK-11202 at a 100 mm cut, which is why
+   * they share an entry — offering two identical sizes would be a choice with
+   * no consequence.
+   */
   const LABEL_SIZES = [
-    [62, 100, 'Brother DK-11202 — 62 × 100 mm'],
+    [62, 100, 'Brother 62 mm roll — DK-2251 continuous, or DK-11202 die-cut'],
+    [62, 150, 'Brother DK-2251 — 62 mm continuous, long badge'],
     [62, 29, 'Brother DK-11209 — 62 × 29 mm'],
     [62, 60, 'Brother DK-11221 — 62 × 60 mm'],
     [54, 101, 'Dymo 99014 — 54 × 101 mm'],
@@ -1961,6 +1972,9 @@
             ${txt('badge.label_width_mm', 'Width (mm)', 'number')}
             ${txt('badge.label_height_mm', 'Height (mm)', 'number')}
           </div>
+          <p class="muted">On a <b>continuous</b> roll like the DK-2251 the width is fixed by the roll — 62 mm — and
+            the height is whatever you set here, cut to length as each badge prints. On a <b>die-cut</b> roll both are
+            fixed by the label, so these must match it or every badge prints short or spills onto the next one.</p>
           <label class="field"><span>Which way it prints on the label</span>
             <select class="input" data-set="badge.orientation">
               <option value="portrait" ${b.orientation !== 'landscape' ? 'selected' : ''}>Vertical — reads down the label</option>
@@ -2823,7 +2837,7 @@
       <div class="form-grid">
         <label class="field"><span>Printer name *</span><input class="input" id="pr-name" placeholder="Gate badge printer" value="${esc(p.name || '')}"></label>
         <label class="field"><span>Model</span><input class="input" id="pr-model" placeholder="Brother QL-820NWB" value="${esc(p.model || '')}"></label>
-        <label class="field"><span>Label type</span><input class="input" id="pr-label" placeholder="DK-2205 62mm continuous" value="${esc(p.label_type || '')}"></label>
+        <label class="field"><span>Label type</span><input class="input" id="pr-label" placeholder="DK-2251 62mm continuous" value="${esc(p.label_type || '')}"></label>
         <label class="field"><span>Foreground colour</span>
           <select class="input" id="pr-color">${PRINTER_COLORS.map(([v, l]) =>
             `<option value="${v}" ${p.foreground_color === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>

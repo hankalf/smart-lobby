@@ -18,6 +18,36 @@
   .card { padding: 1.25rem; margin-bottom: 1.25rem; }
   video { width: 100%; max-width: 320px; border-radius: 12px; background: #0d1512; display: block; margin-top: .75rem; }
   code { background: var(--bg); padding: .1rem .35rem; border-radius: 5px; font-size: .85rem; word-break: break-all; }
+
+  /*
+   * A real badge, at the real label size. Deliberately the same shape and the
+   * same variables the kiosk uses, so a test badge that comes out right is
+   * evidence about the badge that comes out at a sign-in, and not about this
+   * page.
+   */
+  #badge-sheet { display: none; }
+  .badge-card {
+    width: var(--card-w, 62mm); height: var(--card-h, 100mm); padding: 4mm;
+    display: flex; flex-direction: column; align-items: center; text-align: center;
+    color: #000; overflow: hidden; box-sizing: border-box;
+    transform: var(--card-turn, none); transform-origin: top left;
+  }
+  .badge-type { font-size: calc(4.4mm * var(--badge-scale, 1)); font-weight: 800; letter-spacing: .18em; }
+  .badge-name { font-size: calc(5.6mm * var(--badge-scale, 1)); font-weight: 800; margin-top: 1mm; }
+  .badge-company { font-size: calc(3.6mm * var(--badge-scale, 1)); margin-top: 1mm; }
+  .badge-meta { font-size: calc(3.2mm * var(--badge-scale, 1)); margin-top: 1.5mm; line-height: 1.4; }
+  .badge-qr { width: 22mm; margin-top: auto; }
+  .badge-qr img { width: 100%; height: auto; }
+  .badge-foot { font-size: calc(2.6mm * var(--badge-scale, 1)); margin-top: 1.5mm; }
+
+  @media print {
+    @page { size: var(--badge-w, 62mm) var(--badge-h, 100mm); margin: 0; }
+    body > *:not(#badge-sheet) { display: none !important; }
+    #badge-sheet[data-printing] {
+      display: block !important; width: var(--badge-w, 62mm); height: var(--badge-h, 100mm); overflow: hidden;
+    }
+    html, body { background: #fff; height: auto; overflow: visible; margin: 0; padding: 0; }
+  }
 </style>
 </head>
 <body>
@@ -35,8 +65,40 @@
 </div>
 
 <div class="card">
-  <button class="btn subtle" id="test-print">Test printing</button>
-  <p class="why">Opens a print dialog. Cancel it — this only checks that one appears.</p>
+  <h2 style="margin-top:0;font-size:1rem">The badge printer</h2>
+  <p class="why">This prints a real badge at the label size this site is set up for — not this page. It is
+    the only test that proves the roll, the size and the printer all agree.</p>
+  <button class="btn" id="test-badge">Print a test badge</button>
+  <button class="btn subtle" id="test-print">Just open a print dialog</button>
+  <p class="why" id="print-note"></p>
+</div>
+
+<!--
+  The tablet on the printer's own Wi-Fi is the case this exists for. The
+  printer's network has no internet, the iPad is meant to keep internet on
+  cellular, and when that goes wrong nothing announces it — the kiosk simply
+  stops recording sign-ins while still looking fine. So: ask the server, from
+  this tablet, right now.
+-->
+<div class="card">
+  <h2 style="margin-top:0;font-size:1rem">Reaching the server</h2>
+  <p class="why">Run this again after joining the printer's Wi-Fi. If it worked before and fails after,
+    the tablet is trying to reach the internet over the printer instead of over cellular.</p>
+  <button class="btn" id="test-reach">Check the connection</button>
+  <p class="why" id="reach-note">Not checked yet.</p>
+</div>
+
+<div id="badge-sheet" hidden>
+  <div class="badge-card">
+    <div class="badge-top">
+      <div class="badge-type">TEST BADGE</div>
+    </div>
+    <div class="badge-name">Test Print</div>
+    <div class="badge-company">Device check</div>
+    <div class="badge-meta"></div>
+    <div class="badge-qr"></div>
+    <div class="badge-foot"></div>
+  </div>
 </div>
 
 <div class="card">
@@ -44,78 +106,6 @@
   <p class="why"><code id="ua"></code></p>
 </div>
 
-<script>
-(() => {
-  const results = document.getElementById('results');
-  const add = (state, what, why) => {
-    const mark = state === 'pass' ? '✓' : state === 'fail' ? '✕' : '!';
-    results.insertAdjacentHTML('beforeend',
-      `<div class="row"><div class="mark ${state}">${mark}</div>
-       <div><div class="what">${what}</div><div class="why">${why}</div></div></div>`);
-  };
-
-  document.getElementById('ua').textContent = navigator.userAgent;
-
-  // Secure context — everything camera-related depends on it.
-  if (window.isSecureContext) {
-    add('pass', 'Secure connection', 'The camera is allowed to work on this address.');
-  } else {
-    add('fail', 'Not a secure connection',
-      `This page is on ${location.protocol}//. Browsers only allow the camera over https:// or on localhost, ` +
-      'so the selfie step and the badge scanner cannot run here.');
-  }
-
-  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-    add('pass', 'Camera interface present', 'This browser exposes a camera to web pages. Press “Test the camera” to prove it works.');
-  } else {
-    add('fail', 'No camera interface',
-      'This browser gives web pages no way to reach the camera at all. In a kiosk app this usually means the app ' +
-      'does not support it — Safari with Guided Access does.');
-  }
-
-  add('BarcodeDetector' in window ? 'pass' : 'warn',
-    'BarcodeDetector' in window ? 'Built-in barcode reader' : 'No built-in barcode reader',
-    'BarcodeDetector' in window
-      ? 'QR codes are read by the browser itself.'
-      : 'Normal on iPad — Smart Lobby loads its own reader instead, which works the same.');
-
-  try {
-    localStorage.setItem('sl_check', '1'); localStorage.removeItem('sl_check');
-    add('pass', 'Local storage', 'The kiosk can remember which device it is.');
-  } catch {
-    add('fail', 'Local storage blocked', 'The kiosk cannot remember which device it is, so it will not report in.');
-  }
-
-  add(typeof window.print === 'function' ? 'pass' : 'warn', 'Printing available',
-    typeof window.print === 'function' ? 'Badges can be sent to a printer.' : 'This browser may not be able to print badges.');
-
-  add(window.navigator.standalone ? 'pass' : 'warn',
-    window.navigator.standalone ? 'Running full screen' : 'Running in a browser tab',
-    window.navigator.standalone ? 'Added to the home screen.' : 'Fine for testing. For a real kiosk, add it to the home screen.');
-
-  document.getElementById('test-camera').addEventListener('click', async () => {
-    const note = document.getElementById('camera-note');
-    note.textContent = 'Asking for the camera…';
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
-      const video = document.getElementById('cam');
-      video.srcObject = stream;
-      await video.play().catch(() => {});
-      setTimeout(() => {
-        note.textContent = video.videoWidth
-          ? `Camera works — ${video.videoWidth}×${video.videoHeight}. The selfie step and badge scanner will both run here.`
-          : 'The camera opened but sent no picture. This usually means the app is blocking playback.';
-        note.className = 'why';
-      }, 1200);
-    } catch (err) {
-      note.innerHTML = `<b>The camera was refused:</b> ${err.name} — ${err.message}.<br>` +
-        'If this is a kiosk app, it probably does not pass camera permission through to web pages. ' +
-        'Safari with Guided Access does, and so does adding the kiosk to the home screen.';
-    }
-  });
-
-  document.getElementById('test-print').addEventListener('click', () => window.print());
-})();
-</script>
+<script src="/check/check.js"></script>
 </body>
 </html>
