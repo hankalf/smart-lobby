@@ -151,6 +151,41 @@ npm start</code></pre>
   first build slow. Delete it if you would rather have fast builds and are happy uploading PDF
   exports of your decks instead.</p>
 
+<h2>The environment variables, in full</h2>
+
+<table>
+  <thead><tr><th>Variable</th><th>What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>DATA_DIR</code></td><td>Where the database and uploads live. Optional on Railway —
+      a mounted volume is found on its own.</td></tr>
+    <tr><td><code>PORT</code></td><td>What to listen on. Defaults to 8080.</td></tr>
+    <tr><td><code>NODE_ENV</code></td><td><code>production</code> on anything real.</td></tr>
+    <tr><td><code>PUBLIC_URL</code></td><td>The address to use in links it hands out.</td></tr>
+    <tr><td><code>SEED_EXAMPLES</code></td><td><code>false</code> skips the four example records at
+      first-run setup entirely.</td></tr>
+    <tr><td><code>CLEAR_EXAMPLES</code></td><td><code>true</code> deletes them at start-up, once.
+      Set it, redeploy, remove it.</td></tr>
+  </tbody>
+</table>
+
+<h3>Where a link’s address comes from</h3>
+
+<p>Board links, QR codes and the photo in a notification all need an absolute address, and the
+  server works one out in this order: <code>PUBLIC_URL</code>; then the origin of a real request it
+  has already served, remembered at start-up; then <code>RAILWAY_PUBLIC_DOMAIN</code>; then
+  <code>localhost</code>. The middle step is why a link no longer comes out as
+  <code>localhost:8080</code> on a hosted deployment with nothing configured — but set
+  <code>PUBLIC_URL</code> anyway, because a scheduled job firing on a container nobody has visited
+  yet has nothing else to go on.</p>
+
+<h3>The example records</h3>
+
+<p>A fresh install seeds four visitors, one per type, so the dashboard, board and reports are
+  legible on day one. They are flagged in the database rather than recognised by name, so clearing
+  them cannot touch a real visitor who happens to share one — a genuine John Doe keeps his history.
+  While they are present the dashboard offers <em>Clear them out</em>; the two variables above are
+  for installs where reaching the dashboard first is not what you want.</p>
+
 <!-- ==================================================================== 3 -->
 <h1 class="chapter"><span class="num">Chapter 3</span>First run</h1>
 
@@ -537,15 +572,95 @@ node scripts/reset-password.js you@example.com 'a new password'</code></pre>
     the device is named in the address, a home-screen icon always comes back as that device.</li>
   <li>Which cards it shows and in what order, independently of every other tablet.</li>
   <li>A location, a default camera, a printer, and whether it prints badges at all.</li>
-  <li>An operational mode, and an online status from a heartbeat every minute.</li>
+  <li>An operational mode, and an online status from a heartbeat every twenty seconds.</li>
 </ul>
 
 
 <figure>
   <img src="img/devices.png" alt="">
-  <figcaption><b>Devices.</b> Each tablet with its own address, its own cards in its own order, and an online status from a heartbeat every minute.</figcaption>
+  <figcaption><b>Devices.</b> Each tablet with its own address, its own cards in its own order, and an online status from its own heartbeat.</figcaption>
 </figure>
 <p>A tablet opened at plain <code>/kiosk/</code> works too, but shows every card.</p>
+
+<h2>Health, and how long it takes to hear about it</h2>
+
+<p>Three different clocks, which is worth writing down because they get confused with each other:</p>
+
+<table>
+  <thead><tr><th>What</th><th>How often</th></tr></thead>
+  <tbody>
+    <tr><td>A tablet checks in</td><td>Every 20 seconds</td></tr>
+    <tr><td>The Devices page calls it offline</td><td>After 5 minutes of silence</td></tr>
+    <tr><td>The watcher looks at them all</td><td>Every 2 minutes</td></tr>
+    <tr><td>A chat card goes out</td><td>Once it has been quiet for the notify window — 15 minutes by default</td></tr>
+  </tbody>
+</table>
+
+<p>So from a tablet losing power to a message in Teams is around seventeen minutes at the default
+  setting. The window is <em>Minutes quiet before saying a device is down</em> under
+  <span class="path">Settings → Notifications</span>, and it takes anything from 2 to 1440. Fifteen
+  rather than five is deliberate: site wifi drops for two or three minutes often enough that a
+  five-minute window would produce a channel people mute, which is worse than no channel.</p>
+
+<p>Each device is announced once, not repeatedly, and cleared when it checks in again — so a tablet
+  that has been off all week does not post every quarter of an hour. The card goes to the company
+  channel only; a device going down is not any one host's business.</p>
+
+<h2>The two QR codes</h2>
+
+<p><strong>QR</strong> on a device row shows both of its addresses as scannable codes: the tablet's
+  own kiosk address, for setting the tablet up without typing it, and — when phone check-in is on
+  for that device — the address to print on a sign for visitors.</p>
+
+<figure class="narrow">
+  <img src="img/devices-qr.png" alt="">
+  <figcaption><b>A device’s links.</b> The screen names the radius in force, or says plainly that no
+    site location is set.</figcaption>
+</figure>
+
+<p><strong>Reissue the phone link</strong> mints a new code for that device and invalidates the old
+  one immediately. Every sign already printed stops working, which is exactly what you want when a
+  sign has gone up somewhere it should not have, and exactly what you do not want by accident.</p>
+
+<h2>Phone check-in</h2>
+
+<p>A visitor scans the printed code, and the same kiosk app opens on their phone at
+  <code>/go/&lt;code&gt;</code> — same fields, same documents, same induction, same visit record. Two
+  switches gate it, and both must be on:</p>
+
+<ul>
+  <li><span class="path">Settings → Kiosk sign-in flow</span> → <em>Allow visitors to check in from
+    their own phone</em>, for the site.</li>
+  <li><span class="path">Devices → Edit</span> → phone check-in, per device. Switching it off closes
+    that device's link at once.</li>
+</ul>
+
+<figure>
+  <img src="img/set-phone-checkin.png" alt="">
+  <figcaption><b>Where the site is.</b> <em>Use where I am now</em> fills the coordinates in from the
+    browser you are pressing it in — so press it standing on the site.</figcaption>
+</figure>
+
+<p>The distance check is a haversine against the site coordinates. The phone's own reported accuracy
+  is added to the allowance, capped at 500 m: a visitor in the yard whose phone says "somewhere
+  within 200 metres of here" is inside the fence as far as anyone can tell, and refusing them would
+  be the system being confidently wrong. The radius has a floor of 25 m, because a radius of ten
+  metres refuses everybody.</p>
+
+<p>A phone that reports no position at all is treated as its own case rather than as being infinitely
+  far away — the setting <em>Refuse a phone that will not say where it is</em> decides it. Turned
+  off, they are let through and the visit is recorded as usual.</p>
+
+<div class="warn">
+  <span class="label">Be straight about this with whoever asks</span>
+  <p>A browser reports whatever coordinates it chooses to. A phone can be told to lie, and a laptop
+    with developer tools open can be told to lie in about fifteen seconds. The fence stops the car
+    park and the Monday-morning lie-in. It is a deterrent, not an access control, and describing it
+    as one to a client or an auditor would be a mistake.</p>
+  <p>The site's own coordinates are never published: <code>/api/kiosk/config</code>, which is
+    unauthenticated by necessity, says only whether a fence exists, its radius, and whether a
+    location is required.</p>
+</div>
 
 <!-- =================================================================== 12 -->
 <h1 class="chapter"><span class="num">Chapter 12</span>Notifications</h1>
@@ -582,6 +697,10 @@ node scripts/reset-password.js you@example.com 'a new password'</code></pre>
 <p>Arrival, sign-out, induction completed and delivery are separate toggles. SMS has its own arrival
   and delivery toggles, so texts can be kept for arrivals only.</p>
 
+<p>Separately from any of those, <em>Notify when a device goes offline</em> posts to the company
+  channel when a tablet stops checking in, and again when it returns. It is not a visitor event and
+  never reaches a host's own webhook. Off by default, and the timing is in Chapter 11.</p>
+
 <h2>What has been sent</h2>
 
 <p><span class="path">Settings → Notifications → What has been sent</span> lists the last 50 attempts
@@ -616,13 +735,20 @@ node scripts/reset-password.js you@example.com 'a new password'</code></pre>
   <li>The title and sub-heading, written as templates with the visitor's name, company, host and time
     filled in.</li>
   <li>Which fields appear, and in what order.</li>
-  <li>Whether the photo shows, its size, its shape, and whether it sits beside the heading or above.</li>
+  <li>Whether the photo shows, its size, its shape, and whether it sits beside the heading or above.
+    Small, medium and large are 84, 140 and 200 pixels — big enough at the top end to recognise
+    somebody from, which is the only reason a photograph is on the card at all.</li>
   <li>The header colour, whether details read as facts or lines, and the footer.</li>
   <li>Whether the host is tagged, and the wording of the tag.</li>
 </ul>
 
 <p>A live preview shows the card as Teams will render it, so nothing has to be tested by making
   somebody sign in.</p>
+
+<p>The photo on a card is tappable: pressing it opens that visitor's record. A card in a phone's
+  Teams app is the one place a photograph is genuinely too small to be useful, and the fix is the
+  same one everywhere else in the system — the picture opens the record it belongs to. The same tap
+  works on the on-site board and on the visit record itself.</p>
 
 
 <figure>
@@ -708,6 +834,25 @@ Home Assistant    POST  http://192.168.1.10:8123/api/services/lock/unlock
 
 <p>Close a finished job by switching <strong>Active</strong> off: it disappears from the kiosk but
   keeps its history. A project that has ever been signed in against cannot be deleted, only closed.</p>
+
+<h3>Which job a sign-in starts on</h3>
+
+<p>A sign-in can arrive with a job already selected, from two sources, most specific first:</p>
+
+<ol>
+  <li>The firm's usual job, set as a default project on the company record. This is the one that
+    earns its keep, because who somebody works for is what predicts which job they are on.</li>
+  <li>A fallback per visitor type, at the foot of the Projects page — for a site running one job at
+    a time.</li>
+</ol>
+
+<p>A closed project is never suggested, even when it is still set against a firm, so closing a job is
+  enough on its own. And it is only ever a default: the field is filled in and selected, the visitor
+  can change it, and what they choose is what is recorded. A default that could not be overridden
+  would be worse than none, because the day it is wrong is the day somebody is on the other job and
+  nobody notices for a month.</p>
+
+<p>Left as <em>ask them</em>, nothing is suggested and the behaviour is exactly as it was.</p>
 
 <h2>Companies</h2>
 
@@ -921,7 +1066,10 @@ npm test -- --keep          # leave the test database behind to poke at</code></
 <p>Among the suites are an <strong>attack</strong> suite that tries the things an attacker would and
   fails if any of them work, and a <strong>day</strong> suite that runs forty people through one
   kiosk in a single day and checks that the dashboard, roll call, on-site board, reports, paged list,
-  CSV export and printed page all agree about them.</p>
+  CSV export and printed page all agree about them. A <strong>selfcheckin</strong> suite covers
+  phone check-in and the fence, a <strong>recover</strong> suite drives a browser through the two
+  ways out of a sign-in that has gone wrong, and <strong>projectdefault</strong> covers which job a
+  sign-in lands on before anybody picks one.</p>
 
 <!-- =================================================================== 20 -->
 <h1 class="chapter"><span class="num">Chapter 20</span>Troubleshooting</h1>

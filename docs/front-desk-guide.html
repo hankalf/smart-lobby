@@ -245,6 +245,41 @@
   <img src="img/kiosk-details.png" alt="">
   <figcaption><b>The details screen.</b> Which fields are asked for, and whether each is required, is set per visitor type. The note at the foot is the site’s own privacy wording.</figcaption>
 </figure>
+<h2>Phone numbers</h2>
+
+<p>A number takes its shape as it is typed — <code>(415) 268-0155</code> — so what is on screen is
+  plainly a phone number or plainly not one yet. If it is not a possible number, the kiosk says so
+  on the screen that asked, before it will move on.</p>
+
+<figure class="tablet">
+  <img src="img/kiosk-refusal.png" alt="">
+  <figcaption><b>Caught where it is typed.</b> A half-finished number is refused on the screen that
+    asked for it, not five screens later.</figcaption>
+</figure>
+
+<p>This matters more than it sounds. It used to be possible to type half a number, walk the whole
+  flow — details, photo, documents, the induction — and be refused at the very end with no way
+  forward and no way back. If a visitor ever does end up refused at the end, they are now put back on
+  the details form with the reason on it and the cursor in the field that caused it.</p>
+
+<h2>Starting over</h2>
+
+<p>Every screen in a sign-in carries <strong>Back</strong> and <strong>Start over</strong>, including
+  the induction slideshow. Start over asks first, then returns to the welcome screen with nothing of
+  theirs left behind. It is there for the person who realises at slide four that they put the wrong
+  name in — before, that meant watching to the end or walking away.</p>
+
+<h2>Checking in from a phone</h2>
+
+<p>Your site may have a QR code on a sign where visitors arrive. Scanning it opens the same sign-in
+  on the visitor's own phone: same questions, same documents, same induction, same record at your
+  end. It exists for the queue behind one tablet, and for the morning the tablet is dead.</p>
+
+<p>Two things to know when somebody asks you about it. Their phone will ask permission to share its
+  location, and depending on how your site is set up, refusing may mean they have to use the tablet
+  instead. And a check-in from too far away is refused — so a visitor sitting in a café down the road
+  cannot sign themselves in before they arrive, which is the point.</p>
+
 <h2>The photo</h2>
 
 <p>Over a secure address the camera preview appears in the page. Over a plain network address the
@@ -506,6 +541,25 @@
 </figure>
 <p>It can also show a camera view of the gate beside the list, if one is set up.</p>
 
+<h2>It shows the day, not the moment</h2>
+
+<p>Under the people who are here is <strong>Signed out today</strong>: everybody who has been on site
+  today and has since left, dimmed, with the time they went. They stay there until the day turns over
+  on the site's own clock, and are gone when you come in the next morning.</p>
+
+<figure class="dark">
+  <img src="img/board-left.png" alt="">
+  <figcaption><b>Signed out today.</b> Dimmed, with the time they left. Gone when the new day
+    starts.</figcaption>
+</figure>
+
+<p>This is the list that answers "has the electrician been in yet?" without going to the dashboard,
+  and "who was here this morning" at four in the afternoon. During a roll call it is hidden — the
+  only question then is who is still on site.</p>
+
+<p>Tap anybody's photograph, on the board or on a visit record, to see it full size. Useful at a gate
+  when you are matching a face to a name.</p>
+
 <p>The board is on the sidebar of your dashboard as well, so you can open it from where you are.</p>
 
 <div class="note">
@@ -593,6 +647,22 @@
 <p>Sign them out from the dashboard. If it keeps happening with the same people, the sign-out step is
   not sticking — the badge scanner on the kiosk, or a sign-out card on the home screen, usually fixes
   it. Worth raising rather than correcting by hand every evening.</p>
+
+<h2>A visitor’s phone number is refused</h2>
+
+<p>The kiosk will not take a number that cannot be a real one. Usually it is genuinely incomplete —
+  the shape shown as they type makes that obvious. An overseas number that keeps being refused is
+  worth raising with your administrator rather than working around; meanwhile, sign them in from the
+  desk.</p>
+
+<h2>Somebody says the QR sign-in would not let them in</h2>
+
+<p>Read what it told them; it says which of three things happened. <em>Too far from the site</em> —
+  their phone reported somewhere outside the boundary, which also happens to an honest phone indoors
+  with a poor fix. <em>It needs your location</em> — they declined the permission. Either way, the
+  tablet at the entrance always works: send them to it rather than debugging a phone at the gate.
+  A message saying the sign is closed means the code has been withdrawn or reissued, which is one
+  for your administrator.</p>
 
 <h2>Two records for the same firm</h2>
 

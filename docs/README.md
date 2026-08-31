@@ -59,10 +59,20 @@ To retake them:
 
 ```bash
 DATA_DIR=/tmp/demo PORT=3512 node server/index.js &
-BASE_URL=http://localhost:3512 node docs/seed-demo.js    # builds the site
-BASE_URL=http://localhost:3512 node docs/shoot.js        # takes the shots
-npm run docs                                             # rebuilds the PDFs
+DATA_DIR=/tmp/demo BASE_URL=http://localhost:3512 node docs/seed-demo.js   # builds the site
+BASE_URL=http://localhost:3512 node docs/shoot.js                          # takes the shots
+npm run docs                                                               # rebuilds the PDFs
 ```
+
+`seed-demo.js` needs `DATA_DIR` as well as `BASE_URL`, and refuses to run without it. It places
+arrivals across the day by writing timestamps the API has no business accepting, so it opens the
+database directly — and it has to be the same one the server is serving. Getting that wrong used to
+be silent: every UPDATE landed in a database nobody was looking at, and the only symptom was a
+dashboard where everybody had arrived in the same minute.
+
+Check the port is actually free before starting the server. A server left running from an earlier
+attempt keeps the port and its own (possibly deleted) database, the new one exits, and everything
+afterwards quietly talks to the wrong site.
 
 Three of them — the first-run screen, the sign-in screen and the day-one dashboard — can only
 be taken against a server nobody has set up yet, so they are a second pass against an empty
@@ -81,6 +91,10 @@ retake just that one: `node docs/shoot.js badges`.
 the shots are taken whenever they are taken, and a wall clock reading half past
 eleven at night above a list of people who arrived at seven in the morning is the
 first thing a reader would notice.
+
+For the same reason the day is placed relative to the site's current time rather
+than at fixed hours — the arrivals keep their spacing but end shortly before now,
+so nobody on the board has turned up in the future.
 
 The visitor photos are initials on a soft field rather than faces. A stock
 photograph of a person in a visitor record teaches exactly the wrong lesson about

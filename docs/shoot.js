@@ -175,11 +175,48 @@ shot('printable-report', 'The same figures on the letterhead', async (page, ctx)
   return { clip: await trimmed(page, '.sheet') };
 }, { width: 1100, height: 900, scale: 2 });
 
+shot('devices-qr', 'The two codes a device carries', async (page) => {
+  await goAdmin(page, 'devices');
+  await page.waitForSelector('[data-dvqr]');
+  await page.locator('[data-dvqr]').first().click();
+  await page.waitForSelector('.modal-bg .qr-img');
+  // Both codes are fetched from the server as images; a shot taken before they
+  // arrive is two empty boxes where the point of the figure should be.
+  await page.waitForFunction(() => [...document.querySelectorAll('.modal-bg .qr-img')]
+    .every((img) => img.complete && img.naturalWidth > 0), null, { timeout: 8000 });
+  await page.waitForTimeout(400);
+  return page.locator('.modal-bg .modal').first();
+}, NARROW);
+
+shot('set-phone-checkin', 'Phone check-in, and how far out still counts as here', async (page) => {
+  await openSection(page, 'flow');
+  const box = page.locator('#flow-phone').first();
+  if (await box.count()) await box.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(500);
+  return { clip: await trimmed(page, '#flow-phone') };
+});
+
 shot('board', 'The on-site board, for a screen in the office', async (page, ctx) => {
   await page.goto(`${BASE}${ctx.boardPath}`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(1400);
   return null;
 }, BOARD);
+
+/*
+ * The day's departures, which sit below the fold on a wall screen — and are the
+ * whole point of the board listing a day rather than a moment, so they are
+ * worth a figure of their own rather than a mention.
+ */
+shot('board-left', 'Who has already gone, still listed until the day turns over',
+  async (page, ctx) => {
+    await page.goto(`${BASE}${ctx.boardPath}`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(1400);
+    await page.waitForSelector('#left-wrap:not([hidden])');
+    await page.waitForTimeout(400);
+    return { clip: await trimmed(page, '#left-wrap') };
+    // A taller window than a real wall screen, because the board does not
+    // scroll — the departures have to be on screen to be photographed at all.
+  }, { width: 1600, height: 1500, scale: 1.5 });
 
 /* ----------------------------------------------------------------- kiosk */
 
@@ -209,6 +246,31 @@ shot('kiosk-details', 'The details a visitor is asked for', async (page) => {
   await page.waitForTimeout(400);
   return { clip: await trimmed(page, '.screen:not([hidden])') };
 }, KIOSK);
+
+shot('kiosk-refusal', 'A half-typed number, caught where it is typed', async (page) => {
+  await page.goto(`${BASE}/kiosk/`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(1600);
+  await page.locator('.tile[data-action="signin"]').first().click();
+  await page.waitForTimeout(900);
+  const picker = page.locator('.tile[data-type="visitor"]').first();
+  if (await picker.count() && await picker.isVisible()) { await picker.click(); await page.waitForTimeout(900); }
+  await page.fill('#identify-value', '415 268');
+  await page.click('#identify-continue');
+  await page.waitForTimeout(700);
+  return { clip: await trimmed(page, '.screen:not([hidden])') };
+}, KIOSK);
+
+/*
+ * A visitor's own phone, at the size one actually is. Taken through the
+ * device's check-in address rather than the kiosk one, because that is the
+ * screen the QR code opens — right down to the notice about location.
+ */
+shot('phone-checkin', 'What the QR code opens on a visitor’s phone', async (page, ctx) => {
+  if (!ctx.selfPath) throw new Error('no device has phone check-in switched on');
+  await page.goto(`${BASE}${ctx.selfPath}`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(1800);
+  return null;
+}, { width: 414, height: 860, scale: 3 });
 
 shot('kiosk-signout', 'Signing out, scanner first', async (page) => {
   await page.goto(`${BASE}/kiosk/`, { waitUntil: 'networkidle' });
@@ -316,6 +378,16 @@ async function openSection(page, section) {
     const cookie = (jar.headers.get('set-cookie') || '').split(';')[0];
     const link = await fetch(`${BASE}/api/admin/board/link`, { headers: { cookie } }).then((r) => r.json());
     if (link.url) ctx.boardPath = new URL(link.url).pathname;
+
+    // The phone check-in address of whichever device has it switched on.
+    const devices = await fetch(`${BASE}/api/admin/devices`, { headers: { cookie } })
+      .then((r) => r.json()).catch(() => []);
+    for (const d of (Array.isArray(devices) ? devices : [])) {
+      if (!d.self_checkin) continue;
+      const links = await fetch(`${BASE}/api/admin/devices/${d.id}/links`, { headers: { cookie } })
+        .then((r) => r.json()).catch(() => null);
+      if (links && links.self) { ctx.selfPath = new URL(links.self).pathname; break; }
+    }
     // The site's own day, not the container's.
     ctx.today = await fetch(`${BASE}/api/admin/expected`, { headers: { cookie } })
       .then((r) => r.json()).then((j) => j.day).catch(() => ctx.today);

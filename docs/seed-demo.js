@@ -65,6 +65,26 @@ const PROJECTS = [
   { name: 'Office fit-out', code: 'OF3' }
 ];
 
+const LOCATIONS = ['Main gate', 'Site office', 'Yard entrance'];
+
+/*
+ * The tablets. `self` marks the one with phone check-in switched on, which is
+ * the gate — a queue behind one tablet is exactly the problem the QR sign is
+ * there to solve, and the guides photograph its links.
+ */
+const DEVICES = [
+  { name: 'Main gate iPad', loc: 0, self: true },
+  { name: 'Reception desk', loc: 1 },
+  { name: 'Yard entrance', loc: 2 }
+];
+
+/*
+ * Where the demo site is: a stretch of the Oakland waterfront, invented like
+ * everything else here. It is set so the screenshots of the geofence are of a
+ * site that has actually been placed, rather than of two empty boxes.
+ */
+const SITE = { lat: 37.7955, lng: -122.2712, radius_m: 300 };
+
 /*
  * The crew, the callers and the deliveries. `in` and `out` are hours on the
  * site's clock; `out: null` means they are still here when the screenshot is
@@ -114,6 +134,22 @@ const DELIVERIES = [
   { courier: 'Rafael Costa', company: 'Longhaul Logistics', host: 2, parcels: 4, ref: 'LH-77301', at: 13 }
 ];
 
+/*
+ * Placing arrivals across the day means writing timestamps the API has no
+ * business accepting, so this script opens the database directly — which only
+ * works if it opens the *same* one the server is serving.
+ *
+ * Insisted on rather than defaulted, because getting it wrong is silent: with
+ * DATA_DIR unset this opened ./data/smartlobby.db instead, every UPDATE landed
+ * in a database nobody was looking at, and the only symptom was a dashboard of
+ * arrivals all stamped the minute the seed happened to run.
+ */
+if (!process.env.DATA_DIR) {
+  console.error('Set DATA_DIR to the same directory the demo server is using, e.g.\n'
+    + '  DATA_DIR=/tmp/demo BASE_URL=http://localhost:3512 node docs/seed-demo.js');
+  process.exit(1);
+}
+
 (async () => {
   const setup = await req('POST', '/api/admin/setup', {
     email: 'hankalfr@gmail.com', password: 'Testing123!', name: 'Hank Alfred',
@@ -128,9 +164,32 @@ const DELIVERIES = [
    * own hours, and asking what the day is while the site is still nominally in
    * UTC would place every arrival eight hours out.
    */
+  /*
+   * The hours below are a shape, not a clock: a crew in early, callers through
+   * the morning, drivers in and out. Written straight onto the site's day they
+   * produced a board headed 11:47 with somebody who had arrived at 14:13 —
+   * three people on it who had not turned up yet, which is the first thing a
+   * reader would notice and the last thing they should have to explain away.
+   *
+   * So the whole day is slid to end shortly before the site's own current
+   * time, keeping the spacing between arrivals. Where there is not enough of
+   * the day left to hold it — a shot taken at two in the morning — it is
+   * squeezed to fit rather than allowed to run back into yesterday, which
+   * would empty every view that asks about today.
+   */
+  const HOURS = [...PEOPLE.flatMap((p) => [p.in, p.out]), ...DELIVERIES.map((d) => d.at)]
+    .filter((h) => h !== null && h !== undefined);
+  const FIRST = Math.min(...HOURS);
+  const LAST = Math.max(...HOURS);
+  const dayStart = Date.parse(localtime.dayRange(localtime.today()).start);
+  // Far enough back that the per-person jitter below cannot push anybody past now.
+  const endAt = Math.max(0.5, (Date.now() - dayStart) / 3600e3 - 1.5);
+  const startAt = Math.max(0.25, endAt - (LAST - FIRST));
+  const place = (hour) => (LAST === FIRST ? endAt
+    : startAt + ((hour - FIRST) / (LAST - FIRST)) * (endAt - startAt));
+
   const at = (hour, minute = 0) =>
-    new Date(Date.parse(localtime.dayRange(localtime.today()).start)
-      + hour * 3600e3 + minute * 60e3).toISOString();
+    new Date(dayStart + place(hour) * 3600e3 + minute * 60e3).toISOString();
   const dayOff = (n) => new Date(Date.parse(`${localtime.today()}T12:00:00Z`) + n * 864e5)
     .toISOString().slice(0, 10);
 
@@ -163,6 +222,28 @@ const DELIVERIES = [
 
   const projects = [];
   for (const p of PROJECTS) projects.push((await req('POST', '/api/admin/projects', { ...p, active: 1 })).data);
+
+  /* ---------------------------------------------------- tablets and the gate */
+
+  const locations = [];
+  for (const name of LOCATIONS) locations.push((await req('POST', '/api/admin/locations', { name })).data);
+
+  const devices = [];
+  for (const d of DEVICES) {
+    const made = (await req('POST', '/api/admin/devices',
+      { name: d.name, location_id: locations[d.loc].id })).data;
+    if (d.self) await req('PATCH', `/api/admin/devices/${made.id}`, { self_checkin: 1 });
+    // A tablet that has never checked in reads as broken in a screenshot, and
+    // the Devices page is largely about which ones are still talking to you.
+    db.run('UPDATE devices SET last_seen_at = ? WHERE id = ?', new Date().toISOString(), made.id);
+    devices.push(made);
+  }
+
+  await req('PUT', '/api/admin/settings', {
+    kiosk: { self_checkin_enabled: true },
+    geofence: { enabled: true, lat: SITE.lat, lng: SITE.lng, radius_m: SITE.radius_m, require_location: true },
+    notify: { on_device_offline: true }
+  });
 
   /* -------------------------------------------------------- the day so far */
 
@@ -236,6 +317,20 @@ const DELIVERIES = [
     ['Kestrel Groundworks', 'Method statement', dayOff(-4)],
     ['Marlow Scaffolding', 'Public liability insurance', dayOff(240)]
   ];
+  /*
+   * The two ways a job gets chosen for somebody before they pick one: two firms
+   * that are on the same job every morning, and a fallback for everybody else.
+   * Shown in the guides as the pair, because the interesting part is which one
+   * wins.
+   */
+  for (const [firm, project] of [['Vega Electrical', 0], ['Kestrel Groundworks', 1]]) {
+    const company = byName(firm);
+    if (company) await req('PATCH', `/api/admin/companies/${company.id}`,
+      { default_project_id: projects[project].id });
+  }
+  await req('PUT', '/api/admin/settings',
+    { projects: { default_by_type: { contractor: projects[0].id, visitor: null, driver: null, interview: null } } });
+
   for (const [firm, kind, expires] of certs) {
     const company = byName(firm);
     if (!company) continue;

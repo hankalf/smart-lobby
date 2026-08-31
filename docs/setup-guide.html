@@ -111,6 +111,23 @@
   <li>Deploy, and open the address. You should see the screen in Chapter 5.</li>
 </ol>
 
+<p><code>PUBLIC_URL</code> is worth setting, but it is no longer the only thing standing between you
+  and a broken link. Every address the system hands out — the board link you put on a wall screen,
+  the photo in a Teams card, the QR code for a tablet — is built from <code>PUBLIC_URL</code> if it
+  is set, then from the address a real request actually arrived on, then from Railway's own domain.
+  Only a server nobody has ever visited falls back to <code>localhost</code>.</p>
+
+<div class="note">
+  <span class="label">Starting with no sample data</span>
+  <p>A new install seeds four example visitors so the dashboard, board and reports have something in
+    them on day one. If you are standing this up for a site that goes live on Monday and would
+    rather never see them, set <code>SEED_EXAMPLES=false</code> before the first deploy and they are
+    never created. If they are already there, the dashboard offers a <b>Clear them out</b> button —
+    that is the easy way, and it is covered again in Chapter 22. The variable
+    <code>CLEAR_EXAMPLES=true</code> does the same at start-up for an install you cannot reach the
+    dashboard of; set it, redeploy, then remove it. None of the three ever touches a real record.</p>
+</div>
+
 <div class="warn">
   <span class="label">The volume is the whole thing</span>
   <p>Without it, every visitor record, photo and slide is erased on your next deploy. The app will
@@ -302,6 +319,33 @@
 
 <p>Close a finished job by switching <strong>Active</strong> off: it disappears from the kiosk but
   keeps its history. A project that has ever been signed in against cannot be deleted, only closed.</p>
+
+<h2>Which job a sign-in starts on</h2>
+
+<p>A crew from one firm are on the same job every morning for four months. Made to choose it off a
+  dropdown each time, they pick the top one, or the one they were on last month, or whichever their
+  thumb lands on — and the hours report you are billing against quietly becomes fiction. So the
+  kiosk can arrive with a job already chosen. Two places to set it, most specific first:</p>
+
+<dl>
+  <dt>The firm’s usual job</dt>
+  <dd><strong>Companies → Edit</strong>, and set a default project on the firm. This is the one that
+    earns its keep, because who somebody works for is what actually predicts which job they are
+    on.</dd>
+  <dt>A fallback per visitor type</dt>
+  <dd>At the foot of the <strong>Projects</strong> page. For a site running one job at a time, this
+    alone is enough.</dd>
+</dl>
+
+<p>The firm’s job wins where both apply. A closed job is never offered, whatever is set against the
+  firm — so closing a project is enough, and you do not have to go round unpicking it.</p>
+
+<div class="note">
+  <span class="label">It is a default, never a decision</span>
+  <p>The field arrives filled in and selected, and the visitor can change it. What they choose is
+    what is recorded. A default that could not be overridden would be worse than none, because the
+    day it is wrong is the day somebody is on the other job and nobody notices for a month.</p>
+</div>
 
 <!-- =================================================================== 10 -->
 <h1 class="chapter"><span class="num">Chapter 10</span>Step four — the cards on the kiosk</h1>
@@ -539,7 +583,22 @@
 </figure>
 
 <p>You do not have to touch any of this to get working notifications; the defaults are sensible. Come
-  back to it once arrivals are flowing.</p>
+  back to it once arrivals are flowing. One thing worth knowing is there: the photo on the card can
+  be small, medium or large, and it is tappable — whoever the message reaches can press it to open
+  the visit record and see the person properly, which is the whole point of a photograph on a card
+  about somebody arriving.</p>
+
+<h2>When a tablet stops answering</h2>
+
+<p>Tick <strong>Notify when a device goes offline</strong> and the same company channel gets a card
+  when a tablet stops checking in, and another when it comes back. It is off by default because a
+  site with no chat set up would have nowhere to send it.</p>
+
+<p>The timing, since it is the question everybody asks: each tablet checks in every twenty seconds,
+  the Devices page shows it as offline after five minutes, and the chat message goes out once it has
+  been quiet for fifteen — a window you can change. Fifteen rather than five is deliberate: site
+  wifi drops for two or three minutes fairly often, and a channel that cries wolf gets muted, which
+  is worse than no channel at all.</p>
 
 <div class="note">
   <span class="label">Test messages cannot reach a real person</span>
@@ -564,11 +623,84 @@
   <li><strong>Its own cards, in its own order</strong>, independently of every other tablet. The gate
     tablet can show Contractor and Driver; the reception one can show Visitor and Delivery.</li>
   <li>A location, a printer, a default camera, and whether it prints badges at all.</li>
-  <li>An online status, from a heartbeat every minute — so you can see from your desk that the gate
-    tablet has been off since Thursday.</li>
+  <li>An online status, from a heartbeat every twenty seconds — so you can see from your desk that
+    the gate tablet has been off since Thursday. Chapter 16 covers being told about it rather than
+    having to look.</li>
 </ul>
 
 <p>Press <strong>Copy link</strong> and send it to yourself; you will need it in a moment.</p>
+
+<h2>The two codes</h2>
+
+<p><strong>QR</strong> on a device shows both of its addresses as codes to point a camera at. They
+  are not interchangeable, and it is worth being clear which is which before you print anything.</p>
+
+<figure class="narrow">
+  <img src="img/devices-qr.png" alt="">
+  <figcaption><b>A device’s links.</b> The top one is for the tablet, scanned once during setup. The
+    bottom one goes on a sign where visitors can see it.</figcaption>
+</figure>
+
+<dl>
+  <dt>This tablet</dt>
+  <dd>Scan it with the tablet you are setting up, then add it to the home screen. It saves typing a
+    long address into an on-screen keyboard, and nothing else uses it.</dd>
+  <dt>Check in from a phone</dt>
+  <dd>Print it and put it where visitors arrive. Scanning it opens the sign-in on the visitor’s own
+    phone — the same questions, the same documents, the same induction. It is the answer to a queue
+    behind one tablet, and to the tablet being dead on a Monday morning.</dd>
+</dl>
+
+<h2>Checking in from a phone</h2>
+
+<p>Phone check-in is off until you switch it on in two places, which is deliberate: it is the one
+  route into your site that is not a device you control.</p>
+
+<ol class="steps">
+  <li><strong>Settings → Kiosk sign-in flow</strong>, tick <em>Allow visitors to check in from their
+    own phone</em>. That is the site-wide switch.</li>
+  <li><strong>Devices → Edit</strong> on the tablet whose sign the code will be on, and tick phone
+    check-in for that device. Each device has its own code, so you can put one at the gate and not
+    at reception.</li>
+</ol>
+
+<figure>
+  <img src="img/set-phone-checkin.png" alt="">
+  <figcaption><b>Phone check-in, and the fence around it.</b> Press <em>Use where I am now</em>
+    standing on the site and the coordinates fill themselves in.</figcaption>
+</figure>
+
+<p>Then set where the site is, so a phone check-in from somewhere else is refused. Stand on the site,
+  open the settings page on your phone, and press <strong>Use where I am now</strong>. Leave the
+  radius generous — 250 to 300 metres is sensible — because a phone’s idea of where it is indoors,
+  in a steel-framed building or among stacked containers, is routinely a hundred metres out.</p>
+
+<figure class="narrow">
+  <img src="img/phone-checkin.png" alt="">
+  <figcaption><b>What the visitor gets.</b> The same sign-in as the tablet, on the phone in their
+    hand.</figcaption>
+</figure>
+
+<div class="warn">
+  <span class="label">What the fence does, and what it does not</span>
+  <p>A browser reports whatever coordinates it chooses to report. A phone can be told to lie, and a
+    laptop with developer tools open can be told to lie in about fifteen seconds. This stops
+    somebody signing in from the car park on the way past, or from bed on a Monday morning — the two
+    things that actually happen. It is not an access control, and nobody should be told that it is.
+    A tablet bolted to the gate answers the question by being there; that is why the fence applies
+    to phone check-ins only.</p>
+</div>
+
+<p>There is a second decision underneath it: <em>Refuse a phone that will not say where it is</em>.
+  With it on, a visitor who taps Deny cannot check in from their phone and has to use the tablet.
+  With it off, they are let through and the visit is recorded as usual. Off is often the right trade
+  — a real visitor with a stubborn phone is a far more common problem than somebody trying it on —
+  but it is your call, and the setting exists so that it is a decision rather than an accident.</p>
+
+<p>If you ever need to invalidate a printed sign — it went up in the wrong place, or you would
+  rather it stopped working — <strong>Reissue the phone link</strong> on the QR screen mints a new
+  code and stops the old one at once. Every sign already printed goes dead, so reprint before you
+  press it.</p>
 
 <!-- =================================================================== 18 -->
 <h1 class="chapter"><span class="num">Chapter 18</span>Step twelve — setting up the tablet itself</h1>
@@ -712,9 +844,10 @@
 <h1 class="chapter"><span class="num">Chapter 22</span>Going live</h1>
 
 <ol class="steps">
-  <li><strong>Clear the examples.</strong> The four sample records a fresh install ships with are
-    cleared from the dashboard in one press. They are flagged in the database rather than matched by
-    name, so clearing them can never touch a real visitor who happens to share one.</li>
+  <li><strong>Clear the examples.</strong> While the four sample records a fresh install ships with
+    are still on file, the dashboard carries a <em>Clear them out</em> button. One press. They are
+    flagged in the database rather than matched by name, so clearing them can never touch a real
+    visitor who happens to share one — including a real John Doe.</li>
   <li><strong>Book in tomorrow’s visitors</strong> under <span class="path">Expected today</span>, so
     the first morning demonstrates the thing at its best: somebody walks up, types their number, and
     the form is already filled in.</li>
@@ -795,6 +928,23 @@
 <h3>Badges print blank or half off the label</h3>
 <p>Margins None, headers and footers off, background graphics on. Then adjust the label size and text
   scale and print a test.</p>
+
+<h3>A link points at <code>localhost</code></h3>
+<p>Something asked for an address before the server had ever been visited — a notification sent by a
+  scheduled job on a freshly started container, most likely. Set <code>PUBLIC_URL</code> to the
+  address you actually use and it stops guessing. Re-copy the board link afterwards, and reprint any
+  QR sign made from the wrong address.</p>
+
+<h3>A visitor says the QR sign-in refused them</h3>
+<p>Three different refusals, and they say which: <em>too far from the site</em> means the phone
+  reported somewhere outside the radius — check the radius is not too tight before assuming
+  anything about the visitor; <em>needs your location</em> means the phone declined to say, which is
+  a setting you can relax; and a refusal that the sign is closed means phone check-in is off for
+  that device, off for the site, or the code was reissued after the sign was printed. Chapter 17.</p>
+
+<h3>The phone sign-in page comes up blank</h3>
+<p>Reload it once. If it is still blank on every phone, the address on the sign is not one this
+  server serves — reissue the link and reprint, rather than retyping it by hand.</p>
 
 <h3>Nobody can sign in at all</h3>
 <p>There is no reset email. On the machine holding the data:</p>

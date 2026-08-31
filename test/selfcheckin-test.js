@@ -128,6 +128,36 @@ const signIn = (extra) => req('POST', '/api/kiosk/signin', {
   ok('…and carries no backup or notification settings at all',
     !('backup' in config) && !('notify' in config), Object.keys(config).join(','));
 
+  /*
+   * ---- the page a scanned sign actually opens ----
+   *
+   * From a real report: the sign worked, the phone opened the link, and the
+   * visitor got a blank white page. The same index.html is served at three
+   * addresses — /kiosk/, /kiosk/<device>/ and /go/<code> — and a relative
+   * `href="kiosk.css"` resolves against whichever one it was opened at, so
+   * under /go/ the browser asked for /go/kiosk.css, got the fallback HTML
+   * back, and quietly rendered nothing.
+   *
+   * Checked by fetching what the page asks for rather than by driving a
+   * browser: a stylesheet that answers with HTML is the whole bug, and it says
+   * so without needing a screen.
+   */
+  const pageUrl = `${BASE}/go/${code}`;
+  const html = await fetch(pageUrl).then((x) => x.text());
+  const refs = [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map((m) => m[1])
+    .filter((u) => /\.(css|js)$/.test(u));
+  ok('the phone page asks for a stylesheet and its scripts', refs.length >= 3, refs.join(' '));
+
+  const wrong = [];
+  for (const ref of refs) {
+    const res = await fetch(new URL(ref, pageUrl).href);
+    const type = res.headers.get('content-type') || '';
+    const want = ref.endsWith('.css') ? 'css' : 'javascript';
+    if (!res.ok || !type.includes(want)) wrong.push(`${ref} → ${res.status} ${type.split(';')[0]}`);
+  }
+  ok('…and every one of them is actually served from that address', wrong.length === 0,
+    wrong.join(' | '));
+
   /* ---- reissuing stops every sign already printed ---- */
   const fresh = (await req('POST', `/api/admin/devices/${device.id}/self-code`)).data;
   ok('a new link can be issued', !!fresh.code && fresh.code !== code, fresh.code);

@@ -4243,6 +4243,7 @@
       </div>
 
       <div class="card section" id="set-flow"><h2>Kiosk sign-in flow</h2>
+        <div id="flow-phone">
         <h3 style="margin-top:0">Checking in from a phone</h3>
         <p class="muted" style="margin-top:0">A QR code at the gate that opens the sign-in on a visitor's own
           phone. Useful when one tablet has a queue behind it, or when the tablet is dead. Switch it on per
@@ -4268,6 +4269,7 @@
           visit is recorded as usual — which is often the right trade, because a real visitor with a stubborn
           phone is a far more common problem than somebody trying it on. A fix indoors or among steel is
           routinely a hundred metres out, so leave the radius generous.</p>
+        </div>
 
         <h3>How check-in works</h3>
         <p class="muted" style="margin-top:0">Finding the visitor always comes first — it decides whether they need
