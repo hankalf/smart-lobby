@@ -279,11 +279,34 @@ body.has-bg .screen:not(.dark) > .bar .btn.ghost {
 .badge-qr svg, .badge-qr img { width: 100%; height: auto; }
 .badge-foot { font-size: calc(2.6mm * var(--badge-scale, 1)); margin-top: 1.5mm; }
 
+/*
+ * Printing a badge.
+ *
+ * The size below is a request, not a guarantee, and on iOS it is ignored
+ * outright: Safari takes the paper size from the printer and lays the page out
+ * to fit it. Asking for 62 x 100 mm and then drawing a 62 x 100 mm block left
+ * the badge sitting in the middle of whatever sheet the printer actually used,
+ * with its corner marks nowhere near the corners of the label.
+ *
+ * So the badge fills the page instead of measuring itself. On a label the
+ * right size, that is the same thing. On any other, the badge covers the label
+ * rather than floating in it, and the rulers on the test badge — which stay in
+ * real millimetres — say by how much the printer is scaling. The @page rule
+ * stays for the browsers that do honour it.
+ */
 @media print {
   @page { size: var(--badge-w, 62mm) var(--badge-h, 100mm); margin: 0; }
   body > #app, .toast { display: none !important; }
-  #badge-sheet { display: block; width: var(--badge-w, 62mm); height: var(--badge-h, 100mm); overflow: hidden; }
-  html, body { background: #fff; height: auto; overflow: visible; margin: 0; }
+  #badge-sheet { display: block; width: 100%; height: 100%; overflow: hidden; }
+  /*
+   * Only the upright case fills the page. A badge printed sideways is turned
+   * with a transform that shifts it by the label's own width in millimetres,
+   * and a card sized in per cent has no width for that shift to use — it would
+   * rotate itself off the label entirely. Sideways badges keep the measured
+   * path until there is a reason to rework the rotation.
+   */
+  #badge-sheet[data-fit="fill"] .badge-card { width: 100%; height: 100%; }
+  html, body { background: #fff; height: 100%; overflow: visible; margin: 0; padding: 0; }
 }
 
 /* Language switch mid-flow — bottom corner, clear of the header's Back button

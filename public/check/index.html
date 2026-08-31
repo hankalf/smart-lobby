@@ -102,12 +102,22 @@
   @media print {
     @page { size: var(--badge-w, 62mm) var(--badge-h, 100mm); margin: 0; }
     body > *:not(#badge-sheet):not(#align-sheet) { display: none !important; }
+    /*
+     * Filled to the page rather than drawn at the size we asked for. iOS
+     * ignores @page size and takes the paper from the printer, so a fixed
+     * block printed as a small rectangle adrift in the middle of the sheet —
+     * corner marks and all, which is exactly what you cannot diagnose from.
+     * Filling it puts the corners on the corners of whatever it landed on, and
+     * the rulers, which stay in real millimetres, say how far off the size is.
+     */
     #badge-sheet[data-printing], #align-sheet[data-printing] {
-      display: block !important; width: var(--badge-w, 62mm); height: var(--badge-h, 100mm); overflow: hidden;
+      display: block !important; width: 100%; height: 100%; overflow: hidden;
     }
+    .badge-card, .align-card { width: 100%; height: 100%; }
     /* Whichever of the two is not being printed stays out of the way. */
     #badge-sheet:not([data-printing]), #align-sheet:not([data-printing]) { display: none !important; }
-    html, body { background: #fff; height: auto; overflow: visible; margin: 0; padding: 0; }
+    /* height:100% so a card at 100% has a page to be 100% of. */
+    html, body { background: #fff; height: 100%; max-width: none; overflow: visible; margin: 0; padding: 0; }
   }
 </style>
 </head>

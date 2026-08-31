@@ -2407,6 +2407,8 @@
     root.style.setProperty('--card-h', `${landscape ? badge.label_width_mm : badge.label_height_mm}mm`);
     root.style.setProperty('--card-turn', landscape
       ? `translateX(${badge.label_width_mm}mm) rotate(90deg)` : 'none');
+    // Upright badges fill whatever page the printer uses; see kiosk.css.
+    $('#badge-sheet').dataset.fit = landscape ? 'turn' : 'fill';
     root.style.setProperty('--badge-scale', badge.font_scale || 1);
 
     /*

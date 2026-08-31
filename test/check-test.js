@@ -92,6 +92,25 @@ const ok = (n, c, x) => { if (c) { pass++; console.log(`  ok  ${n}`); } else { f
       window.__print.rules = {
         mm: span('.ruler.mm'), inch: span('.ruler.inch'), overflows: inch.right > card.right + 0.5
       };
+
+      /*
+       * Where the corner marks sit relative to the page. iOS ignores the page
+       * size we ask for and takes the paper from the printer, so a badge drawn
+       * at a fixed size lands as a small rectangle adrift in the middle of the
+       * sheet — which is what a real printer did, and is the one thing the
+       * marks must never do, since their job is to show what the printer
+       * cropped.
+       */
+      const page = document.body.getBoundingClientRect();
+      const marks = [...document.querySelectorAll('.corner')].map((el) => el.getBoundingClientRect());
+      window.__print.corners = {
+        fillsPage: Math.abs(card.width - page.width) < 2 && Math.abs(card.height - page.height) < 2,
+        // The furthest any mark sits from the page edge it belongs to.
+        strayBy: Math.max(...marks.map((m) => Math.min(
+          Math.min(m.left - page.left, page.right - m.right),
+          Math.min(m.top - page.top, page.bottom - m.bottom)
+        )))
+      };
     };
   });
   /*
@@ -138,6 +157,19 @@ const ok = (n, c, x) => { if (c) { pass++; console.log(`  ok  ${n}`); } else { f
     return !!(img && img.complete && img.naturalWidth > 0);
   });
   ok('the badge carries a QR code that actually loaded', qr);
+
+  /*
+   * The viewport this suite runs at is nothing like a 62 mm label, which makes
+   * it a fair stand-in for a printer handing back a page size nobody asked
+   * for. The badge has to fill it: corner marks adrift in the middle of a
+   * sheet cannot tell anybody what was cropped, which is the only reason they
+   * are printed.
+   */
+  const corners = printed.corners || {};
+  ok('the badge fills the page it is given, whatever size that turns out to be',
+    corners.fillsPage === true, JSON.stringify(corners));
+  ok('…so the corner marks are on the corners rather than adrift in the middle',
+    Number.isFinite(corners.strayBy) && corners.strayBy < 2, `${corners.strayBy} px from the edge`);
 
   /*
    * The page has to come back afterwards. A dialog that is cancelled leaves no
