@@ -1995,6 +1995,40 @@
               ${txt('badge.margin_right_mm', 'Right (mm)', 'number')}
             </div>
           </details>
+
+          <!--
+            The tools that tell you what to put in the boxes above live on the
+            device check page, and until this was here they lived at a URL you
+            could only learn from a guide — so the settings were adjustable and
+            unmeasurable at the same time.
+
+            They belong on the tablet rather than here, and not for tidiness: a
+            test badge printed from this page goes to whatever printer this
+            computer has. Hence the code, which is the quickest way to get the
+            address onto the tablet holding the printer.
+          -->
+          <h3>Working out what to put in those boxes</h3>
+          <div class="notice">
+            <p style="margin-top:0"><b>Print from the tablet, not from here.</b> A test badge printed from this
+              computer goes to this computer's printer. Open the device check on the tablet that has the badge
+              printer and use the two tools on it:</p>
+            <ul style="margin:.4rem 0">
+              <li><b>Print an alignment page</b> — a numbered scale. Read the last number fully on the label in
+                each direction, type them in, and it says what to set the margins to.</li>
+              <li><b>Print a test badge</b> — a real badge at this size, carrying a 50 mm rule, a 2 inch rule and
+                a mark in each corner. Rules long or short by the same factor means the printer is scaling;
+                rules running along the roll instead of across it means it turned the badge; a missing corner
+                means it is being clipped, and the margins need to go up.</li>
+            </ul>
+            <div class="row" style="align-items:center;gap:1rem;flex-wrap:wrap">
+              <img class="qr-img" style="width:120px;height:120px"
+                src="/api/qr?text=${encodeURIComponent(`${location.origin}/check/`)}" alt="">
+              <div>
+                <p class="muted" style="margin:0 0 .4rem"><code class="token">${esc(location.origin)}/check/</code></p>
+                <button class="btn subtle" id="copy-check-link" type="button">Copy that address</button>
+              </div>
+            </div>
+          </div>
           <label class="field"><span>Which way it prints on the label</span>
             <select class="input" data-set="badge.orientation">
               <option value="portrait" ${b.orientation !== 'landscape' ? 'selected' : ''}>Vertical — reads down the label</option>
@@ -2096,6 +2130,9 @@
     };
     drawList();
     $('#badge-q').addEventListener('input', drawList);
+
+    $('#copy-check-link').addEventListener('click', (e) =>
+      copyText(`${location.origin}/check/`, e.currentTarget));
 
     // The preset and the custom boxes stay in step with each other.
     $('#label-preset').addEventListener('change', (e) => {
@@ -2926,6 +2963,11 @@
           Wi-Fi. <b>Wireless Direct</b> is for a tablet on cellular data: the printer hosts its own Wi-Fi and the tablet
           joins it, keeping internet over LTE. A <b>Bluetooth</b> entry is inventory only — iPads can only print over
           Bluetooth from the maker's own app, not from the kiosk.</p>
+        <p class="muted">To prove a printer actually works, open <code class="token">/check/</code> on the tablet
+          that has it — not on this computer, which would print to its own printer. That page prints a test badge
+          and an alignment page, and checks the tablet can still reach the server after joining a printer's own
+          Wi-Fi, which is the failure that otherwise goes unnoticed. There is a code to scan it with under
+          <b>Badges → Label size</b>.</p>
       </div>`;
 
     $('#pr-add').addEventListener('click', () => {
