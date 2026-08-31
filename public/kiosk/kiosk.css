@@ -258,7 +258,9 @@ body.has-bg .screen:not(.dark) > .bar .btn.ghost {
 .badge-card {
   width: var(--card-w, var(--badge-w, 62mm));
   height: var(--card-h, var(--badge-h, 100mm));
-  padding: 4mm;
+  /* Set from the badge settings, per side — see buildBadge in kiosk.js. */
+  padding: var(--badge-pad-top, 4mm) var(--badge-pad-right, 4mm)
+           var(--badge-pad-bottom, 4mm) var(--badge-pad-left, 4mm);
   display: flex; flex-direction: column; align-items: center; text-align: center;
   font-family: var(--font); color: #000; overflow: hidden;
   /* Turned when the badge prints horizontally on an upright label. */

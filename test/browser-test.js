@@ -45,8 +45,34 @@ async function armDeckSignature() {
   });
 }
 
+/*
+ * Badges are off on a fresh site, so a sign-in here builds no badge at all and
+ * there is nothing to check the margins against. Switched on with margins that
+ * are nobody's default — 5 and 7 — so a value that arrives is proof the
+ * setting travelled rather than a coincidence, and the footer emptied so the
+ * "an empty footer takes no room" rule is actually exercised.
+ *
+ * Returns what was there before; the caller puts it back.
+ */
+async function armBadge() {
+  const login = await fetch(`${BASE}/api/admin/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'hankalfr@gmail.com', password: 'Testing123!' })
+  });
+  const cookie = (login.headers.get('set-cookie') || '').split(';')[0];
+  const before = await fetch(`${BASE}/api/admin/settings`, { headers: { cookie } }).then((r) => r.json());
+  await fetch(`${BASE}/api/admin/settings`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', cookie },
+    body: JSON.stringify({
+      badge: { ...before.badge, enabled: true, margin_mm: 5, margin_top_mm: 7, footer_text: '' }
+    })
+  });
+  return { cookie, badge: before.badge };
+}
+
 (async () => {
   await armDeckSignature();
+  const badgeWas = await armBadge();
   const browser = await chromium.launch({ ...launchOptions(),
     args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream']
   });
@@ -155,6 +181,51 @@ async function armDeckSignature() {
   await page.click('#ack-confirm');
   await page.waitForSelector('[data-screen="done"]:not([hidden])', { timeout: 10000 });
   ok('flow completes to done screen', true);
+
+  /*
+   * ---- the badge that was built for this sign-in ----
+   *
+   * The margins are a setting rather than the 4 mm that used to be baked into
+   * the stylesheet, because every label printer has an edge strip it cannot
+   * print on and how wide it differs by model and by roll. A setting that
+   * silently failed to reach the badge would only show up as clipped labels at
+   * a gate, so it is checked where the badge is actually assembled.
+   */
+  const pad = await page.evaluate(() => {
+    const style = getComputedStyle(document.documentElement);
+    const read = (name) => style.getPropertyValue(name).trim();
+    return {
+      top: read('--badge-pad-top'), bottom: read('--badge-pad-bottom'),
+      left: read('--badge-pad-left'), right: read('--badge-pad-right'),
+      // The kiosk hides things with a class, not the hidden property.
+      footShown: !document.getElementById('badge-foot').classList.contains('hidden'),
+      footText: (document.getElementById('badge-foot').textContent || '').trim()
+    };
+  });
+  ok('the badge takes its margins from the settings',
+    pad.left === '5mm' && pad.right === '5mm' && pad.bottom === '5mm', JSON.stringify(pad));
+  /*
+   * A side set on its own beats the all-round number, which is what a
+   * continuous roll needs: the cut edges and the side edges do not have the
+   * same unprintable strip.
+   */
+  ok('…and a side set on its own overrides the number for all round',
+    pad.top === '7mm', JSON.stringify(pad));
+
+  /*
+   * An empty footer used to keep its top margin whatever was in it, so
+   * clearing the wording still cost a few millimetres at the foot of every
+   * badge — which on a 62 mm label is the difference between the QR fitting
+   * and not.
+   */
+  ok('a footer with nothing in it takes no room on the badge',
+    !pad.footShown && !pad.footText, JSON.stringify(pad));
+
+  // The settings are shared with every later suite; put the badge back.
+  await fetch(`${BASE}/api/admin/settings`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', cookie: badgeWas.cookie },
+    body: JSON.stringify({ badge: badgeWas.badge })
+  }).catch(() => {});
 
   /* ---- server has the induction signature ---- */
   const res = await fetch(`${BASE}/api/admin/login`, {

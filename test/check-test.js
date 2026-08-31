@@ -148,6 +148,60 @@ const ok = (n, c, x) => { if (c) { pass++; console.log(`  ok  ${n}`); } else { f
   ok('the page comes back afterwards, printed or cancelled',
     await page.evaluate(() => document.getElementById('badge-sheet').hidden));
 
+  /* ---- the alignment page, and the arithmetic it saves you ---- */
+
+  await page.emulateMedia({ media: 'print' });
+  await page.evaluate(() => {
+    window.__align = { calls: 0 };
+    window.print = () => {
+      const sheet = document.getElementById('align-sheet');
+      window.__align.calls++;
+      window.__align.armed = !sheet.hidden && sheet.hasAttribute('data-printing');
+      const card = document.querySelector('.align-card').getBoundingClientRect();
+      const ticks = [...document.querySelectorAll('.align-across s')];
+      const down = [...document.querySelectorAll('.align-down s')];
+      const toMm = (px) => (px / 96) * 25.4;
+      window.__align.acrossSpan = ticks.length
+        ? toMm(ticks[ticks.length - 1].getBoundingClientRect().left - card.left) : 0;
+      window.__align.downSpan = down.length
+        ? toMm(down[down.length - 1].getBoundingClientRect().top - card.top) : 0;
+      // The badge sheet must not come along for the ride.
+      window.__align.badgeHidden = !document.getElementById('badge-sheet').hasAttribute('data-printing');
+    };
+  });
+  await page.evaluate(() => document.getElementById('print-align').click());
+  await page.waitForFunction(() => window.__align.calls > 0, null, { timeout: 10000 }).catch(() => {});
+  const align = await page.evaluate(() => window.__align);
+  await page.emulateMedia({ media: null });
+
+  ok('an alignment page can be printed', align.calls === 1, JSON.stringify(align));
+  ok('…with only the alignment page on it, not the test badge', align.badgeHidden === true);
+  /*
+   * The scale has to run the full width of the label it claims to measure. One
+   * that stopped short would read as an unprintable margin that is not there,
+   * and send somebody to pad a badge that already fitted.
+   */
+  ok('…and its scale runs the full label, so a missing mark means a real margin',
+    Math.abs(align.acrossSpan - 62) < 0.5, `${(align.acrossSpan || 0).toFixed(1)} mm of 62`);
+  ok('…in both directions', Math.abs(align.downSpan - 100) < 0.5,
+    `${(align.downSpan || 0).toFixed(1)} mm of 100`);
+
+  await page.fill('#align-across', '56');
+  await page.fill('#align-down', '94');
+  await page.click('#align-apply');
+  await page.waitForTimeout(300);
+  const advice = (await page.textContent('#align-note')).replace(/\s+/g, ' ');
+  ok('reading two numbers off it gives the margins to set',
+    /3 mm.*left and right/.test(advice) && /3 mm.*top and bottom/.test(advice), advice.slice(0, 130));
+
+  /* A label the printer can reach all of needs no correction, and should say so. */
+  await page.fill('#align-across', '62');
+  await page.fill('#align-down', '100');
+  await page.click('#align-apply');
+  await page.waitForTimeout(300);
+  ok('…and says plainly when there is nothing to correct',
+    /whole label is printable/i.test(await page.textContent('#align-note')));
+
   ok('nothing threw along the way', errors.length === 0, errors.join(' | '));
 
   await b.close();

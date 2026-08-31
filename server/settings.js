@@ -164,7 +164,28 @@ const DEFAULTS = {
     badge_prefixes: {},
     title_text: 'VISITOR',
     footer_text: 'Please return this badge on exit',
-    font_scale: 1
+    font_scale: 1,
+    /*
+     * The white space inside the label edge. A setting because it is the first
+     * thing anybody adjusts once a badge is coming out of a real printer:
+     * every label printer has an unprintable strip at the edges, and how wide
+     * it is differs by model and by roll. Too small and the badge is clipped;
+     * too large and a 62 mm label wastes a third of itself.
+     *
+     * Four millimetres is what every badge printed before this was a setting,
+     * so a site that never touches it sees no change.
+     */
+    margin_mm: 4,
+    /*
+     * The margins separately, for a printer whose unprintable strip is not the
+     * same on all four sides — which is usual on a continuous roll, where the
+     * cut edges and the side edges behave differently. Null means "use
+     * margin_mm", so the simple case stays one number.
+     */
+    margin_top_mm: null,
+    margin_bottom_mm: null,
+    margin_left_mm: null,
+    margin_right_mm: null
   },
   /*
    * The paperwork a site insists on before somebody works there.

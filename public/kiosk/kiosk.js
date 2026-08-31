@@ -2409,6 +2409,21 @@
       ? `translateX(${badge.label_width_mm}mm) rotate(90deg)` : 'none');
     root.style.setProperty('--badge-scale', badge.font_scale || 1);
 
+    /*
+     * The white space inside the label edge, per side. Every label printer has
+     * a strip at the edge it cannot print on, and how wide it is differs by
+     * model and by roll — so this is a setting rather than the 4 mm that used
+     * to be baked into the stylesheet. A side left unset falls back to the one
+     * number, so a site that wants "a bit more all round" sets one field.
+     */
+    const gap = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+    const all = gap(badge.margin_mm);
+    const side = (v) => `${gap(v) ?? all ?? 4}mm`;
+    root.style.setProperty('--badge-pad-top', side(badge.margin_top_mm));
+    root.style.setProperty('--badge-pad-bottom', side(badge.margin_bottom_mm));
+    root.style.setProperty('--badge-pad-left', side(badge.margin_left_mm));
+    root.style.setProperty('--badge-pad-right', side(badge.margin_right_mm));
+
     $('#badge-type').textContent = badge.title_text || result.visit.visit_type.toUpperCase();
     $('#badge-name').textContent = result.visit.full_name;
     $('#badge-company').textContent = badge.show_company ? (result.visit.company || '') : '';
@@ -2430,7 +2445,15 @@
 
     $('#badge-qr').innerHTML = badge.show_qr
       ? `<img src="/api/qr?text=${encodeURIComponent(result.checkout_code)}" alt="">` : '';
-    $('#badge-foot').textContent = badge.footer_text || '';
+    /*
+     * An empty footer takes no room. It used to keep its top margin whatever
+     * was in it, so clearing the wording still cost a few millimetres at the
+     * foot of every badge — which on a 62 mm label is the difference between
+     * the QR fitting and not.
+     */
+    const foot = $('#badge-foot');
+    foot.textContent = badge.footer_text || '';
+    show(foot, !!(badge.footer_text || '').trim());
   }
 
   $('#btn-print-badge').addEventListener('click', () => window.print());

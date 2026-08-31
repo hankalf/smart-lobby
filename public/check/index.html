@@ -76,12 +76,37 @@
   .ruler i.end { width: 0; }
   .intended { font-size: 2.4mm; margin-top: 1mm; }
 
+  /*
+   * The alignment page. Printed with no padding at all — the whole point is to
+   * find out where the printable area actually stops, so anything this page
+   * held back would be measuring itself rather than the printer.
+   */
+  #align-sheet { display: none; }
+  .align-card {
+    width: var(--badge-w, 62mm); height: var(--badge-h, 100mm);
+    position: relative; color: #000; overflow: hidden; box-sizing: border-box; padding: 0;
+  }
+  .align-title { position: absolute; top: 6mm; left: 6mm; width: 40mm; font-size: 2.6mm; line-height: 1.3; }
+  .align-across, .align-down { position: absolute; top: 0; left: 0; }
+  .align-across b, .align-down b {
+    position: absolute; font-size: 2.2mm; font-weight: 600; white-space: nowrap;
+  }
+  .align-across s, .align-down s { position: absolute; background: #000; text-decoration: none; display: block; }
+  /* Ticks off the top edge, numbers just below them. */
+  .align-across s { top: 0; width: .25mm; height: 3mm; }
+  .align-across b { top: 3.4mm; transform: translateX(-50%); }
+  /* And off the left edge, reading down. */
+  .align-down s { left: 0; height: .25mm; width: 3mm; }
+  .align-down b { left: 3.4mm; transform: translateY(-50%); }
+
   @media print {
     @page { size: var(--badge-w, 62mm) var(--badge-h, 100mm); margin: 0; }
-    body > *:not(#badge-sheet) { display: none !important; }
-    #badge-sheet[data-printing] {
+    body > *:not(#badge-sheet):not(#align-sheet) { display: none !important; }
+    #badge-sheet[data-printing], #align-sheet[data-printing] {
       display: block !important; width: var(--badge-w, 62mm); height: var(--badge-h, 100mm); overflow: hidden;
     }
+    /* Whichever of the two is not being printed stays out of the way. */
+    #badge-sheet:not([data-printing]), #align-sheet:not([data-printing]) { display: none !important; }
     html, body { background: #fff; height: auto; overflow: visible; margin: 0; padding: 0; }
   }
 </style>
@@ -130,6 +155,42 @@
   <button class="btn" id="test-badge">Print a test badge</button>
   <button class="btn subtle" id="test-print">Just open a print dialog</button>
   <p class="why" id="print-note"></p>
+</div>
+
+<!--
+  Setting the margins by measuring a label with a tape measure works, and is
+  what the rulers on the test badge are for. This is the same job done by
+  reading two numbers off a printed page, which is how every inkjet aligns its
+  own head: print a numbered scale, see which number falls off the edge, type
+  it in. It needs no tape, no camera and no arithmetic, and it is accurate to
+  the mark spacing whatever the lighting is like.
+-->
+<div class="card">
+  <h2 style="margin-top:0;font-size:1rem">Setting the margins</h2>
+  <p class="why">Prints a page of numbered marks on one label. Read the last number that is fully on
+    the label in each direction, type them in, and the margins are worked out for you.</p>
+  <button class="btn" id="print-align">Print an alignment page</button>
+  <div class="form-grid" style="margin-top:.9rem">
+    <label class="field"><span>Last number across the label</span>
+      <input class="input" id="align-across" type="number" inputmode="numeric" placeholder="e.g. 56"></label>
+    <label class="field"><span>Last number down the label</span>
+      <input class="input" id="align-down" type="number" inputmode="numeric" placeholder="e.g. 94"></label>
+  </div>
+  <button class="btn subtle" id="align-apply" style="margin-top:.6rem">Work out the margins</button>
+  <p class="why" id="align-note">Print the page first.</p>
+</div>
+
+<!--
+  The alignment page. Numbered marks along the top and down the left, in the
+  same millimetres the badge is laid out in, so the number that falls off the
+  edge is a direct reading of how much of the label cannot be printed on.
+-->
+<div id="align-sheet" hidden>
+  <div class="align-card">
+    <div class="align-title">Alignment — read the last number fully on the label</div>
+    <div class="align-across" id="align-scale-across"></div>
+    <div class="align-down" id="align-scale-down"></div>
+  </div>
 </div>
 
 <!--

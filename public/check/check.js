@@ -201,6 +201,95 @@
 
   document.getElementById('test-print').addEventListener('click', () => window.print());
 
+  /* ------------------------------------------------------- the alignment page */
+
+  const alignSheet = document.getElementById('align-sheet');
+  const alignNote = document.getElementById('align-note');
+  const STEP = 2;   // millimetres between marks — fine enough to set a margin by
+
+  /**
+   * A numbered scale, drawn in the same millimetres the badge is laid out in.
+   *
+   * Every second mark is numbered, so the page stays readable on a 62 mm label
+   * without the numbers running into each other. The mark at zero is where the
+   * printer *believes* the label starts, so how much of the low end is missing
+   * is as informative as where the high end stops.
+   */
+  function scale(into, extent, axis) {
+    const bits = [];
+    for (let at = 0; at <= extent; at += STEP) {
+      const where = axis === 'across' ? `left:${at}mm` : `top:${at}mm`;
+      bits.push(`<s style="${where}"></s>`);
+      if (at % (STEP * 2) === 0) bits.push(`<b style="${where}">${at}</b>`);
+    }
+    into.innerHTML = bits.join('');
+  }
+
+  let alignFor = null;
+  document.getElementById('print-align').addEventListener('click', async () => {
+    alignNote.textContent = 'Reading this site’s label size…';
+    try {
+      alignFor = await badgeSetup();
+    } catch {
+      alignNote.textContent = 'Could not read the label settings from the server.';
+      return;
+    }
+    // The scales run the full intended size, so a mark that does not appear on
+    // the label is exactly the part the printer cannot reach.
+    scale(document.getElementById('align-scale-across'), alignFor.w, 'across');
+    scale(document.getElementById('align-scale-down'), alignFor.h, 'down');
+
+    alignNote.innerHTML = `Printing a scale to <b>${alignFor.w} × ${alignFor.h} mm</b>. `
+      + 'Margins <b>None</b>, no scaling. Then read the last number fully on the label in each '
+      + 'direction and type them in above.';
+
+    alignSheet.hidden = false;
+    alignSheet.setAttribute('data-printing', '');
+    window.print();
+    setTimeout(() => { alignSheet.removeAttribute('data-printing'); alignSheet.hidden = true; }, 500);
+  });
+
+  document.getElementById('align-apply').addEventListener('click', () => {
+    const across = Number(document.getElementById('align-across').value);
+    const down = Number(document.getElementById('align-down').value);
+    if (!alignFor) return void (alignNote.textContent = 'Print the alignment page first.');
+    if (!Number.isFinite(across) || !Number.isFinite(down) || across <= 0 || down <= 0) {
+      alignNote.textContent = 'Type the last number you can read in each direction.';
+      return;
+    }
+
+    /*
+     * What the numbers mean. The scale was drawn to the full intended size, so
+     * a last-readable number below that size is the printable area falling
+     * short — the difference is what the printer cannot reach, and half of it
+     * at each end is the margin to set. Rounded up to the next whole
+     * millimetre, because a margin that is exactly the unprintable width puts
+     * the badge's edge on the boundary and prints a hairline or nothing
+     * depending on the day.
+     */
+    const shortAcross = Math.max(0, alignFor.w - across);
+    const shortDown = Math.max(0, alignFor.h - down);
+    const side = Math.ceil(shortAcross / 2);
+    const ends = Math.ceil(shortDown / 2);
+
+    if (shortAcross === 0 && shortDown === 0) {
+      alignNote.innerHTML = '<b class="pass">The whole label is printable.</b> Nothing to correct — '
+        + 'any margin you set now is for looks rather than for the printer.';
+      return;
+    }
+
+    alignNote.innerHTML = `The printer reaches <b>${across} × ${down} mm</b> of a `
+      + `<b>${alignFor.w} × ${alignFor.h} mm</b> label — it cannot print `
+      + `${shortAcross} mm across or ${shortDown} mm down.<br><br>`
+      + `Set the margins under <b>Badges → Label size</b> to at least `
+      + `<b>${side} mm</b> left and right, and <b>${ends} mm</b> top and bottom. `
+      + 'Then print a test badge and check all four corner marks are on the label.'
+      + (Math.abs(side - ends) >= 2
+        ? '<br><br>The two differ enough to be worth setting per side rather than one number all round — '
+          + 'which is normal on a continuous roll, where the cut edges and the side edges behave differently.'
+        : '');
+  });
+
   /* --------------------------------------------------- reaching the server */
 
   const reachNote = document.getElementById('reach-note');

@@ -1975,6 +1975,26 @@
           <p class="muted">On a <b>continuous</b> roll like the DK-2251 the width is fixed by the roll — 62 mm — and
             the height is whatever you set here, cut to length as each badge prints. On a <b>die-cut</b> roll both are
             fixed by the label, so these must match it or every badge prints short or spills onto the next one.</p>
+
+          <h3>Margins</h3>
+          <p class="muted" style="margin-top:0">The white space inside the label edge. Every label printer has a strip
+            at the edge it cannot print on, and how wide it is differs by model and by roll — too small and the badge
+            is clipped, too large and a 62 mm label wastes a third of itself. Start with one number; fill in a side
+            only where that printer needs a different one.</p>
+          <div class="form-grid">
+            ${txt('badge.margin_mm', 'All round (mm)', 'number')}
+          </div>
+          <details>
+            <summary>Different on each side</summary>
+            <p class="muted">Usual on a continuous roll, where the cut edges and the side edges do not behave the
+              same. Leave a box empty to use the number above.</p>
+            <div class="form-grid">
+              ${txt('badge.margin_top_mm', 'Top (mm)', 'number')}
+              ${txt('badge.margin_bottom_mm', 'Bottom (mm)', 'number')}
+              ${txt('badge.margin_left_mm', 'Left (mm)', 'number')}
+              ${txt('badge.margin_right_mm', 'Right (mm)', 'number')}
+            </div>
+          </details>
           <label class="field"><span>Which way it prints on the label</span>
             <select class="input" data-set="badge.orientation">
               <option value="portrait" ${b.orientation !== 'landscape' ? 'selected' : ''}>Vertical — reads down the label</option>
