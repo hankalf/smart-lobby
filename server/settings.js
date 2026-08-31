@@ -86,7 +86,51 @@ const DEFAULTS = {
     qr_signout_enabled: true,
     auto_signout_enabled: true,
     auto_signout_time: '23:59',
-    thank_you_seconds: 12
+    thank_you_seconds: 12,
+    /*
+     * Signing in from your own phone, by scanning a QR at the gate.
+     *
+     * Off by default. It removes the queue at a single tablet and works when
+     * the tablet is dead, but it also removes the one thing a fixed kiosk
+     * guarantees — that the person tapping it is standing at the gate — which
+     * is what the geofence below is for.
+     */
+    self_checkin_enabled: false
+  },
+  /*
+   * Where the site is, and how far from it a phone check-in is allowed.
+   *
+   * Worth being straight about what this is: a browser reports the coordinates
+   * it chooses to report, and a determined person can tell it whatever they
+   * like. This stops somebody signing in from the car park on the way past, or
+   * from home on a Monday morning — not somebody who has decided to cheat and
+   * knows how. It is a gate, not a lock, and it should be described that way to
+   * whoever asks for it.
+   *
+   * It applies to phone check-ins only. A tablet bolted to the gate already
+   * answers the question by being where it is.
+   */
+  /*
+   * Which job a sign-in lands on when nobody has said.
+   *
+   * Two answers, most specific first: the firm's usual job, set on the company
+   * record, then a fallback per visitor type set here. Whatever is filled in is
+   * only ever a starting point — the visitor sees it selected and can change
+   * it, because the one day it is wrong is the day it matters.
+   */
+  projects: {
+    // { contractor: 4, driver: null } — a project id per visitor type.
+    default_by_type: {}
+  },
+  geofence: {
+    enabled: false,
+    lat: null,
+    lng: null,
+    // Big enough to cover a yard and forgive the wobble in a phone's fix, which
+    // indoors and among steel is routinely a hundred metres out.
+    radius_m: 250,
+    // What to do when the phone will not say where it is at all.
+    require_location: true
   },
   badge: {
     enabled: false,
@@ -195,6 +239,20 @@ const DEFAULTS = {
     on_signout: false,
     on_delivery: true,
     on_induction: false,
+    /*
+     * A tablet that has stopped checking in. Not a visitor event at all, which
+     * is why it is off by default — but on a site with a gate nobody walks
+     * past, a kiosk that died on Friday afternoon is not noticed until Monday,
+     * and by then there is no record of who was on site over the weekend.
+     */
+    on_device_offline: false,
+    /*
+     * How long a tablet has to be silent before it counts as down. It checks
+     * in every 20 seconds, so anything above a couple of minutes is a real
+     * absence rather than a dropped packet; fifteen rides out a reboot, a
+     * router restart or somebody carrying it out of range.
+     */
+    device_quiet_minutes: 15,
     /*
      * And who is worth posting about. Keyed by visitor type; a type that is
      * not named here notifies, so adding a new one on the Visitor types tab
@@ -629,28 +687,18 @@ function publicSettings() {
   const s = getAll();
   return {
     org: s.org,
-    // Only the notice: retention numbers and the rest stay on the server.
     /*
-   * Copying a backup off the machine.
-   *
-   * The destination is a URL, and the one that works for a normal account in
-   * somebody else's tenant is a Power Automate flow into OneDrive — the same
-   * shape as the Teams webhook, and needing no Azure app registration or admin
-   * consent, which is exactly what such an account cannot obtain.
-   */
-  backup: {
-    offsite_enabled: false,
-    offsite_url: '',
-    offsite_secret: '',
-    // A database-only copy is a fraction of the size, for sites whose photos
-    // push the archive past what the flow will accept.
-    offsite_include_media: true,
-    offsite_last_at: '',
-    offsite_last_ok: true,
-    offsite_last_error: '',
-    offsite_last_file: ''
-  },
-  privacy: { notice: privacyNotice('en'), notice_es: privacyNotice('es') },
+     * Only the notice. Retention numbers, webhook URLs, backup destinations
+     * and every other setting stay on the server.
+     *
+     * This list is an allow-list on purpose, and anything added to it is
+     * published to the world: /api/kiosk/config answers without a login,
+     * because a tablet in a lobby cannot hold a secret. A stray `backup` block
+     * sat here for a while — harmlessly, because it was a literal of empty
+     * defaults rather than the site's real values, but one obvious "fix" away
+     * from posting a OneDrive URL and its secret to anyone who asked.
+     */
+    privacy: { notice: privacyNotice('en'), notice_es: privacyNotice('es') },
     kiosk: s.kiosk,
     types: s.types,
     details: s.details,
@@ -659,7 +707,14 @@ function publicSettings() {
     badge: { ...s.badge, mode: s.badge.mode },
     induction: s.induction,
     deliveries: s.deliveries,
-    access: { enabled: s.access.enabled, unlock_button_on_kiosk: s.access.unlock_button_on_kiosk }
+    access: { enabled: s.access.enabled, unlock_button_on_kiosk: s.access.unlock_button_on_kiosk },
+    /*
+     * Whether a phone check-in has to prove where it is, and how far out still
+     * counts — but never the site's own coordinates. The phone does not need
+     * them: it sends where it is and the server does the arithmetic, so the
+     * fence cannot be read off the public config and walked around.
+     */
+    geofence: require('./geofence').publicSettings()
   };
 }
 

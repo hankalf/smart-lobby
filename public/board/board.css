@@ -37,11 +37,30 @@ main section:first-child .group { margin-top: 0; }
   border-radius: 14px; padding: .7rem .85rem;
 }
 .person.new { border-color: rgba(255, 255, 255, .55); background: rgba(255, 255, 255, .14); }
+/* Bigger than it was: on a board read from across an office, a face at 54px
+   was a smudge. A photo is also tappable, and opens full size. */
 .avatar {
-  width: 54px; height: 54px; border-radius: 50%; flex: 0 0 auto; object-fit: cover;
+  width: 76px; height: 76px; border-radius: 50%; flex: 0 0 auto; object-fit: cover;
   background: rgba(255, 255, 255, .14); display: grid; place-items: center;
-  font-weight: 700; font-size: 1.1rem; color: #dcebe4;
+  font-weight: 700; font-size: 1.4rem; color: #dcebe4;
 }
+img.avatar { cursor: zoom-in; }
+img.avatar:hover, img.avatar:focus-visible { outline: 2px solid rgba(255, 255, 255, .5); outline-offset: 2px; }
+
+/* The full-size photo, over the board. Dismissed by tapping anywhere. */
+#zoom {
+  position: fixed; inset: 0; z-index: 50; display: grid; place-items: center;
+  background: rgba(5, 12, 9, .88); cursor: zoom-out; padding: 4vmin;
+}
+#zoom[hidden] { display: none; }
+#zoom img {
+  max-width: min(560px, 82vw); max-height: 74vh; border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .5);
+}
+#zoom .zoom-name {
+  margin-top: 1rem; text-align: center; font-size: 1.3rem; font-weight: 600; color: #eaf3ee;
+}
+#zoom .zoom-sub { margin-top: .25rem; text-align: center; color: #9fbcaf; font-size: .95rem; }
 .who { min-width: 0; flex: 1; }
 .name { font-weight: 600; font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Two lines rather than one clipped one: on a wall board the company and who
@@ -71,7 +90,7 @@ main section:first-child .group { margin-top: 0; }
   .grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1rem; }
   .name { font-size: 1.25rem; }
   .sub, .when { font-size: .95rem; }
-  .avatar { width: 66px; height: 66px; }
+  .avatar { width: 92px; height: 92px; font-size: 1.6rem; }
 }
 @media (max-width: 560px) {
   .bar { padding: .85rem 1rem; }

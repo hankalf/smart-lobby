@@ -80,6 +80,48 @@ const anon = (path) => fetch(BASE + path, { cache: 'no-store' });
   ok('issuing a link is recorded', audit.some((a) => a.action === 'board_key_issued'));
   ok('turning it off is recorded', audit.some((a) => a.action === 'board_disabled'));
 
+  
+  /* ---- who left stays on the board until the day rolls over ---- */
+  {
+    const db = require('../server/db');
+    const localtime = require('../server/localtime');
+    const day = localtime.dayRange(localtime.today());
+    const at = (h) => new Date(Date.parse(day.start) + h * 3600e3).toISOString();
+
+    const staffList = (await req('GET', '/api/admin/staff')).data || [];
+    const host2 = staffList[0]
+      || (await req('POST', '/api/admin/staff', { name: 'Board Host', email: 'board@example.com', active: 1 })).data;
+    const early = await req('POST', '/api/kiosk/signin', {
+      full_name: 'Board Early Leaver', phone: '4152667001', visit_type: 'visitor',
+      host_id: host2 && host2.id, client_ref: `board-early-${Date.now()}`
+    });
+    const earlyId = early.data.visit.id;
+    await req('POST', '/api/kiosk/signout', { visit_id: earlyId });
+    // Signed out this morning — hours ago, far outside the "just left" window.
+    db.run('UPDATE visits SET signed_in_at = ?, signed_out_at = ? WHERE id = ?', at(7), at(8), earlyId);
+
+    // And somebody who left yesterday, who should not be there at all.
+    const old = await req('POST', '/api/kiosk/signin', {
+      full_name: 'Board Yesterday', phone: '4152667002', visit_type: 'visitor',
+      host_id: host2 && host2.id, client_ref: `board-old-${Date.now()}`
+    });
+    const oldId = old.data.visit.id;
+    await req('POST', '/api/kiosk/signout', { visit_id: oldId });
+    db.run('UPDATE visits SET signed_in_at = ?, signed_out_at = ? WHERE id = ?',
+      new Date(Date.parse(day.start) - 16 * 3600e3).toISOString(),
+      new Date(Date.parse(day.start) - 8 * 3600e3).toISOString(), oldId);
+
+    const board = (await req('GET', `/api/board/${key}/data`)).data;
+    const names = (board.left || []).map((p) => p.name);
+    ok('somebody who left this morning is still on the board this afternoon',
+      names.includes('Board Early Leaver'), JSON.stringify(names).slice(0, 140));
+    ok('…and somebody who left yesterday is not',
+      !names.includes('Board Yesterday'), JSON.stringify(names).slice(0, 140));
+
+    await req('DELETE', `/api/admin/visits/${earlyId}`);
+    await req('DELETE', `/api/admin/visits/${oldId}`);
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('CRASH', e); process.exit(1); });

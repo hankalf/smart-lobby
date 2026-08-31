@@ -37,6 +37,9 @@
     undo: null,
     // The booking this person turned out to have, if reception made one.
     expected: null,
+    // The job their firm is usually here for — a starting point for the
+    // dropdown, not a decision. See server/projects.js.
+    defaultProject: null,
     deviceToken: localStorage.getItem('sl_device_token') || '',
     // Which tablet this is, taken from the address: /kiosk/north-gate. The path
     // is the reliable part — see deviceSlug() below.
@@ -46,7 +49,14 @@
     deviceUnknown: false,
     configRev: null,
     configPending: false,
-    appliedSections: undefined
+    appliedSections: undefined,
+    /*
+     * A phone check-in, from /go/<code>. The code goes with the sign-in and is
+     * checked at the server; `location` is what the phone said when asked, and
+     * is what the geofence is applied to.
+     */
+    selfCode: (location.pathname.match(/^\/go\/([A-Za-z0-9]{8,})\/?$/) || [])[1] || '',
+    location: null
   };
 
   /* ------------------------------------------------------------- helpers */
@@ -145,6 +155,8 @@
       'Confirmo que he visto y entendido la inducción del sitio.',
     "You're signed in": 'Ha registrado su entrada',
     'Signed out': 'Salida registrada',
+    'Start over': 'Empezar de nuevo',
+    'Checking you are on site…': 'Comprobando que está en el sitio…',
     "That's not right — cancel this": 'No es correcto — cancelar',
     'Cancelled': 'Cancelado',
     'That sign-in has been cancelled. Please start again.':
@@ -271,6 +283,7 @@
     '#deck-prev', '#deck-next',
     '[data-screen="ack"] h2', '#ack-replay', '#ack-confirm',
     '#btn-print-badge', '[data-screen="done"] [data-go="idle"]', '#btn-undo-signin',
+    '[data-restart]', '#deck-restart', '#ack-restart',
     '[data-screen="signout"] .bar h2', '[data-screen="signout"] .bar button',
     '#btn-scan', '#btn-scan-stop', '#scan-status',
     '[data-screen="delivery"] .bar h2', '[data-screen="delivery"] .bar button',
@@ -486,7 +499,7 @@
     if (name === 'signout' && state.cfg && state.cfg.kiosk.qr_signout_enabled && !scannerDismissed) startScanner();
     if (name === 'idle') resetVisit();
     updateLangControls();
-    if (name === 'details') applyDetailFields();
+    if (name === 'details') { applyDetailFields(); applyDefaultProject(state.defaultProject); }
     // Sizing the pad wipes any ink on it, so a re-render of the same screen —
     // a language switch mid-document — must leave it alone.
     if (name === 'agreement' && changed) sizeSignaturePad();
@@ -542,6 +555,7 @@
     // The next person must not be able to cancel the last person's sign-in.
     state.undo = null;
     state.expected = null;
+    state.defaultProject = null;
     state.deckIndex = 0;
     state.inductionDone = false;
     state.inductionSignature = null;
@@ -897,6 +911,30 @@
   }));
   $$('[data-back]').forEach((b) => b.addEventListener('click', goBack));
 
+  /*
+   * Start over, on every screen of a sign-in.
+   *
+   * Back walks one step at a time, which is right for a mis-typed field and
+   * wrong for "this is not me" — somebody four documents into the wrong
+   * visitor type wants out, not eight taps. This throws the whole entry away
+   * and returns to the welcome screen; resetVisit() wipes every field, the
+   * photo, the answers and the signatures on the way, so nothing of theirs is
+   * left for the next person.
+   *
+   * It asks first. An accidental brush against it after five minutes of
+   * induction would be worse than the problem it solves.
+   */
+  function startOver() {
+    const question = state.lang === 'es'
+      ? '¿Empezar de nuevo? Se borrará lo que ha introducido.'
+      : 'Start over? Everything you have entered will be cleared.';
+    if (!window.confirm(question)) return;
+    // Always the welcome screen, never the menu: setScreen wipes the entry on
+    // the way to idle, which is the whole point of the button.
+    setScreen('idle', { push: false });
+  }
+  $$('[data-restart], #deck-restart, #ack-restart').forEach((b) => b.addEventListener('click', startOver));
+
   /** The sections offered on the home screen, one card each. */
   /** The types on offer, and how each is worded in the language on screen. */
   const allTypes = () => (state.cfg && state.cfg.types) || [];
@@ -1019,10 +1057,58 @@
   /** Letters mean they typed a name; digits mean a phone number. */
   const looksLikeName = (value) => /[a-z]/i.test(value.replace(/^\+/, ''));
 
+  /*
+   * What the server says when it refuses a sign-in, in words a visitor can act
+   * on, and which box to put the cursor in. The server sends a message of its
+   * own for a bad number; these cover the rest, which arrive as a code alone.
+   */
+  const FIELD_REFUSALS = {
+    name_required: 'Please enter your name.',
+    phone_required: 'Please enter a contact number.',
+    bad_phone: 'Please check that phone number.',
+    email_required: 'Please enter an email address.',
+    company_required: 'Please enter your company.',
+    host_required: 'Please choose who you are here to see.',
+    vehicle_required: 'Please enter your vehicle registration.',
+    reference_required: 'Please enter your load or order reference.',
+    movement_required: 'Please choose whether this is a pick-up or a delivery.',
+    project_required: 'Please choose your project.'
+  };
+  const REFUSAL_FIELD = {
+    name_required: '#f-name',
+    phone_required: '#f-phone',
+    bad_phone: '#f-phone',
+    email_required: '#f-email',
+    company_required: '#f-company',
+    host_required: '#f-host-search',
+    vehicle_required: '#f-vehicle',
+    reference_required: '#f-reference',
+    movement_required: '#f-movement',
+    project_required: '#f-project'
+  };
+
   $('#identify-continue').addEventListener('click', async () => {
     const value = $('#identify-value').value.trim();
     if (!value) return startFlow();
     const isEmail = value.includes('@');
+
+    /*
+     * A half-typed number is caught here, at the first screen that asks for
+     * one, rather than being carried forward and refused by the server at the
+     * very end — where the visitor has already taken a photo, signed the site
+     * rules and watched the induction, and has nothing to do about it.
+     */
+    if (!isEmail && !looksLikeName(value) && usPhones()) {
+      const seen = window.Phone.check(value);
+      if (!seen.ok) {
+        const note = $('#identify-result');
+        note.textContent = t(seen.message) || t('Please check that phone number.');
+        note.classList.add('error');
+        note.classList.remove('hidden');
+        return;
+      }
+      $('#identify-value').value = seen.formatted;
+    }
 
     // Name typed: offer the matches so they can pick themselves.
     if (!isEmail && looksLikeName(value) && state.cfg.kiosk.lookup_by_name) {
@@ -1059,6 +1145,7 @@
         return;
       }
       state.induction = r.induction || { required: false, slideshow: null };
+      state.defaultProject = r.default_project || null;
       if (r.found && r.visitor) {
         state.visitor = r.visitor;
         $('#f-name').value = r.visitor.full_name || '';
@@ -1101,6 +1188,21 @@
    * knows is filled in; nothing is locked, because the plan can be wrong and
    * the person standing there is the authority on who they are.
    */
+  /*
+   * The job this person is probably here for, filled in but never locked.
+   *
+   * Only ever into an empty field: a booking that names a project, or a visitor
+   * who has already chosen, both outrank a guess made from their employer.
+   */
+  function applyDefaultProject(suggestion) {
+    if (!suggestion || !suggestion.id) return;
+    const select = $('#f-project');
+    if (!select || select.value) return;
+    // Only if the kiosk is actually offering that project.
+    if (![...select.options].some((o) => o.value === String(suggestion.id))) return;
+    select.value = String(suggestion.id);
+  }
+
   function applyExpected(booking) {
     if (!booking) return false;
     state.expected = booking;
@@ -1167,6 +1269,7 @@
         language: state.lang
       });
       $('#identify-matches').innerHTML = '';
+      state.defaultProject = r.default_project || state.defaultProject;
       if (r.found && r.visitor) {
         state.visitor = r.visitor;
         state.induction = r.induction || state.induction;
@@ -1314,12 +1417,42 @@
 
   /* --------------------------------------------------------------- details */
 
-  $('#f-phone').addEventListener('input', (e) => {
-    if (!usPhones()) return;
-    const el = e.target;
-    // Only reformat when typing at the end, so editing mid-number is not fought.
-    if (el.selectionStart !== el.value.length) return;
-    el.value = window.Phone.formatAsTyped(el.value);
+  /*
+   * A number takes its shape as it is typed — (415) 268-0101 — rather than
+   * being tidied up afterwards. Somebody can see at a glance whether they have
+   * given ten digits or nine, which is most of what goes wrong.
+   *
+   * Both boxes that ask for one, because the first screen is where a partial
+   * number used to get in and cause trouble at the very end.
+   */
+  ['#f-phone', '#identify-value'].forEach((sel) => {
+    const box = $(sel);
+    if (!box) return;
+    box.addEventListener('input', (e) => {
+      if (!usPhones()) return;
+      const el = e.target;
+      // An email or a name typed into the lookup box is not a number.
+      if (sel === '#identify-value' && /[a-z@]/i.test(el.value)) return;
+      // Only reformat when typing at the end, so editing mid-number is not fought.
+      if (el.selectionStart !== el.value.length) return;
+      el.value = window.Phone.formatAsTyped(el.value);
+    });
+  });
+
+  /*
+   * Somebody who has never been here before names their firm on this screen,
+   * and that is the first moment anything can guess which job they are on. Asked
+   * on blur rather than on every keystroke, and only when the project field is
+   * showing and still empty.
+   */
+  $('#f-company').addEventListener('blur', async () => {
+    const select = $('#f-project');
+    const company = $('#f-company').value.trim();
+    if (!select || select.value || !company || select.offsetParent === null) return;
+    try {
+      const r = await api('/lookup', { company, visit_type: state.visitType, language: state.lang });
+      applyDefaultProject(r.default_project);
+    } catch { /* a guess that cannot be made is not worth a message */ }
   });
 
   $('#details-continue').addEventListener('click', async () => {
@@ -2071,10 +2204,44 @@
 
   // A confirm button tapped twice must not become two check-ins.
   let submitting = false;
+  /**
+   * Where this phone says it is.
+   *
+   * Asked once per check-in, at submit rather than on arrival: a permission
+   * prompt on the welcome screen, before somebody has decided to sign in at
+   * all, is the fastest way to get it denied for good.
+   *
+   * A refusal or a timeout comes back as null rather than throwing — the
+   * server decides what a missing fix means, because that is a site policy and
+   * not something the phone should get a vote on.
+   */
+  function askWhereWeAre() {
+    if (!navigator.geolocation) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      // Ten seconds: long enough for a real fix outdoors, short enough that
+      // somebody is not left staring at a spinner at a gate in the rain.
+      const done = setTimeout(() => resolve(null), 10000);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          clearTimeout(done);
+          resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy });
+        },
+        () => { clearTimeout(done); resolve(null); },
+        { enableHighAccuracy: true, timeout: 9000, maximumAge: 60000 }
+      );
+    });
+  }
+
   async function submitSignIn() {
     if (submitting) return;
     submitting = true;
-    try { await doSubmitSignIn(); } finally { submitting = false; }
+    try {
+      if (state.selfCode && !state.location) {
+        toast(t('Checking you are on site…'), 9000);
+        state.location = await askWhereWeAre();
+      }
+      await doSubmitSignIn();
+    } finally { submitting = false; }
   }
 
   async function doSubmitSignIn() {
@@ -2102,6 +2269,9 @@
       photo: state.photo,
       documents: state.signedDocs,
       device_id: state.deviceId,
+      // Only ever set on a phone check-in; the tablet at the gate sends neither.
+      self_code: state.selfCode || undefined,
+      location: state.selfCode ? state.location : undefined,
       induction_completed: inductionDone,
       induction_signature: inductionDone ? state.inductionSignature : null,
       slideshow_id: inductionDone && state.induction.slideshow ? state.induction.slideshow.id : null,
@@ -2131,10 +2301,35 @@
       state.lastResult = result;
       showDone(result);
     } catch (err) {
-      // A response with a status is the server refusing; without one the
-      // server was never reached — save the sign-in and let them go on site.
+      /*
+       * A response with a status is the server refusing; without one the
+       * server was never reached — save the sign-in and let them go on site.
+       *
+       * A refusal is nearly always something on the details screen: a phone
+       * number that cannot exist, a missing name. Showing a toast on whatever
+       * screen the visitor happened to finish on left them at a dead end —
+       * they had signed the rules and watched the induction, and the only
+       * button in front of them tried the same thing again. So a refusal takes
+       * them back to the form, with the reason on it, where it can be fixed.
+       */
       if (err.status) {
-        return toast(err.data && err.data.message ? err.data.message : t('Sorry, something went wrong. Please see reception.'));
+        const code = err.data && err.data.error;
+        const message = t((err.data && err.data.message) || FIELD_REFUSALS[code] || '')
+          || t('Sorry, something went wrong. Please see reception.');
+        // Minted again on the next attempt: the refused one recorded nothing,
+        // and reusing it would make the corrected sign-in look like a repeat.
+        state.clientRef = null;
+        if (state.flow.includes('details')) {
+          state.flowIndex = state.flow.indexOf('details');
+          setScreen('details');
+          const box = $('#details-error');
+          box.textContent = message;
+          show(box, true);
+          const field = REFUSAL_FIELD[code];
+          if (field) { const el = $(field); if (el) { el.focus(); el.select && el.select(); } }
+          return;
+        }
+        return toast(message);
       }
       payload.queued_at = new Date().toISOString();
       try {

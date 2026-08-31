@@ -60,6 +60,17 @@ const NAMES = ['John Doe', 'Jane Doe', 'Sam Doe', 'Alex Doe'];
   let dash = (await req('GET', '/api/admin/dashboard')).data;
   ok('the dashboard knows the examples are on file', dash.health.examples.present === true,
     JSON.stringify(dash.health.examples));
+  /*
+   * The two facts are reported separately, and the dashboard offers to clear
+   * them on `present` alone — a site deployed this morning has no real visits
+   * yet, and that is precisely when somebody wants the examples gone. Only the
+   * wording turns on `real_visits`.
+   *
+   * The value itself is not asserted: on a full run api-test has already put
+   * real visits on this database, so it is true by the time this suite starts.
+   */
+  ok('…and says separately whether any real visit has happened, so the offer can be worded either way',
+    typeof dash.health.examples.real_visits === 'boolean', JSON.stringify(dash.health.examples));
 
   const DETAILS_BEFORE = (await req('GET', '/api/admin/settings')).data.details;
   await req('PUT', '/api/admin/settings', {

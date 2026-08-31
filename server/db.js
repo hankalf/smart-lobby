@@ -518,6 +518,30 @@ function migrate() {
   addColumn('devices', 'slug', 'TEXT');
 
   /*
+   * When a tablet was last reported as having gone quiet, so it is said once
+   * rather than every five minutes for the rest of the weekend. Cleared when
+   * it checks in again, which is also what makes "it is back" sayable.
+   */
+  addColumn('devices', 'offline_notified_at', 'TEXT');
+
+  /*
+   * Whether this device offers a phone check-in, and the code in that link.
+   * Separate from the device slug on purpose: the slug is printed on a sticker
+   * and shared freely, while this one grants a sign-in and can be reissued
+   * without reprinting the tablet's own address.
+   */
+  /*
+   * The job a firm is usually on site for. A crew from Vega Electrical are on
+   * the warehouse job every day for four months, and asking each of them to
+   * pick it off a dropdown at seven in the morning is forty taps a week that
+   * nobody wanted to make.
+   */
+  addColumn('companies', 'default_project_id', 'INTEGER REFERENCES projects(id) ON DELETE SET NULL');
+
+  addColumn('devices', 'self_checkin', 'INTEGER NOT NULL DEFAULT 0');
+  addColumn('devices', 'self_code', 'TEXT');
+
+  /*
    * A webhook post that fails is worth trying again — Teams having a bad thirty
    * seconds should not cost an arrival its notification. These carry what is
    * needed to send it a second time, and how many goes it has had.

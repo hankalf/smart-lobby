@@ -19,6 +19,27 @@ const files = require('./files');
 
 migrate();
 
+/*
+ * Clearing the sample records at deploy time.
+ *
+ * The dashboard has a button for this, but a site that is already live wants
+ * it gone without somebody remembering to press it — and a redeploy is the
+ * natural moment. Set CLEAR_EXAMPLES=true and every example record goes on the
+ * next start; it is safe to leave set, because once they are gone it does
+ * nothing.
+ *
+ * Only ever the examples: they carry a flag in the database, so this cannot
+ * reach a real visitor who happens to be called John Doe.
+ */
+if (process.env.CLEAR_EXAMPLES === 'true') {
+  try {
+    const gone = require('./examples').clear();
+    if (gone) console.log(`[examples] cleared ${gone} sample record(s) — CLEAR_EXAMPLES is set`);
+  } catch (err) {
+    console.error('[examples] could not clear the samples:', err.message);
+  }
+}
+
 const app = express();
 app.set('trust proxy', 1);
 /*
@@ -80,6 +101,13 @@ function cspFor(req) {
     .replace("connect-src 'self'", `connect-src 'self' ${origin}`)
     .replace("frame-src 'self'", `frame-src 'self' ${origin}`);
 }
+
+/*
+ * Remember the address people actually reach this on, so links we hand out —
+ * the on-site board, the photo in a Teams card — point somewhere real without
+ * anybody having to set PUBLIC_URL. See notify.baseUrl().
+ */
+app.use((req, res, next) => { require('./notify').rememberOrigin(req); next(); });
 
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -182,6 +210,22 @@ app.get('/admin', (req, res) => res.redirect('/admin/'));
  * itself and a slug can never shadow one.
  */
 const devices = require('./devices');
+
+/*
+ * A phone check-in: /go/<code>.
+ *
+ * Short and typeable, because it is printed on a sign at a gate and read off a
+ * phone camera. It serves the same kiosk app in a mode that asks the phone
+ * where it is before it will submit — see server/geofence.js for what that
+ * does and, more importantly, what it does not.
+ *
+ * The code is not checked here. It is checked at sign-in, where refusing it
+ * can say something useful; refusing to serve the page would only produce a
+ * blank screen at a gate with no explanation on it.
+ */
+app.get('/go/:code', (req, res) => {
+  res.sendFile(path.join(PUBLIC_WEB, 'kiosk', 'index.html'));
+});
 
 /**
  * A web app manifest per device, so "Add to Home Screen" on an iPad saves an
@@ -333,6 +377,49 @@ setInterval(purgeOldData, 24 * 60 * 60 * 1000);
 setInterval(() => {
   try { require('./storage').shed(); } catch (err) { console.error('[storage]', err.message); }
 }, 60 * 60 * 1000).unref?.();
+
+/*
+ * A tablet that has stopped checking in.
+ *
+ * Kiosks report every 20 seconds, so silence for longer than the configured
+ * window is a real absence rather than a dropped packet. Checked every two
+ * minutes: the point of this is that somebody hears about a dead gate kiosk
+ * while there is still a day left to fix it, and a check that ran hourly would
+ * put an hour on top of the window before anybody was told.
+ *
+ * Said once per outage, not once per check — `offline_notified_at` is stamped
+ * when it is announced and cleared when the tablet checks in again, which is
+ * also what makes "it is back" sayable exactly once.
+ */
+function watchDevices() {
+  const n = settings.getSection('notify');
+  if (!n.on_device_offline) return;
+  const minutes = Math.min(1440, Math.max(2, Number(n.device_quiet_minutes) || 15));
+  const cutoff = new Date(Date.now() - minutes * 60_000).toISOString();
+
+  const gone = all(`SELECT d.*, l.name AS location_name FROM devices d
+                    LEFT JOIN locations l ON l.id = d.location_id
+                    WHERE d.last_seen_at IS NOT NULL AND d.last_seen_at < ?
+                      AND d.offline_notified_at IS NULL`, cutoff);
+  for (const device of gone) {
+    run('UPDATE devices SET offline_notified_at = ? WHERE id = ?', nowISO(), device.id);
+    console.log(`[devices] ${device.name} has not checked in for ${minutes} minutes`);
+    require('./notify').notifyDevice(device, 'down').catch((err) => console.error('[devices]', err.message));
+  }
+
+  const back = all(`SELECT d.*, l.name AS location_name FROM devices d
+                    LEFT JOIN locations l ON l.id = d.location_id
+                    WHERE d.offline_notified_at IS NOT NULL AND d.last_seen_at >= ?`, cutoff);
+  for (const device of back) {
+    run('UPDATE devices SET offline_notified_at = NULL WHERE id = ?', device.id);
+    console.log(`[devices] ${device.name} is checking in again`);
+    require('./notify').notifyDevice({ ...device, last_seen_at: device.offline_notified_at }, 'back')
+      .catch((err) => console.error('[devices]', err.message));
+  }
+}
+setInterval(() => {
+  try { watchDevices(); } catch (err) { console.error('[devices]', err.message); }
+}, 2 * 60 * 1000).unref?.();
 
 /*
  * A nightly copy of the database, kept for a week. The first one is written a

@@ -10,8 +10,45 @@ const photolink = require('./photolink');
  * redeploy, which matters because a wrong value here shows up only as a card
  * with a missing picture.
  */
+/*
+ * Where this install can be reached from outside.
+ *
+ * Four answers, best first, because getting this wrong is invisible until
+ * somebody clicks a link:
+ *
+ *   1. What an administrator typed, if they typed one.
+ *   2. PUBLIC_URL, for a deployment that sets it.
+ *   3. The host of a real request that has actually arrived — which needs no
+ *      configuration at all and is right by construction. Remembered, so a
+ *      notification sent from a background job hours later still has it.
+ *   4. Railway's own domain variable, so a fresh deploy is right before the
+ *      first request arrives.
+ *
+ * localhost is the last resort and means nothing has told us anything. It used
+ * to be the only fallback, which is how a site running on Railway with no
+ * PUBLIC_URL set handed out an on-site board link pointing at localhost:8080 —
+ * a link that works on the server and nowhere else in the world.
+ */
+let seenOrigin = '';
+
+/** Remember the origin a real request arrived on. See baseUrl above. */
+function rememberOrigin(req) {
+  try {
+    const proto = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    if (!host || /^localhost|^127\.|^\[?::1\]?/i.test(host)) return;
+    seenOrigin = `${String(proto).split(',')[0].trim()}://${String(host).split(',')[0].trim()}`;
+  } catch { /* a malformed header is not worth failing a request over */ }
+}
+
 const baseUrl = () => {
-  const configured = settings.getSection('notify').public_url || process.env.PUBLIC_URL || '';
+  const railway = process.env.RAILWAY_PUBLIC_DOMAIN
+    ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : '';
+  const configured = settings.getSection('notify').public_url
+    || process.env.PUBLIC_URL
+    || seenOrigin
+    || railway
+    || '';
   return (configured || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
 };
 
@@ -346,10 +383,16 @@ function health() {
   const failed = recent.filter((r) => r.status !== 'sent' && r.status !== 'sending' && r.status !== 'retrying').length;
   const waiting = all("SELECT id FROM notifications WHERE status = 'retrying'").length;
 
+  /*
+   * The same window the device watch uses, rather than a fixed hour of its
+   * own: a site that set the threshold to five minutes because the gate matters
+   * should not then wait an hour for the dashboard to agree.
+   */
+  const quietAfter = Math.min(1440, Math.max(2, Number(settings.getSection('notify').device_quiet_minutes) || 15));
   const quiet = all(
     `SELECT name, last_seen_at FROM devices
      WHERE last_seen_at IS NOT NULL AND last_seen_at < ? ORDER BY last_seen_at`,
-    new Date(Date.now() - 60 * 60_000).toISOString());
+    new Date(Date.now() - quietAfter * 60_000).toISOString());
 
   const configured = !!settings.getSection('notify').global_webhook_url;
   return {
@@ -419,7 +462,58 @@ async function notifyCancelled(v) {
   });
 }
 
+/**
+ * A tablet that has stopped checking in, and one that has come back.
+ *
+ * Not a visitor event, so it does not go through the card designer: a site
+ * notice should look like a site notice wherever it lands, and there is no
+ * visitor to design a card around. It is posted to the company channel only —
+ * the person a visitor came to see has no use for it, and waking every host
+ * on the site because a tablet rebooted is how people mute the channel.
+ */
+async function notifyDevice(device, state) {
+  const n = settings.getSection('notify');
+  if (!n.on_device_offline) return;
+  const down = state === 'down';
+  const quiet = device.last_seen_at
+    ? Math.round((Date.now() - Date.parse(device.last_seen_at)) / 60000) : null;
+
+  const model = {
+    event: down ? 'device_offline' : 'device_back',
+    title: down ? `Kiosk offline — ${device.name}` : `Kiosk back online — ${device.name}`,
+    subtitle: down
+      ? 'It has stopped checking in. Nobody can sign in or out on it until it is back.'
+      : 'It is checking in again.',
+    fields: [
+      { label: 'Tablet', value: device.name },
+      ...(device.location_name ? [{ label: 'Where', value: device.location_name }] : []),
+      { label: down ? 'Last seen' : 'Was quiet for',
+        value: down
+          ? `${fmtTime(device.last_seen_at)}${quiet != null ? ` — ${quiet} minutes ago` : ''}`
+          : (quiet != null ? `${quiet} minutes` : 'a while') }
+    ],
+    photoUrl: null,
+    photoPlacement: 'top',
+    photoShape: 'square',
+    photoSize: 'small',
+    headerStyle: down ? 'attention' : 'good',
+    detailsStyle: 'facts',
+    footer: null,
+    mention: null,
+    mentionTemplate: null,
+    alsoMention: [],
+    alsoTemplate: null,
+    // Somewhere to go and look: the Devices page says what every tablet is
+    // doing, which is the next thing anybody reading this wants.
+    links: [{ id: 'devices', label: 'Open Devices', url: `${baseUrl()}/admin/#devices` }]
+  };
+
+  // The company channel only — see above.
+  await sendWebhooks({ ownUrl: null, extraUrls: [], model, visit_id: null });
+}
+
 module.exports = { notifyArrival, notifyDeparture, notifyDelivery, notifyInduction, notifyCancelled,
+  notifyDevice,
   detailFor: visitDetail,
-  sendWebhook, sendWebhooks, webhookTargets, baseUrl, boardUrl, cardPhotoUrl, cardContext, visitDetail, fmtTime,
+  sendWebhook, sendWebhooks, webhookTargets, baseUrl, rememberOrigin, boardUrl, cardPhotoUrl, cardContext, visitDetail, fmtTime,
   retryPending, health, RETRY_DELAYS_MS, typeNotified, routedStaff };

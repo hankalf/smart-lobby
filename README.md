@@ -188,6 +188,20 @@ kiosk says to see reception), and notifications, which go out when the sign-in i
    - `PUBLIC_URL=https://your-app.up.railway.app` (used for photo links inside notification emails)
 4. Deploy. Railway provides HTTPS, so the kiosk camera works out of the box.
 
+`PUBLIC_URL` is worth setting but is no longer load-bearing: the address in a Teams card or a
+"share the board" link is taken from `PUBLIC_URL` if it is set, then from the address a real request
+actually arrived on, then from Railway's own domain. Only a server that has never been visited falls
+back to `localhost`.
+
+Two more variables decide what the sample data does, for a site going straight into real use:
+
+   - `SEED_EXAMPLES=false` — do not create the John Doe example records during first-run setup.
+   - `CLEAR_EXAMPLES=true` — delete the example records at start-up, once. Set it, redeploy, then
+     remove it. Real records are never touched; only the seeded examples are.
+
+Neither is usually needed: while the examples are on file the dashboard offers a **Clear them out**
+button, which is the same thing without a redeploy.
+
 The included `Dockerfile` installs LibreOffice, poppler and metric-compatible fonts, so uploaded
 PowerPoint decks render exactly as they look in PowerPoint. Railway uses a Dockerfile in preference to
 any other builder, so nothing needs configuring — but it does make the image around a gigabyte and the

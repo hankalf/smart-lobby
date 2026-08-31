@@ -517,3 +517,43 @@ code.token { background: var(--bg); padding: .15rem .4rem; border-radius: 5px; f
 @keyframes save-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
 /* Sits above the pill rather than under it. */
 .toast { bottom: 4.25rem; }
+
+
+/* ------------------------------------------------------------ photo zoom */
+/*
+ * A visitor's face, full size, from wherever it is shown small. Reception is
+ * asked "is that the one who came on Tuesday" often enough that a 36px avatar
+ * in a table is not an answer.
+ */
+td .avatar[data-bigphoto], .visit-photo { cursor: zoom-in; }
+.visit-photo { width: 140px; border-radius: 12px; display: block; }
+td .avatar[data-bigphoto]:hover, .visit-photo:hover {
+  outline: 2px solid var(--brand); outline-offset: 2px;
+}
+.photo-zoom {
+  position: fixed; inset: 0; z-index: 90; display: grid; place-items: center;
+  background: rgba(10, 24, 18, .8); cursor: zoom-out; padding: 5vmin;
+}
+.photo-zoom figure { margin: 0; text-align: center; }
+.photo-zoom img {
+  max-width: min(520px, 84vw); max-height: 74vh; border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .45);
+}
+.photo-zoom figcaption {
+  margin-top: .9rem; color: #fff; font-weight: 600; font-size: 1.05rem;
+}
+
+/* --------------------------------------------------------------- QR links */
+/*
+ * A device's two addresses as codes to point a camera at. Sized to be scanned
+ * off a laptop screen from arm's length, which is how the tablet gets set up,
+ * and to survive being printed for the gate.
+ */
+.qr-block { margin-bottom: 1.25rem; }
+.qr-block h3 { margin: 0 0 .5rem; text-transform: none; letter-spacing: 0; font-size: 1rem; color: var(--brand-dark); }
+.qr-img {
+  display: block; width: 200px; height: 200px; background: #fff;
+  border: 1px solid var(--line); border-radius: 10px; padding: 8px;
+}
+.qr-url { margin: .5rem 0 .25rem; overflow-wrap: anywhere; }
+.qr-url code { font-size: .8rem; }

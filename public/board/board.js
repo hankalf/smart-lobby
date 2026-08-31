@@ -50,7 +50,8 @@
     return `<div class="person${isNew ? ' new' : ''}${rollcall ? ' tappable' : ''}${off ? ' accounted' : ''}"
       ${rollcall ? `data-person="${p.id}" role="button" tabindex="0"` : ''}>
       ${p.photo
-        ? `<img class="avatar" src="${esc(p.photo)}" alt="">`
+        ? `<img class="avatar" src="${esc(p.photo)}" alt="" data-zoom="${esc(p.photo)}"
+             data-zoom-name="${esc(p.name)}" data-zoom-sub="${esc(sub)}" tabindex="0" role="button">`
         : `<div class="avatar">${esc(initials(p.name))}</div>`}
       <div class="who">
         <div class="name">${esc(p.name)}</div>
@@ -59,6 +60,39 @@
       <div class="when">${off ? '✓' : esc(time(showOut ? p.out : p.in))}</div>
     </div>`;
   }
+
+  /*
+   * Tapping a face shows it full size.
+   *
+   * Skipped during a roll call: there the whole card is a tap target for
+   * marking somebody accounted for, and a photo that swallowed the tap would
+   * make the roll call miscount — which is the one thing this screen must not
+   * do.
+   */
+  function bindZoom() {
+    if (rollcall) return;
+    const box = document.getElementById('zoom');
+    const open = (el) => {
+      document.getElementById('zoom-img').src = el.dataset.zoom;
+      document.getElementById('zoom-name').textContent = el.dataset.zoomName || '';
+      document.getElementById('zoom-sub').textContent = el.dataset.zoomSub || '';
+      box.hidden = false;
+    };
+    document.querySelectorAll('[data-zoom]').forEach((el) => {
+      el.addEventListener('click', (e) => { e.stopPropagation(); open(el); });
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(el); }
+      });
+    });
+  }
+
+  (function closesTheZoom() {
+    const box = document.getElementById('zoom');
+    if (!box) return;
+    const shut = () => { box.hidden = true; document.getElementById('zoom-img').src = ''; };
+    box.addEventListener('click', shut);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') shut(); });
+  }());
 
   /** Tapping somebody marks them found; tapping again puts them back. */
   function bindRollcall() {
@@ -119,6 +153,7 @@
     $('#left-wrap').hidden = rollcall || !data.left.length;
     $('#left').innerHTML = rollcall ? '' : data.left.map((p) => card(p, { showOut: true })).join('');
     bindRollcall();
+    bindZoom();
 
     // The site's zone arrives with the roster, so the clock is redrawn here as
     // well — otherwise it shows the viewer's own time until the next tick.

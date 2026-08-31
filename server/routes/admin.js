@@ -95,7 +95,11 @@ router.post('/setup', ratelimit.limit({ name: 'setup', windowMs: 60 * 60000, max
    * designer and the Teams preview all have something real to draw on the
    * very first screen rather than saying "nothing yet" four times over.
    */
-  const examples = require('../examples').seed();
+  /*
+   * SEED_EXAMPLES=false skips them entirely, for an install that is going
+   * straight into service and does not want John Doe on the board on day one.
+   */
+  const examples = process.env.SEED_EXAMPLES === 'false' ? { skipped: true } : require('../examples').seed();
   auth.startSession(res, user, req);
   res.json({ ok: true, user, examples });
 });
@@ -1125,9 +1129,56 @@ router.post('/devices', (req, res) => {
   res.json(get('SELECT * FROM devices WHERE id = ?', r.lastInsertRowid));
 });
 
+/*
+ * The links for one device, and their QR codes.
+ *
+ * Two different things, deliberately separate: the tablet's own address, which
+ * goes on the tablet, and the phone check-in address, which goes on a sign at
+ * the gate. Reissuing the second does not disturb the first — the tablet's
+ * home-screen icon keeps working.
+ */
+router.get('/devices/:id/links', (req, res) => {
+  const device = get('SELECT * FROM devices WHERE id = ?', req.params.id);
+  if (!device) return res.status(404).json({ error: 'not_found' });
+  const base = notify.baseUrl();
+  const kiosk = device.slug ? `${base}/kiosk/${encodeURIComponent(device.slug)}` : `${base}/kiosk/`;
+  const self = device.self_checkin && device.self_code ? `${base}/go/${device.self_code}` : null;
+  res.json({
+    kiosk,
+    self,
+    self_enabled: !!device.self_checkin,
+    // Whether phone check-in is switched on for the site at all: a device can
+    // be set up for it and still be inert until the site setting is on.
+    site_enabled: settings.getSection('kiosk').self_checkin_enabled !== false
+      && !!settings.getSection('kiosk').self_checkin_enabled,
+    geofence: require('../geofence').publicSettings()
+  });
+});
+
+/** A fresh phone check-in code, which stops every printed sign at once. */
+router.post('/devices/:id/self-code', (req, res) => {
+  const device = get('SELECT * FROM devices WHERE id = ?', req.params.id);
+  if (!device) return res.status(404).json({ error: 'not_found' });
+  const code = deviceSlugs.newSelfCode();
+  run('UPDATE devices SET self_code = ?, self_checkin = 1 WHERE id = ?', code, device.id);
+  audit(req, 'self_code_issued', 'device', device.id, { name: device.name });
+  res.json({ ok: true, code, url: `${notify.baseUrl()}/go/${code}` });
+});
+
 router.patch('/devices/:id', (req, res) => {
   const b = req.body || {};
-  const fields = ['site_id', 'location_id', 'name', 'mode', 'default_camera', 'print_enabled', 'sections', 'printer_id'];
+  /*
+   * Switching phone check-in on for the first time mints the code, so there is
+   * never a device with the feature on and no link to hand out.
+   */
+  if (b.self_checkin) {
+    const existing = get('SELECT self_code FROM devices WHERE id = ?', req.params.id);
+    if (existing && !existing.self_code) {
+      run('UPDATE devices SET self_code = ? WHERE id = ?', deviceSlugs.newSelfCode(), req.params.id);
+    }
+  }
+  const fields = ['site_id', 'location_id', 'name', 'mode', 'default_camera', 'print_enabled',
+    'sections', 'printer_id', 'self_checkin'];
   const cols = fields.filter((f) => b[f] !== undefined);
   if (cols.length) {
     run(`UPDATE devices SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`,
@@ -1517,6 +1568,14 @@ router.patch('/companies/:id', (req, res) => {
   }
   if (b.notes !== undefined) run('UPDATE companies SET notes = ? WHERE id = ?', clean(b.notes) || null, id);
   if (b.blocked !== undefined) run('UPDATE companies SET blocked = ? WHERE id = ?', b.blocked ? 1 : 0, id);
+  /*
+   * The job this firm is usually on. Filled into the kiosk's project dropdown
+   * for anybody from this company, and overridable there — see server/projects.js.
+   */
+  if (b.default_project_id !== undefined) {
+    run('UPDATE companies SET default_project_id = ? WHERE id = ?',
+      b.default_project_id ? Number(b.default_project_id) : null, id);
+  }
   audit(req, 'update', 'companies', id, b);
   res.json(companies.detail(id));
 });

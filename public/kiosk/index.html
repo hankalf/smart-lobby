@@ -60,7 +60,7 @@
 
   <!-- IDENTIFY --------------------------------------------------------- -->
   <section class="screen" data-screen="identify" hidden>
-    <header class="bar"><h2 id="identify-title">Have you visited us before?</h2><button class="btn ghost" data-back>Back</button></header>
+    <header class="bar"><h2 id="identify-title">Have you visited us before?</h2><button class="btn ghost" data-back>Back</button><button class="btn ghost" data-restart>Start over</button></header>
     <div class="panel">
       <p class="lead" id="identify-lead">Enter your phone number and we'll speed things up.</p>
       <label class="field"><span id="identify-label">Phone number</span>
@@ -77,7 +77,7 @@
 
   <!-- DETAILS ---------------------------------------------------------- -->
   <section class="screen" data-screen="details" hidden>
-    <header class="bar"><h2>Your details</h2><button class="btn ghost" data-back>Back</button></header>
+    <header class="bar"><h2>Your details</h2><button class="btn ghost" data-back>Back</button><button class="btn ghost" data-restart>Start over</button></header>
     <div class="panel">
       <label class="field" id="w-name"><span>Full name *</span><input class="input xl" id="f-name" autocomplete="name"></label>
       <label class="field" id="w-company"><span>Company</span><input class="input" id="f-company"></label>
@@ -130,7 +130,7 @@
 
   <!-- PHOTO ------------------------------------------------------------ -->
   <section class="screen" data-screen="photo" hidden>
-    <header class="bar"><h2>Photo for your badge</h2><button class="btn ghost" data-back>Back</button></header>
+    <header class="bar"><h2>Photo for your badge</h2><button class="btn ghost" data-back>Back</button><button class="btn ghost" data-restart>Start over</button></header>
     <div class="panel center">
       <div class="camera-wrap">
         <video id="cam" autoplay playsinline muted></video>
@@ -151,7 +151,7 @@
 
   <!-- AGREEMENT -------------------------------------------------------- -->
   <section class="screen" data-screen="agreement" hidden>
-    <header class="bar"><h2 id="agreement-title">Site rules</h2><button class="btn ghost" data-back>Back</button></header>
+    <header class="bar"><h2 id="agreement-title">Site rules</h2><button class="btn ghost" data-back>Back</button><button class="btn ghost" data-restart>Start over</button></header>
     <div class="panel" id="agreement-panel">
       <div class="doc" id="agreement-body"></div>
       <p class="muted doc-scroll hidden" id="agreement-scroll"></p>
@@ -178,6 +178,12 @@
           <span id="deck-count" class="deck-count"></span>
           <button class="btn" id="deck-next">Next</button>
         </div>
+        <!--
+          A way out of the deck itself. Without it the induction was a corridor
+          with no doors: somebody who realised at slide four that they had put
+          the wrong name in had to watch to the end or walk away.
+        -->
+        <button class="btn link" id="deck-restart">Start over</button>
       </div>
     </div>
   </section>
@@ -197,6 +203,7 @@
         <button class="btn ghost" id="ack-replay">Watch again</button>
         <button class="btn big" id="ack-confirm">I confirm</button>
       </div>
+      <button class="btn link" id="ack-restart">Start over</button>
     </div>
   </section>
 

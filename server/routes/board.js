@@ -18,6 +18,7 @@ const settings = require('../settings');
 const files = require('../files');
 const auth = require('../auth');
 const ratelimit = require('../ratelimit');
+const localtime = require('../localtime');
 
 const router = express.Router();
 
@@ -77,9 +78,25 @@ router.get('/:key/data', boardLimit, allow, (req, res) => {
   });
 
   const onsite = all(`SELECT ${columns} ${from} WHERE v.status = 'onsite' ORDER BY v.signed_in_at DESC`).map(shape);
+
+  /*
+   * Everybody who has left today, not just the last twenty minutes.
+   *
+   * The short window meant a name vanished off the board while the person was
+   * still walking to their van, and by mid-afternoon the board could not answer
+   * "has the electrician been yet" — which is most of what it gets asked. The
+   * list now holds for the site's own day and empties itself when the next one
+   * starts, so the board reads as a record of the day rather than of the last
+   * few minutes.
+   *
+   * The short window is still used, for the "just arrived" highlight — that is
+   * a different question, and one the client re-decides on every poll.
+   */
+  const day = localtime.dayRange(localtime.today());
   const left = all(`SELECT ${columns} ${from}
-                    WHERE v.status != 'onsite' AND v.signed_out_at IS NOT NULL AND v.signed_out_at >= ?
-                    ORDER BY v.signed_out_at DESC LIMIT 25`, since).map(shape);
+                    WHERE v.status != 'onsite' AND v.signed_out_at IS NOT NULL
+                      AND v.signed_out_at >= ? AND v.signed_out_at < ?
+                    ORDER BY v.signed_out_at DESC LIMIT 200`, day.start, day.end).map(shape);
 
   res.set('Cache-Control', 'no-store').json({
     camera: b.camera_enabled && b.camera_url ? {

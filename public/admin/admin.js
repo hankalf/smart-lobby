@@ -214,6 +214,29 @@
 
   /* ---------------------------------------------------------------- modal */
 
+  /*
+   * A visitor photo, full size, from anywhere in the dashboard.
+   *
+   * Delegated from the document rather than bound per render: the visit record
+   * is redrawn inside a modal, the on-site list is redrawn on every poll, and
+   * re-binding after each one is how a handler quietly stops working.
+   */
+  document.addEventListener('click', (e) => {
+    const img = e.target.closest && e.target.closest('[data-bigphoto]');
+    if (!img) return;
+    e.preventDefault();
+    const box = el(`<div class="photo-zoom" role="dialog" aria-modal="true" aria-label="Visitor photo">
+      <figure>
+        <img src="${esc(img.dataset.bigphoto)}" alt="">
+        <figcaption>${esc(img.dataset.bigphotoName || '')}</figcaption>
+      </figure></div>`);
+    const shut = () => { box.remove(); document.removeEventListener('keydown', onKey); };
+    const onKey = (ev) => { if (ev.key === 'Escape') shut(); };
+    box.addEventListener('click', shut);
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(box);
+  });
+
   function modal(title, contentHtml, onSave, saveLabel = 'Save') {
     const bg = el(`<div class="modal-bg"><div class="modal"><h2>${esc(title)}</h2>
       <div class="modal-body">${contentHtml}</div>
@@ -637,9 +660,22 @@
         <b>Data retention</b> is usually the quickest room to find.</div>`);
     }
 
-    if (h.examples && h.examples.present && h.examples.real_visits) {
-      out.push(`<div class="notice">Your own visits have started arriving, so the example records this site was
-        set up with have done their job. <button class="btn link" id="clear-examples">Clear them out</button></div>`);
+    /*
+     * The offer to clear the examples out used to wait until real visits had
+     * arrived, on the reasoning that until then they are the only thing making
+     * the dashboard legible. That reasoning is wrong for the case that matters
+     * most: somebody who has just deployed this for a real site wants them gone
+     * *before* the first visitor, and had no way to say so short of an
+     * environment variable and a redeploy. So it is offered either way, and
+     * only the wording changes.
+     */
+    if (h.examples && h.examples.present) {
+      out.push(`<div class="notice">${h.examples.real_visits
+        ? `Your own visits have started arriving, so the example records this site was set up with have
+           done their job.`
+        : `This site is showing four example visitors so the dashboard, board and reports have something
+           in them. They are not real and count for nothing — clear them out whenever you like.`}
+        <button class="btn link" id="clear-examples">Clear them out</button></div>`);
     }
 
     const c = h.compliance || {};
@@ -727,7 +763,7 @@
     if (!rows.length) return '<p class="empty">Nobody is signed in at the moment.</p>';
     return `<table><thead><tr><th></th><th>Name</th><th>Company</th><th>Type</th><th>Staff member</th><th>Badge</th><th>Since</th><th></th></tr></thead>
       <tbody>${rows.map((r) => `<tr>
-        <td>${r.photo_path ? `<img class="avatar" src="${esc(r.photo_path)}" alt="">` : '<div class="avatar"></div>'}</td>
+        <td>${r.photo_path ? `<img class="avatar" src="${esc(r.photo_path)}" alt="" data-bigphoto="${esc(r.photo_path)}" data-bigphoto-name="${esc(r.full_name)}">` : '<div class="avatar"></div>'}</td>
         <td><b>${esc(r.full_name)}</b>${r.phone ? `<div class="muted">${esc(r.phone)}</div>` : ''}</td>
         <td>${esc(r.company || '')}</td>
         <td>${esc(r.visit_type)}</td>
@@ -1027,7 +1063,8 @@
     const v = await api(`/visits/${id}`);
     modal(`Visit — ${v.full_name}`, `
       <div class="row" style="align-items:flex-start">
-        ${v.photo_path ? `<img src="${esc(v.photo_path)}" style="width:120px;border-radius:12px">` : ''}
+        ${v.photo_path ? `<img src="${esc(v.photo_path)}" class="visit-photo" data-bigphoto="${esc(v.photo_path)}"
+           data-bigphoto-name="${esc(v.full_name)}" alt="" title="Click to see it full size">` : ''}
         <div>
           <p style="margin:0"><b>${esc(v.full_name)}</b><br>
           <span class="muted">${esc(v.company || '')} ${v.phone ? '· ' + esc(v.phone) : ''} ${v.email ? '· ' + esc(v.email) : ''}</span></p>
@@ -1248,7 +1285,7 @@
       <div class="card section"><div class="table-wrap">${rows.length ? `<table>
         <thead><tr><th></th><th>Received</th><th>Courier</th><th>For</th><th>Parcels</th><th>Tracking</th><th>Status</th><th></th></tr></thead>
         <tbody>${rows.map((r) => `<tr>
-          <td>${r.photo_path ? `<img class="avatar" src="${esc(r.photo_path)}" alt="">` : ''}</td>
+          <td>${r.photo_path ? `<img class="avatar" src="${esc(r.photo_path)}" alt="" data-bigphoto="${esc(r.photo_path)}" data-bigphoto-name="${esc(r.full_name)}">` : ''}</td>
           <td>${fmtDate(r.received_at)}</td>
           <td>${esc(r.courier_company || '')}${r.courier_name ? `<div class="muted">${esc(r.courier_name)}</div>` : ''}</td>
           <td>${esc(r.host_name || r.recipient_text || '')}</td>
@@ -2013,7 +2050,7 @@
       $('#badge-list').innerHTML = rows.length ? `<table>
         <thead><tr><th></th><th>Name</th><th>Company</th><th>Badge</th><th>Signed in</th><th>Status</th><th></th></tr></thead>
         <tbody>${rows.map((r) => `<tr>
-          <td>${r.photo_path ? `<img class="avatar" src="${esc(r.photo_path)}" alt="">` : '<div class="avatar"></div>'}</td>
+          <td>${r.photo_path ? `<img class="avatar" src="${esc(r.photo_path)}" alt="" data-bigphoto="${esc(r.photo_path)}" data-bigphoto-name="${esc(r.full_name)}">` : '<div class="avatar"></div>'}</td>
           <td><b>${esc(r.full_name)}</b></td>
           <td>${esc(r.company || '')}</td>
           <td>${esc(r.badge_no || '—')}</td>
@@ -3393,13 +3430,22 @@
     }));
   };
 
-  function editCompany(id, rows) {
+  async function editCompany(id, rows) {
     const c = rows.find((x) => x.id === id);
+    const projects = (await api('/projects').catch(() => [])).filter((p) => p.active !== 0);
     const m = modal(`Edit ${c.name}`, `
       <label class="field"><span>Name</span><input class="input" id="ce-name" value="${esc(c.name)}">
         <span class="muted">Correcting a spelling here corrects it on all ${c.visits} visit${c.visits === 1 ? '' : 's'}
           already recorded, not only the next one.</span></label>
       <label class="field"><span>Notes</span><textarea class="input" id="ce-notes" rows="3">${esc(c.notes || '')}</textarea></label>
+      <label class="field"><span>Usually here for</span>
+        <select class="input" id="ce-project">
+          <option value="">— no usual job —</option>
+          ${projects.map((p) => `<option value="${p.id}"
+            ${String(c.default_project_id) === String(p.id) ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
+        </select>
+        <span class="muted">Filled in on the kiosk for anybody from this firm, so a crew on the same job for
+          months is not made to pick it every morning. They can still change it.</span></label>
       <label class="check"><input type="checkbox" id="ce-blocked" ${c.blocked ? 'checked' : ''}>
         <span>Bar this company from site<br><span class="muted">Everybody from it is turned away at the kiosk with
           “please see reception”</span></span></label>`,
@@ -3407,6 +3453,7 @@
         const r = await api(`/companies/${id}`, { method: 'PATCH', body: {
           name: $('#ce-name', bg).value.trim(),
           notes: $('#ce-notes', bg).value.trim(),
+          default_project_id: $('#ce-project', bg).value || null,
           blocked: $('#ce-blocked', bg).checked
         } });
         if (r && r.error) return toast(r.message || 'Could not save');
@@ -3447,6 +3494,26 @@
 
   VIEWS.projects = async (root) => {
     const rows = await api('/projects');
+    SETTINGS = await api('/settings');
+    const typeList = ((SETTINGS && SETTINGS.types) || []).filter((t) => t.key);
+    const byType = (SETTINGS.projects && SETTINGS.projects.default_by_type) || {};
+    const defaultsPanel = () => `
+      <div class="card section">
+        <h2>Which job to start on</h2>
+        <p class="muted" style="margin-top:0">A sign-in arrives with a job already chosen, so a crew on the same one
+          for months is not made to pick it every morning. Most specific wins: a firm's usual job — set on the
+          company under <b>Companies</b> — beats the fallback here. Either way the visitor sees it selected and can
+          change it, because the day it is wrong is the day it matters.</p>
+        ${typeList.length ? `<div class="form-grid">
+          ${typeList.map((t) => `<label class="field"><span>${esc(t.label || t.key)}</span>
+            <select class="input" data-pjdefault="${esc(t.key)}">
+              <option value="">— ask them —</option>
+              ${rows.filter((p) => p.active !== 0).map((p) => `<option value="${p.id}"
+                ${String(byType[t.key]) === String(p.id) ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
+            </select></label>`).join('')}
+        </div>` : '<p class="empty">Add a visitor type first.</p>'}
+      </div>`;
+
     root.innerHTML = `
       <h1 class="page">Projects</h1>
       <p class="page-sub">The jobs a contractor can be on site for. They pick one from this list when they sign in, so a
@@ -3473,7 +3540,25 @@
           : '<p class="empty">No projects yet. Add the jobs contractors will be signing in against.</p>'}</div>
         <p class="muted">A finished job is closed with <b>Edit → Active off</b> — it drops off the kiosk but keeps its
           history. A project that has ever been signed in against cannot be removed, only closed.</p>
-      </div>`;
+      </div>
+      ${defaultsPanel()}`;
+
+    // Saved as they are changed, like the rest of the settings.
+    $$('[data-pjdefault]').forEach((sel) => sel.addEventListener('change', async () => {
+      /*
+       * Every type sent, with null for "ask them" — not just the one that
+       * changed, and never by omitting a key. Settings are deep-merged, so a
+       * key left out keeps whatever it had; clearing one requires saying so.
+       */
+      const next = {};
+      typeList.forEach((t) => {
+        const box = $(`[data-pjdefault="${t.key}"]`);
+        next[t.key] = box && box.value ? Number(box.value) : null;
+      });
+      await api('/settings', { method: 'PUT', body: { projects: { default_by_type: next } } });
+      toast('Saved');
+      render('projects');
+    }));
 
     $('#pj-add').addEventListener('click', async () => {
       if (!$('#pj-name').value.trim()) return toast('Give the project a name');
@@ -3557,6 +3642,7 @@
               <td>${fmtDate(d.last_seen_at)}</td>
               <td><span class="pill ${online ? 'on' : 'off'}">${online ? 'online' : 'offline'}</span></td>
               <td><button class="btn ghost" data-dvcopy="${d.id}">Copy link</button>
+                  <button class="btn ghost" data-dvqr="${d.id}">QR</button>
                   <button class="btn ghost" data-dvedit="${d.id}">Edit</button>
                   <button class="btn ghost" data-dvlink="${d.id}">Link</button>
                   <button class="btn ghost" data-dvdel="${d.id}">Remove</button></td></tr>`;
@@ -3606,6 +3692,54 @@
 
     $$('[data-dvlink]').forEach((b) => b.addEventListener('click', () =>
       showLink(rows.find((x) => String(x.id) === b.dataset.dvlink))));
+
+    /*
+     * The links as codes, to point a camera at.
+     *
+     * Two of them, and they are not interchangeable: the tablet's own address,
+     * for setting a tablet up without typing it; and the phone check-in
+     * address, which goes on a sign at the gate for visitors to scan.
+     */
+    $$('[data-dvqr]').forEach((b) => b.addEventListener('click', async () => {
+      const device = rows.find((x) => String(x.id) === b.dataset.dvqr);
+      let links;
+      try { links = await api(`/devices/${device.id}/links`); }
+      catch { return toast('Could not read that device’s links'); }
+
+      const block = (title, url, note) => `
+        <div class="qr-block">
+          <h3>${esc(title)}</h3>
+          <img class="qr-img" src="/api/qr?text=${encodeURIComponent(url)}" alt="">
+          <p class="muted qr-url"><code class="token">${esc(url)}</code></p>
+          <p class="muted">${note}</p>
+        </div>`;
+
+      modal(`${device.name} — links`, `
+        ${block('This tablet', links.kiosk,
+    'Open this on the tablet, then Add to Home Screen. It always comes back showing this device’s cards.')}
+        ${links.self
+    ? block('Check in from a phone', links.self,
+      'Print this and put it where visitors arrive. Scanning it opens the sign-in on their own phone.'
+      + (links.geofence.enabled
+        ? ` Sign-ins are refused more than ${links.geofence.radius_m} m from the site.`
+        : ' <b>No site location is set</b>, so this is not limited to people who are actually here — '
+          + 'set one under Settings → Kiosk sign-in flow.'))
+    : `<div class="notice"><b>Phone check-in is off for this device.</b> Turn it on with
+         <b>Edit</b>, and switch it on for the site under
+         <b>Settings → Kiosk sign-in flow</b>.</div>`}
+        ${links.self ? `<div class="row"><button class="btn ghost" id="qr-reissue">Reissue the phone link</button>
+          <span class="muted">Every printed sign stops working.</span></div>` : ''}`, null);
+
+      const reissue = $('#qr-reissue');
+      if (reissue) {
+        reissue.addEventListener('click', async () => {
+          if (!confirm('Issue a new phone check-in link? Every sign already printed will stop working.')) return;
+          await api(`/devices/${device.id}/self-code`, { method: 'POST' });
+          toast('New link issued — reprint the sign');
+          $$('.modal-bg [data-close]').forEach((x) => x.click());
+        });
+      }
+    }));
 
     // One press, straight from the list — the common case is emailing a link to
     // whoever is standing at the tablet.
@@ -3665,6 +3799,10 @@
           ${printers.map((p) => `<option value="${p.id}" ${p.id === d.printer_id ? 'selected' : ''}>${esc(p.name)}${p.model ? ` (${esc(p.model)})` : ''}</option>`).join('')}
         </select>
         <span class="muted">From the Printers tab — records which printer this tablet prints to.</span></label>
+        <label class="check"><input type="checkbox" id="de-self" ${d.self_checkin ? 'checked' : ''}>
+          <span>Offer check-in from a phone<br><span class="muted">Produces a second link, and a QR code to
+            print for the gate. Visitors scan it and sign in on their own phone. Also needs switching on for
+            the site under <b>Settings → Kiosk sign-in flow</b>, where the site location is set.</span></span></label>
         <p class="muted">More operational modes are coming; every device runs in kiosk mode for now.</p>`,
         async (bg, close) => {
           const picked = sectionOrder.filter((k) => enabled.has(k));
@@ -3684,6 +3822,7 @@
             // card added later still appears on this device.
             sections: isDefault ? null : JSON.stringify(picked),
             print_enabled: $('#de-print', bg).checked,
+            self_checkin: $('#de-self', bg).checked,
             printer_id: $('#de-printer', bg).value ? Number($('#de-printer', bg).value) : null } });
           close(); render('devices');
         });
@@ -4104,7 +4243,33 @@
       </div>
 
       <div class="card section" id="set-flow"><h2>Kiosk sign-in flow</h2>
-        <h3 style="margin-top:0">How check-in works</h3>
+        <h3 style="margin-top:0">Checking in from a phone</h3>
+        <p class="muted" style="margin-top:0">A QR code at the gate that opens the sign-in on a visitor's own
+          phone. Useful when one tablet has a queue behind it, or when the tablet is dead. Switch it on per
+          device under <b>Devices</b>, which is also where the code to print is.</p>
+        ${chk('kiosk.self_checkin_enabled', 'Allow visitors to check in from their own phone')}
+
+        <h4 style="margin-bottom:.25rem">Only from the site itself</h4>
+        <p class="muted" style="margin-top:0">A phone check-in can be refused when the phone says it is
+          somewhere else. Worth being straight about what that is: a browser reports whatever coordinates it
+          chooses to, so this stops somebody signing in from the car park on the way past or from home on a
+          Monday — not somebody who has decided to cheat and knows how. It applies to phone check-ins only;
+          a tablet bolted to the gate answers the question by being there.</p>
+        ${chk('geofence.enabled', 'Refuse phone check-ins from away from the site')}
+        <div class="form-grid">
+          ${txt('geofence.lat', 'Site latitude', 'number')}
+          ${txt('geofence.lng', 'Site longitude', 'number')}
+          ${txt('geofence.radius_m', 'How far out is still “here” (metres)', 'number')}
+        </div>
+        <div class="row"><button class="btn subtle" id="geo-here" type="button">Use where I am now</button>
+          <span class="muted" id="geo-here-note">Stand on the site and press this from a phone or laptop.</span></div>
+        ${chk('geofence.require_location', 'Refuse a phone that will not say where it is')}
+        <p class="muted">With that off, a visitor whose phone has location switched off is let through and the
+          visit is recorded as usual — which is often the right trade, because a real visitor with a stubborn
+          phone is a far more common problem than somebody trying it on. A fix indoors or among steel is
+          routinely a hundred metres out, so leave the radius generous.</p>
+
+        <h3>How check-in works</h3>
         <p class="muted" style="margin-top:0">Finding the visitor always comes first — it decides whether they need
           the induction at all. Everything after that is yours to arrange, and it can differ per type. A step that
           does not apply is skipped wherever it sits: no photo asked for, no documents for that type, an induction
@@ -5533,6 +5698,35 @@
       } catch {
         box.innerHTML = '<div class="notice error">Could not run the test.</div>';
       } finally { btn.disabled = false; }
+    });
+
+    /*
+     * The site's coordinates, read from the browser of whoever is standing on
+     * it. Far easier than finding them on a map, and it is the one number here
+     * that is tedious to get right by hand.
+     */
+    const geoHere = $('#geo-here');
+    if (geoHere) geoHere.addEventListener('click', () => {
+      const note = $('#geo-here-note');
+      if (!navigator.geolocation) { note.textContent = 'This browser will not report a location.'; return; }
+      note.textContent = 'Asking this browser where it is…';
+      navigator.geolocation.getCurrentPosition((pos) => {
+        const lat = pos.coords.latitude.toFixed(6);
+        const lng = pos.coords.longitude.toFixed(6);
+        const set = (path, value) => {
+          const field = $(`[data-set="${path}"]`);
+          if (!field) return;
+          field.value = value;
+          field.dispatchEvent(new Event('change', { bubbles: true }));
+        };
+        set('geofence.lat', lat);
+        set('geofence.lng', lng);
+        note.textContent = `Set to ${lat}, ${lng} — accurate to about ${Math.round(pos.coords.accuracy)} m.`;
+      }, (err) => {
+        note.textContent = err.code === 1
+          ? 'Location was refused. Allow it for this page and try again.'
+          : 'Could not get a location from this browser.';
+      }, { enableHighAccuracy: true, timeout: 10000 });
     });
 
     $('#backup-now').addEventListener('click', async (e) => {

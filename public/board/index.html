@@ -47,12 +47,22 @@
   </section>
 
   <section id="left-wrap" hidden>
-    <h2 class="group">Just signed out</h2>
+    <h2 class="group">Signed out today</h2>
     <div class="grid dim" id="left"></div>
   </section>
 </main>
 
 <div id="offline" class="offline hidden">Not connected — showing the last update</div>
+
+<!-- A face, full size. Reception is asked "is that the one who came Tuesday"
+     often enough that a thumbnail on a wall board is not an answer. -->
+<div id="zoom" hidden role="dialog" aria-modal="true" aria-label="Visitor photo">
+  <div>
+    <img id="zoom-img" alt="">
+    <div class="zoom-name" id="zoom-name"></div>
+    <div class="zoom-sub" id="zoom-sub"></div>
+  </div>
+</div>
 
 <script src="board.js"></script>
 </body>

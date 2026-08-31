@@ -79,7 +79,14 @@ function duration(from, to) {
  * Adaptive Cards' named sizes are advisory and Teams draws Medium small; an
  * explicit width is the only way to get a picture somebody can recognise.
  */
-const PHOTO_PX = { small: 56, medium: 84, large: 120 };
+/*
+ * Bigger than they were across the board. 120px was the old maximum, and at
+ * that size a face in a Teams channel on a laptop is a thumbnail — recognisable
+ * only if you already know who it is, which is the opposite of the job. The
+ * card is also clickable now, so the size here is the glance and the tap is the
+ * proper look.
+ */
+const PHOTO_PX = { small: 84, medium: 140, large: 200 };
 const PHOTO_SIZES = Object.keys(PHOTO_PX);
 
 /** Teams only understands its own palette, so a card style is a choice, not a colour. */
@@ -388,6 +395,12 @@ function buildModel(eventId, row, notify, ctx) {
     subtitle: fill(c.subtitle_template, tokens) || null,
     fields,
     photoUrl: c.show_photo ? (ctx.photoUrl || null) : null,
+    /*
+     * Where tapping the face leads. The same signed link the card shows, which
+     * is good for as long as the photo is kept — so the picture opens in the
+     * browser at whatever size the screen allows.
+     */
+    photoLinkUrl: c.show_photo ? (ctx.photoUrl || null) : null,
     photoPlacement: c.photo_placement === 'top' ? 'top' : 'left',
     photoShape: c.photo_shape === 'square' ? 'square' : 'person',
     photoSize: PHOTO_SIZES.includes(c.photo_size) ? c.photo_size : 'large',
@@ -466,8 +479,21 @@ function teamsCard(m) {
    * desk, which is the entire point of putting a face on the card.
    */
   const photo = m.photoUrl
-    ? { type: 'Image', url: m.photoUrl, width: `${PHOTO_PX[m.photoSize] || PHOTO_PX.large}px`,
-      style: m.photoShape === 'person' ? 'Person' : 'Default', altText: 'Visitor photo' }
+    ? {
+      type: 'Image',
+      url: m.photoUrl,
+      width: `${PHOTO_PX[m.photoSize] || PHOTO_PX.large}px`,
+      style: m.photoShape === 'person' ? 'Person' : 'Default',
+      altText: 'Visitor photo — tap to see it full size',
+      /*
+       * Tapping the face opens the picture itself. Teams renders a card at
+       * whatever width the window gives it, so on a phone or a narrow channel
+       * even a large image is small; selectAction is the only way to let
+       * somebody actually look at the person without leaving Teams to go and
+       * find the visit record.
+       */
+      ...(m.photoLinkUrl ? { selectAction: { type: 'Action.OpenUrl', title: 'See the photo', url: m.photoLinkUrl } } : {})
+    }
     : null;
 
   /*

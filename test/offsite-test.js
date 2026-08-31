@@ -130,10 +130,19 @@ const FLOW_URL = 'http://127.0.0.1:2755/offsite';
   ok('the dashboard is told the last copy did not get there', health.last_ok === false,
     JSON.stringify(health));
 
-  /* ---- nothing is left lying in the scratch directory ---- */
+  /*
+   * ---- nothing is left lying in the scratch directory ----
+   *
+   * Excluding this suite's own fixture, which is still open and is cleaned up
+   * on the line below. It used to be counted, and the check passed only when
+   * the fixture and a real split happened to land in the same second and share
+   * a directory name — so the internal cleanup removed the fixture too. That
+   * is a coin toss, not a test.
+   */
   const tmp = path.join(DATA_DIR, 'tmp');
+  const mine = path.basename(built.dir);
   const leftovers = fs.existsSync(tmp)
-    ? fs.readdirSync(tmp).filter((n) => n.startsWith('offsite-')) : [];
+    ? fs.readdirSync(tmp).filter((n) => n.startsWith('offsite-') && n !== mine) : [];
   ok('the pieces are cleaned up after sending', leftovers.length === 0, leftovers.join(','));
 
   fs.rmSync(built.dir, { recursive: true, force: true });

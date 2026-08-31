@@ -10,6 +10,8 @@ const { nextBadgeNo } = require('../badges');
 const companies = require('../companies');
 const compliance = require('../compliance');
 const expectedVisits = require('../expected');
+const geofence = require('../geofence');
+const projectDefaults = require('../projects');
 const localtime = require('../localtime');
 const devices = require('../devices');
 const phoneRules = require('../../public/kiosk/phone');
@@ -339,6 +341,15 @@ router.post('/lookup', lookupLimit, (req, res) => {
   const booking = expectedVisits.match({
     code: req.body.code, phone: req.body.phone, email: req.body.email, visit_type: visitType
   });
+  /*
+   * The job this person is probably here for, so the dropdown arrives already
+   * on it. Worked out from their firm where one is known — see server/projects.js.
+   */
+  const suggestedProject = projectDefaults.defaultFor({
+    visitType,
+    companyName: visitor ? visitor.company : clean(req.body.company)
+  });
+
   const expectedPayload = booking ? {
     id: booking.id,
     full_name: booking.full_name,
@@ -359,6 +370,7 @@ router.post('/lookup', lookupLimit, (req, res) => {
     return res.json({
       found: false,
       expected: expectedPayload,
+      default_project: suggestedProject,
       induction: inductionStatus(null, visitType, lang)
     });
   }
@@ -378,6 +390,7 @@ router.post('/lookup', lookupLimit, (req, res) => {
     },
     already_onsite: openVisit || null,
     expected: expectedPayload,
+    default_project: suggestedProject,
     induction: inductionStatus(visitor, visitType, lang)
   });
 });
@@ -415,6 +428,31 @@ router.post('/signin', writeLimit, async (req, res) => {
 
     // Which fields this visitor type must supply is configured per type.
     const fields = settings.fieldsFor(visitType);
+    /*
+     * A phone check-in has to prove it is at the site; a tablet at the gate
+     * does not, because it is bolted to the gate. The code is looked up rather
+     * than believed: a request can claim to be a phone check-in, but it cannot
+     * make up a code for a device that has the feature switched on.
+     */
+    let selfDevice = null;
+    if (clean(b.self_code)) {
+      selfDevice = devices.bySelfCode(b.self_code);
+      if (!selfDevice) {
+        return res.status(403).json({
+          error: 'self_checkin_closed',
+          message: 'This check-in link is no longer active. Please sign in on the tablet at the entrance.'
+        });
+      }
+      if (!settings.getSection('kiosk').self_checkin_enabled) {
+        return res.status(403).json({
+          error: 'self_checkin_off',
+          message: 'Checking in from a phone is switched off here. Please use the tablet at the entrance.'
+        });
+      }
+      const where = geofence.check(b.location || null);
+      if (!where.ok) return res.status(403).json({ error: `geofence_${where.reason}`, message: where.message });
+    }
+
     if (fields.phone === 'required' && !phone) return res.status(400).json({ error: 'phone_required' });
     /*
      * The same check the kiosk makes, applied again here: the tablet is not

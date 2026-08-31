@@ -57,4 +57,22 @@ function resolve({ slug, token }) {
   return bySlug(slug) || byToken(token) || null;
 }
 
-module.exports = { slugify, uniqueSlug, bySlug, byToken, resolve, RESERVED };
+/**
+ * The device a phone check-in code belongs to.
+ *
+ * A code is only ever handed out for a device with self check-in switched on,
+ * and switching it off stops the code working without reissuing anything —
+ * which is the point of checking the flag here rather than only at issue time.
+ */
+function bySelfCode(code) {
+  const clean = String(code || '').trim();
+  if (clean.length < 8) return null;
+  return get('SELECT * FROM devices WHERE self_code = ? AND self_checkin = 1', clean) || null;
+}
+
+/** A fresh code for a device's phone link, replacing whatever it had. */
+function newSelfCode() {
+  return require('crypto').randomBytes(16).toString('hex');
+}
+
+module.exports = { slugify, uniqueSlug, bySlug, byToken, bySelfCode, newSelfCode, resolve, RESERVED };
