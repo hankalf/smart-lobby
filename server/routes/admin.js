@@ -241,6 +241,15 @@ router.get('/dashboard', (req, res) => {
        */
       printers: all(`SELECT id, name, trouble_since FROM printers
                      WHERE trouble_since IS NOT NULL ORDER BY trouble_since`),
+      /*
+       * Every working printer, so the dashboard can offer to flag one.
+       * Reception is who notices badges have stopped, and the Printers page
+       * is administrative — without this the people who can see the problem
+       * would have nowhere to report it. Names and ids only; the rest of a
+       * printer's record stays behind the settings.
+       */
+      printers_known: all(`SELECT id, name FROM printers
+                           WHERE active = 1 AND trouble_since IS NULL ORDER BY name`),
       examples: (() => {
         const examples = require('../examples');
         return { present: examples.present(), real_visits: examples.present() && !examples.onlyExamples() };

@@ -123,6 +123,17 @@ function areaForRequest(method, urlPath) {
   if (segment === 'staff' && method !== 'GET') return 'admin';
   // Reading what is lapsing is reception's job; deciding the rules is not.
   if (segment === 'certificates' && method !== 'GET') return 'visitors';
+  /*
+   * Saying a badge printer has stopped, and saying it is working again.
+   *
+   * Registering printers is configuration and stays administrative, but this
+   * pair is not configuration — it is reporting what you can see from the
+   * desk, and the desk is the only place it can be seen from. Nothing in this
+   * system can reach a printer to check, so gating the report behind an
+   * administrator meant the one group who notice could not say so, and the
+   * feature detected nothing at all.
+   */
+  if (segment === 'printers' && /^\/printers\/\d+\/(trouble|working)$/.test(path)) return 'dashboard';
   return AREA_BY_PREFIX[segment] || 'admin';
 }
 

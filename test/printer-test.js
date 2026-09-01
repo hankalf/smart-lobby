@@ -100,6 +100,56 @@ const dashPrinters = () => req('GET', '/api/admin/dashboard')
   ok('clearing an already-clear printer is a no-op rather than an error',
     r.status === 200 && r.data.unchanged === true, JSON.stringify(r.data));
 
+  /*
+   * ---- reception, who are the entire detection mechanism ----
+   *
+   * The whole feature rests on somebody at the desk noticing that labels have
+   * stopped. Registering printers is configuration and stays administrative,
+   * but if saying "this one has stopped" were administrative too, the one
+   * group who can see the problem could not report it and the feature would
+   * detect nothing at all. That is exactly how it first shipped.
+   */
+  const desk = { email: `desk-${Date.now()}@example.com`, password: 'Testing123!', name: 'Desk', role: 'reception' };
+  const account = (await req('POST', '/api/admin/users', desk)).data;
+  ok('a reception login can be created', !!(account && account.id), JSON.stringify(account).slice(0, 90));
+
+  const owner = cookie;
+  cookie = '';
+  const login = await req('POST', '/api/admin/login', { email: desk.email, password: desk.password });
+  ok('…and can sign in', login.status === 200, JSON.stringify(login.data).slice(0, 80));
+  /*
+   * An account made for somebody else starts on a temporary password and can
+   * do nothing until it is changed — so the report below is being made by a
+   * real, settled reception login rather than by a half-created one.
+   */
+  const chose = await req('POST', '/api/admin/me/password',
+    { current: desk.password, password: 'chosen-by-the-desk-1' });
+  ok('…once they have chosen their own password', chose.status === 200, JSON.stringify(chose.data).slice(0, 80));
+
+  r = await req('POST', `/api/admin/printers/${made.id}/trouble`, { note: 'No labels coming out' });
+  ok('reception can say a printer has stopped', r.status === 200, `${r.status} ${JSON.stringify(r.data)}`);
+
+  const seen = await req('GET', '/api/admin/dashboard');
+  ok('…and the dashboard they are looking at shows it',
+    (((seen.data || {}).health || {}).printers || []).some((p) => p.id === made.id));
+  ok('…and offers them the printers they could report, since they cannot read the register',
+    Array.isArray(((seen.data || {}).health || {}).printers_known),
+    JSON.stringify(((seen.data || {}).health || {}).printers_known));
+
+  r = await req('POST', `/api/admin/printers/${made.id}/working`);
+  ok('reception can say it is working again', r.status === 200, String(r.status));
+
+  /* But the printer register itself stays administrative. */
+  r = await req('GET', '/api/admin/printers');
+  ok('reception still cannot read the printer register', r.status === 403, String(r.status));
+  r = await req('POST', '/api/admin/printers', { name: 'Sneaky' });
+  ok('…nor register one', r.status === 403, String(r.status));
+  r = await req('DELETE', `/api/admin/printers/${made.id}`);
+  ok('…nor remove one', r.status === 403, String(r.status));
+
+  cookie = owner;
+  await req('DELETE', `/api/admin/users/${account.id}`);
+
   /* ---- a printer nobody registered ---- */
   r = await req('POST', '/api/admin/printers/999999/trouble', {});
   ok('marking a printer that does not exist is refused', r.status === 404, String(r.status));

@@ -676,11 +676,12 @@
      * have, and the first time it was wrong nobody would trust the next one.
      */
     if (Array.isArray(h.printers) && h.printers.length) {
-      out.push(`<div class="notice error"><b>Visitors say badges are not printing</b> —
-        ${h.printers.map((p) => esc(p.name)).join(', ')}. Nobody has looked at the
-        ${h.printers.length === 1 ? 'printer' : 'printers'}; this is what people at the kiosk reported.
-        Usually out of labels, switched off, or off its Wi-Fi. Sign-ins are still being recorded.
-        Clear it under <b>Printers</b> once it is sorted.</div>`);
+      out.push(`<div class="notice error"><b>Badges are not printing</b> —
+        ${h.printers.map((p) => esc(p.name)).join(', ')}. Reported from the desk; nothing here can
+        reach a printer to check. Usually out of labels, switched off, or off its Wi-Fi. Sign-ins are
+        still being recorded — only the badge is missing.
+        ${h.printers.map((p) => `<button class="btn link" data-prfixed="${p.id}">${
+  esc(p.name)} is working again</button>`).join(' ')}</div>`);
     }
 
     if (h.examples && h.examples.present) {
@@ -726,6 +727,7 @@
 
   VIEWS.dashboard = async (root) => {
     const d = await api('/dashboard');
+    const h = d.health || {};
     const max = Math.max(1, ...d.week.map((w) => w.n));
     root.innerHTML = `
       <h1 class="page">Dashboard</h1>
@@ -746,6 +748,14 @@
           <div class="row" style="margin:0">
             <button class="btn subtle" id="btn-rollcall">Emergency roll call</button>
             <button class="btn ghost" id="btn-signout-all">Sign out everyone</button>
+            <!--
+              Here rather than only on the Printers page, which is
+              administrative: reception are the ones who notice the labels have
+              stopped, and nothing in this system can reach a printer to find
+              out for itself.
+            -->
+            ${(h.printers_known || []).length
+    ? '<button class="btn ghost" id="btn-printer-down">Badges not printing</button>' : ''}
           </div>
         </div>
         <div class="table-wrap">${onsiteTable(d.onsite)}</div>
@@ -771,6 +781,44 @@
       'Sign out every person currently on site?',
       async () => { const r = await api('/visits/signout-all', { method: 'POST' }); toast(`${r.count} signed out`); render('dashboard'); }));
     bindSignoutButtons(root, () => render('dashboard'));
+
+    /*
+     * Reporting a printer, and clearing it, from the dashboard — where
+     * reception are, rather than on the administrative Printers page they
+     * cannot open. The list comes with the dashboard for the same reason: they
+     * cannot read the printer register either.
+     */
+    const raise = $('#btn-printer-down');
+    if (raise) {
+      raise.addEventListener('click', () => {
+        const known = h.printers_known || [];
+        const bg = modal('Badges are not printing', `
+          <p class="muted" style="margin-top:0">This tells the dashboard, the on-site board and your chat
+            channel at once, so nobody else has to work it out at the gate. Sign-ins carry on as
+            normal — only the badge is missing.</p>
+          ${known.length > 1 ? `<label class="field"><span>Which printer</span>
+            <select class="input" id="pd-which">${known.map((p) =>
+    `<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select></label>` : ''}
+          <label class="field"><span>What is wrong, if you know</span>
+            <input class="input" id="pd-note" placeholder="Out of labels, switched off, offline…"></label>`,
+        async (box, close) => {
+          const which = $('#pd-which', box);
+          const id = which ? which.value : known[0].id;
+          await api(`/printers/${id}/trouble`,
+            { method: 'POST', body: { note: $('#pd-note', box).value.trim() || null } });
+          close();
+          render('dashboard');
+        }, 'Tell everyone');
+        const note = $('#pd-note', bg);
+        if (note) note.focus();
+      });
+    }
+
+    $$('[data-prfixed]').forEach((b) => b.addEventListener('click', async () => {
+      await api(`/printers/${b.dataset.prfixed}/working`, { method: 'POST' });
+      toast('Marked as working again');
+      render('dashboard');
+    }));
   };
 
   function onsiteTable(rows) {
