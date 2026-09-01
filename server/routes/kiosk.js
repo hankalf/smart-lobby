@@ -909,7 +909,16 @@ router.post('/ping', (req, res) => {
   // links handed out before device pages existed, by its token.
   const slug = String(req.body.slug || '');
   const token = String(req.body.token || '');
-  const device = devices.resolve({ slug, token });
+  /*
+   * A phone that scanned the sign says which device it is standing at by the
+   * code on that sign. Without this it said nothing at all — /go/<code> has no
+   * slug in it — so a phone check-in came up showing every card on the site
+   * rather than the ones chosen for that gate, offering to sign people out and
+   * take deliveries at a barrier that does neither.
+   */
+  const selfCode = String(req.body.self_code || '');
+  const device = devices.resolve({ slug, token }) || (selfCode ? devices.bySelfCode(selfCode) : null);
+  const isPhone = !!selfCode && !slug && !token;
 
   if (device) {
     // The kiosk reports the cameras it can see so they can be chosen in the dashboard.
@@ -919,8 +928,16 @@ router.post('/ping', (req, res) => {
           label: String(c.label || '').slice(0, 120)
         })))
       : device.cameras;
-    run('UPDATE devices SET last_seen_at = ?, last_ip = ?, app_version = ?, cameras = ? WHERE id = ?',
-      nowISO(), req.ip, String(req.body.version || ''), cameras, device.id);
+    /*
+     * A visitor's phone is not the tablet, so it does not count as the tablet
+     * checking in. Letting it would keep a dead gate iPad looking alive every
+     * time somebody scanned the sign beside it — which is precisely when you
+     * most want to know the tablet is down.
+     */
+    if (!isPhone) {
+      run('UPDATE devices SET last_seen_at = ?, last_ip = ?, app_version = ?, cameras = ? WHERE id = ?',
+        nowISO(), req.ip, String(req.body.version || ''), cameras, device.id);
+    }
     const location = device.location_id ? get('SELECT name FROM locations WHERE id = ?', device.location_id) : null;
     return res.json({
       ok: true,

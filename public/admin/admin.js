@@ -3902,8 +3902,20 @@
     : `<div class="notice"><b>Phone check-in is off for this device.</b> Turn it on with
          <b>Edit</b>, and switch it on for the site under
          <b>Settings → Kiosk sign-in flow</b>.</div>`}
-        ${links.self ? `<div class="row"><button class="btn ghost" id="qr-reissue">Reissue the phone link</button>
+        ${links.self ? `<div class="row"><button class="btn" id="qr-print">Print the sign</button>
+          <span class="muted">Opens a ready-made sign — print it, or save it as a PDF.</span></div>
+          <div class="row"><button class="btn ghost" id="qr-reissue">Reissue the phone link</button>
           <span class="muted">Every printed sign stops working.</span></div>` : ''}`, null);
+
+      /*
+       * A new tab rather than printing from here: this modal sits inside the
+       * dashboard, and printing it would print the dashboard around it.
+       */
+      const printSign = $('#qr-print');
+      if (printSign) {
+        printSign.addEventListener('click', () =>
+          window.open(`/api/admin/devices/${device.id}/sign`, '_blank', 'noopener'));
+      }
 
       const reissue = $('#qr-reissue');
       if (reissue) {

@@ -101,7 +101,8 @@ function render(stats, ctx = {}) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>:root { --brand: ${esc(org.primary_color || '#1f7a4d')}; }${CSS}</style>
 </head><body>
-<div class="noprint"><button type="button" onclick="window.print()">Print or save as PDF</button></div>
+<div class="noprint"><button type="button" data-print>Print or save as PDF</button></div>
+<script src="/shared/print-button.js"></script>
 <div class="sheet">
 
   <header class="letterhead">

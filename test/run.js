@@ -58,6 +58,7 @@ const SUITES = [
   { name: 'print', file: 'print-test.js' },
   { name: 'check', file: 'check-test.js', browser: true },
   { name: 'printer', file: 'printer-test.js' },
+  { name: 'sign', file: 'sign-test.js', browser: true },
   { name: 'visits', file: 'visits-test.js' },
   { name: 'undo', file: 'undo-test.js' },
   { name: 'selfcheckin', file: 'selfcheckin-test.js' },

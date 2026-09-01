@@ -819,6 +819,15 @@
    */
   function adoptDevice(d) {
     if (!d.slug) return;
+    /*
+     * Never on a phone that scanned the sign. This makes the tablet's address
+     * canonical and saves its token, which is right for the tablet and wrong
+     * for a visitor: it would rewrite /go/<code> to /kiosk/<slug>, throwing
+     * away the code the sign-in has to send — so the check-in would be refused
+     * as coming from no sign at all — and leave a stranger's phone holding a
+     * device token and a home-screen manifest for your gate kiosk.
+     */
+    if (state.selfCode) return;
     state.deviceSlug = d.slug;
     if (d.token || state.deviceToken) localStorage.setItem('sl_device_token', state.deviceToken);
 
@@ -866,7 +875,10 @@
       const res = await fetch('/api/kiosk/ping', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug: state.deviceSlug, token: state.deviceToken, version: '1.0.0', cameras })
+        // The code off the printed sign is how a phone says which gate it is
+        // standing at — there is no slug in /go/<code> to say it with.
+        body: JSON.stringify({ slug: state.deviceSlug, token: state.deviceToken,
+          self_code: state.selfCode || undefined, version: '1.0.0', cameras })
       });
       const d = await res.json();
       state.deviceId = d.device_id;

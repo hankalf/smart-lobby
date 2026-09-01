@@ -1217,6 +1217,68 @@ router.get('/devices/:id/links', (req, res) => {
   });
 });
 
+/**
+ * The sign to put on the wall, ready to print.
+ *
+ * Opened in a tab and printed — which is also how it is saved as a PDF, so it
+ * can be sent to whoever actually owns the laminator. Served as its own page
+ * rather than printed out of the dashboard: the admin stylesheet is built for
+ * a screen with a menu down one side, and a sign is a sheet of paper with one
+ * enormous code on it.
+ *
+ * What the sign says it is for comes from the device's own card list, because
+ * a sign reading "sign in" at a barrier that only takes deliveries sends
+ * people to the wrong place, and the card list is the one thing that knows.
+ */
+router.get('/devices/:id/sign', async (req, res) => {
+  const device = get('SELECT * FROM devices WHERE id = ?', req.params.id);
+  if (!device) return res.status(404).send('No such device');
+  if (!device.self_checkin || !device.self_code) {
+    return res.status(409).type('text/plain')
+      .send('Phone check-in is off for this device. Switch it on under Devices → Edit, '
+        + 'and for the site under Settings → Kiosk sign-in flow.');
+  }
+
+  const url = `${notify.baseUrl()}/go/${device.self_code}`;
+  const org = settings.getSection('org');
+  const location = device.location_id
+    ? get('SELECT name FROM locations WHERE id = ?', device.location_id) : null;
+
+  /*
+   * The card keys this device shows, turned into the words on its buttons.
+   * A device that has never been given a list shows everything, so the sign
+   * says the plain thing rather than reciting the whole set.
+   */
+  let keys = null;
+  try { keys = JSON.parse(device.sections || 'null'); } catch { keys = null; }
+  const labels = {
+    signin: 'Sign in', signout: 'Sign out', delivery: 'Delivery', unlock: 'Request entry'
+  };
+  for (const type of (settings.getSection('types') || [])) {
+    if (type && type.key) labels[type.key] = type.label || type.key;
+  }
+  const cards = Array.isArray(keys) && keys.length
+    // Signing out or asking for a door is not what a printed sign is for.
+    ? keys.filter((k) => k !== 'signout' && k !== 'unlock').map((k) => labels[k] || k)
+    : [];
+
+  let qrSvg = '';
+  try {
+    qrSvg = await require('qrcode').toString(url, { type: 'svg', margin: 0, errorCorrectionLevel: 'M' });
+  } catch { qrSvg = ''; }
+
+  res.type('html').send(require('../sign-print').render({
+    url,
+    qrSvg,
+    deviceName: device.name,
+    location: location ? location.name : '',
+    orgName: org.name || '',
+    logoPath: org.logo_path || '',
+    cards,
+    geofenced: require('../geofence').publicSettings().enabled
+  }));
+});
+
 /** A fresh phone check-in code, which stops every printed sign at once. */
 router.post('/devices/:id/self-code', (req, res) => {
   const device = get('SELECT * FROM devices WHERE id = ?', req.params.id);
