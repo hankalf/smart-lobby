@@ -1226,9 +1226,8 @@ router.get('/devices/:id/links', (req, res) => {
  * a screen with a menu down one side, and a sign is a sheet of paper with one
  * enormous code on it.
  *
- * What the sign says it is for comes from the device's own card list, because
- * a sign reading "sign in" at a barrier that only takes deliveries sends
- * people to the wrong place, and the card list is the one thing that knows.
+ * The address is built here but only ever handed over as the code itself —
+ * see sign-print.js for why it is not printed in words as well.
  */
 router.get('/devices/:id/sign', async (req, res) => {
   const device = get('SELECT * FROM devices WHERE id = ?', req.params.id);
@@ -1244,37 +1243,17 @@ router.get('/devices/:id/sign', async (req, res) => {
   const location = device.location_id
     ? get('SELECT name FROM locations WHERE id = ?', device.location_id) : null;
 
-  /*
-   * The card keys this device shows, turned into the words on its buttons.
-   * A device that has never been given a list shows everything, so the sign
-   * says the plain thing rather than reciting the whole set.
-   */
-  let keys = null;
-  try { keys = JSON.parse(device.sections || 'null'); } catch { keys = null; }
-  const labels = {
-    signin: 'Sign in', signout: 'Sign out', delivery: 'Delivery', unlock: 'Request entry'
-  };
-  for (const type of (settings.getSection('types') || [])) {
-    if (type && type.key) labels[type.key] = type.label || type.key;
-  }
-  const cards = Array.isArray(keys) && keys.length
-    // Signing out or asking for a door is not what a printed sign is for.
-    ? keys.filter((k) => k !== 'signout' && k !== 'unlock').map((k) => labels[k] || k)
-    : [];
-
   let qrSvg = '';
   try {
     qrSvg = await require('qrcode').toString(url, { type: 'svg', margin: 0, errorCorrectionLevel: 'M' });
   } catch { qrSvg = ''; }
 
   res.type('html').send(require('../sign-print').render({
-    url,
     qrSvg,
     deviceName: device.name,
     location: location ? location.name : '',
     orgName: org.name || '',
     logoPath: org.logo_path || '',
-    cards,
     geofenced: require('../geofence').publicSettings().enabled
   }));
 });

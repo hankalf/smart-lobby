@@ -23,30 +23,19 @@ const esc = (s) => String(s == null ? '' : s)
 
 /**
  * @param {object} opts
- * @param {string} opts.url        the /go/<code> address the sign points at
- * @param {string} opts.qrSvg      that address as an SVG QR code, already rendered
+ * @param {string} opts.qrSvg  the /go/<code> address as an SVG QR code, already
+ *                             rendered — the address itself is never printed, see below
  * @param {string} opts.deviceName which entrance this is
  * @param {string} [opts.location] where that is, if the device says
  * @param {string} [opts.orgName]  the site's name, for the top of the sign
  * @param {string} [opts.logoPath] the site's logo, as a data URI
- * @param {string[]} [opts.cards]  what this device offers — "Sign in", "Delivery"
  * @param {boolean} [opts.geofenced] whether a location is required
  */
 function render(opts = {}) {
   const {
-    url = '', qrSvg = '', deviceName = '', location = '', orgName = '',
-    logoPath = '', cards = [], geofenced = false
+    qrSvg = '', deviceName = '', location = '', orgName = '',
+    logoPath = '', geofenced = false
   } = opts;
-
-  /*
-   * What the visitor can do here, named from the device's own card list. A
-   * sign that says "sign in" at a barrier that only takes deliveries sends
-   * people to the wrong place, and the card list is the one thing that
-   * actually knows.
-   */
-  const what = cards.length
-    ? cards.length === 1 ? cards[0] : `${cards.slice(0, -1).join(', ')} or ${cards[cards.length - 1]}`
-    : 'Sign in';
 
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -76,10 +65,7 @@ function render(opts = {}) {
   .where { font-size: 6.5mm; font-weight: 700; margin: 0 0 2mm; }
   .where small { display: block; font-size: 4.5mm; font-weight: 400; color: #555; margin-top: 1mm; }
 
-  /* The address in words, for a phone whose camera will not co-operate. */
-  .url { font-family: "Liberation Mono", "DejaVu Sans Mono", monospace; font-size: 4mm; color: #444;
-         word-break: break-all; margin: 5mm 0 0; }
-  .note { font-size: 4mm; color: #555; margin: 4mm 0 0; line-height: 1.5; }
+  .note { font-size: 4mm; color: #555; margin: 5mm 0 0; line-height: 1.5; }
   @media print { .noprint { display: none !important; } }
   .noprint { margin-top: 10mm; }
   .noprint button {
@@ -91,11 +77,23 @@ function render(opts = {}) {
   <div class="sign">
     ${logoPath ? `<img class="logo" src="${esc(logoPath)}" alt="">` : ''}
     ${orgName ? `<p class="org">${esc(orgName)}</p>` : ''}
-    <h1>${esc(what)} from your phone</h1>
+    <!--
+      One heading for every sign, rather than one built from the device's card
+      list. A gate offering three things produced "Sign in, Contractor or
+      Delivery from your phone", which is a sentence nobody reads from six feet
+      away — and the cards are on the screen the code opens anyway.
+    -->
+    <h1>Check-in from your phone</h1>
     <p class="lead">Point your camera at the code</p>
     <div class="qr">${qrSvg}</div>
     <p class="where">${esc(deviceName)}${location ? `<small>${esc(location)}</small>` : ''}</p>
-    <p class="url">${esc(url)}</p>
+    <!--
+      The address is deliberately not printed. It is a long random code, it is
+      unreadable at sign distance, and nobody types one off a wall — but
+      anybody photographing the sign gets a permanent copy of a working
+      check-in link in plain text, which is the one thing on here worth not
+      handing out. The code carries it; that is what the code is for.
+    -->
     <p class="note">
       ${geofenced
     ? 'Your phone will ask to share its location — this only works from the site itself. '

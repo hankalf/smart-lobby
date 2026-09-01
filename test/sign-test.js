@@ -57,18 +57,28 @@ async function req(method, p, body) {
   ok('…and where that is', r.text.includes('Sign Test Gate<'));
 
   /*
-   * The heading comes from the device's own cards. Sign-out is dropped: a
-   * printed sign is for arriving, and nobody scans a poster to leave.
+   * One heading on every sign. Built from the device's cards it produced
+   * "Sign in, Contractor or Delivery from your phone" — a sentence nobody
+   * reads from six feet away, and the cards are on the screen the code opens
+   * anyway.
    */
-  ok('the sign says what this entrance is for, from its own card list',
-    /Sign in or Delivery from your phone/.test(r.text),
+  ok('the sign says the same plain thing however many cards the device has',
+    /<h1>Check-in from your phone<\/h1>/.test(r.text),
     (r.text.match(/<h1>[^<]*<\/h1>/) || [''])[0]);
-  ok('…without offering to sign people out from a poster', !/Sign out/.test(r.text));
 
   ok('the code is drawn into the page rather than fetched',
     r.text.includes('<svg') && !/<img[^>]+\/api\/qr/.test(r.text));
+
+  /*
+   * And the address is nowhere on it. It is unreadable at sign distance and
+   * nobody types one off a wall, but anybody photographing the sign would walk
+   * away with a working check-in link in plain text — the one thing on the
+   * sheet worth not handing out.
+   */
   const link = (await req('GET', `/api/admin/devices/${device.id}/links`)).data;
-  ok('…and points at this device’s own check-in address', r.text.includes(link.self), link.self);
+  ok('the check-in address is not printed in words anywhere on the sign',
+    !r.text.includes(link.self) && !/\/go\//.test(r.text),
+    (r.text.match(/[^\s"'>]*\/go\/[^\s"'<]*/) || [''])[0]);
 
   /*
    * ---- the button, in a browser ----
