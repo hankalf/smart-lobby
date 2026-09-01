@@ -234,6 +234,13 @@ router.get('/dashboard', (req, res) => {
       // How full the volume is. Filling it stops sign-ins and the backup that
       // would have warned you, so it is worth a banner rather than a page.
       storage: require('../storage').health(),
+      /*
+       * Printers people have reported as not printing. Nothing here has looked
+       * at a printer — it cannot — so this is a count of what visitors said,
+       * and the dashboard says so in those words.
+       */
+      printers: all(`SELECT id, name, trouble_since FROM printers
+                     WHERE trouble_since IS NOT NULL ORDER BY trouble_since`),
       examples: (() => {
         const examples = require('../examples');
         return { present: examples.present(), real_visits: examples.present() && !examples.onlyExamples() };
@@ -935,6 +942,52 @@ router.get('/printers', (req, res) => {
                 FROM printers pr LEFT JOIN locations l ON l.id = pr.location_id
                 ORDER BY pr.active DESC, pr.name`));
 });
+
+/**
+ * "Badges have stopped coming out of this one" — and, later, that they have
+ * started again.
+ *
+ * A person sets it and a person clears it, because there is nothing to
+ * observe: badges print over AirPrint from the tablet, the server never speaks
+ * to the printer, and on Wireless Direct the printer is on a network only that
+ * tablet has joined. Reception noticing is the whole detection mechanism.
+ *
+ * What this buys over somebody walking round telling people: everyone finds
+ * out at once — the dashboard, the on-site board and the chat channel — and
+ * the next person to reach the gate is not left wondering why there is no
+ * badge.
+ *
+ * Silence never clears it. Nobody mentioning a printer is what a working one
+ * and a dead one both look like on a quiet afternoon.
+ */
+const printerState = (down) => (req, res) => {
+  const printer = get(`SELECT pr.*, l.name AS location_name FROM printers pr
+                       LEFT JOIN locations l ON l.id = pr.location_id WHERE pr.id = ?`, req.params.id);
+  if (!printer) return res.status(404).json({ error: 'not_found' });
+
+  const who = req.user ? (req.user.name || req.user.email) : null;
+  const note = down ? (clean((req.body || {}).note) || null) : null;
+
+  // Already in the state asked for: say so and send nothing, so a second press
+  // does not post a duplicate card to the channel.
+  if (down === !!printer.trouble_since) return res.json({ ok: true, unchanged: true });
+
+  if (down) run('UPDATE printers SET trouble_since = ?, trouble_by = ?, trouble_note = ? WHERE id = ?',
+    nowISO(), who, note, printer.id);
+  else run('UPDATE printers SET trouble_since = NULL, trouble_by = NULL, trouble_note = NULL WHERE id = ?',
+    printer.id);
+
+  audit(req, 'update', 'printer', Number(printer.id),
+    down ? { badges: 'not printing', note } : { badges: 'printing again' });
+
+  notify.notifyPrinter(printer, down ? 'down' : 'back', who, note)
+    .catch((err) => console.error('[printer]', err.message));
+
+  res.json({ ok: true });
+};
+
+router.post('/printers/:id/trouble', printerState(true));
+router.post('/printers/:id/working', printerState(false));
 
 router.post('/printers', (req, res) => {
   const body = printerBody(req.body || {});

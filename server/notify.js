@@ -512,8 +512,70 @@ async function notifyDevice(device, state) {
   await sendWebhooks({ ownUrl: null, extraUrls: [], model, visit_id: null });
 }
 
+/**
+ * A badge printer somebody has marked as not printing, and the same when it is
+ * working again.
+ *
+ * Worded as somebody's report rather than as an observation, because that is
+ * what it is. Nothing here has spoken to the printer — it cannot: badges print
+ * over AirPrint from the tablet, and on Wireless Direct the printer sits on a
+ * network only that tablet has joined. Announcing "the printer is offline"
+ * would be claiming knowledge this system does not have, and the first time it
+ * was wrong nobody would believe the next one.
+ *
+ * @param {object} printer  the printer record
+ * @param {'down'|'back'} state
+ * @param {string} [by]     who said so
+ * @param {string} [note]   what they said about it
+ */
+async function notifyPrinter(printer, state, by, note) {
+  const n = settings.getSection('notify');
+  if (!n.on_printer_trouble) return;
+  const down = state === 'down';
+  const since = printer.trouble_since
+    ? Math.round((Date.now() - Date.parse(printer.trouble_since)) / 60000) : null;
+
+  const model = {
+    event: down ? 'printer_trouble' : 'printer_back',
+    title: down ? `Badges are not printing — ${printer.name}` : `Badges are printing again — ${printer.name}`,
+    subtitle: down
+      ? 'Reported from the desk. Sign-ins are still being recorded — only the badge is missing.'
+      : 'Marked as working again from the desk.',
+    fields: [
+      { label: 'Printer', value: printer.name },
+      ...(printer.location_name ? [{ label: 'Where', value: printer.location_name }] : []),
+      ...(down && printer.label_type ? [{ label: 'Roll', value: printer.label_type }] : []),
+      ...(by ? [{ label: down ? 'Reported by' : 'Cleared by', value: by }] : []),
+      ...(down && note ? [{ label: 'Note', value: note }] : []),
+      ...(!down && since != null ? [{ label: 'Down for', value: `${since} minutes` }] : []),
+      /*
+       * The three things that account for almost every case, in the order
+       * worth checking them. On the card because whoever reads it is usually
+       * nowhere near the printer, and would otherwise walk to it to find out
+       * it is out of labels.
+       */
+      ...(down ? [{ label: 'Worth checking', value: 'Out of labels · switched off · off its Wi-Fi' }] : [])
+    ],
+    photoUrl: null,
+    photoPlacement: 'top',
+    photoShape: 'square',
+    photoSize: 'small',
+    headerStyle: down ? 'attention' : 'good',
+    detailsStyle: 'facts',
+    footer: null,
+    mention: null,
+    mentionTemplate: null,
+    alsoMention: [],
+    alsoTemplate: null,
+    links: [{ id: 'printers', label: 'Open Printers', url: `${baseUrl()}/admin/#printers` }]
+  };
+
+  await sendWebhooks({ ownUrl: null, extraUrls: [], model, visit_id: null });
+}
+
 module.exports = { notifyArrival, notifyDeparture, notifyDelivery, notifyInduction, notifyCancelled,
   notifyDevice,
+  notifyPrinter,
   detailFor: visitDetail,
   sendWebhook, sendWebhooks, webhookTargets, baseUrl, rememberOrigin, boardUrl, cardPhotoUrl, cardContext, visitDetail, fmtTime,
   retryPending, health, RETRY_DELAYS_MS, typeNotified, routedStaff };

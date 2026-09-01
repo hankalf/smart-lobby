@@ -275,6 +275,14 @@ const DEFAULTS = {
      */
     device_quiet_minutes: 15,
     /*
+     * A badge printer marked as not printing. There is no way to ask a printer
+     * directly — printing is AirPrint from the tablet, the server never speaks
+     * to the printer, and on Wireless Direct the printer is on a network only
+     * the tablet has joined — so this fires when somebody at the desk says so,
+     * and tells everyone else at once rather than one person walking round.
+     */
+    on_printer_trouble: false,
+    /*
      * And who is worth posting about. Keyed by visitor type; a type that is
      * not named here notifies, so adding a new one on the Visitor types tab
      * does not silently go unannounced.

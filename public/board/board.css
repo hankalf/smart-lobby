@@ -82,6 +82,22 @@ img.avatar:hover, img.avatar:focus-visible { outline: 2px solid rgba(255, 255, 2
 }
 .hidden { display: none; }
 
+/*
+ * A printer marked as not printing. Amber rather than the red the offline
+ * banner uses: nothing is broken about the sign-in, only the badge, and a
+ * board that shouts the same colour at both teaches people to ignore the one
+ * that matters.
+ */
+.printer-down {
+  margin: 0 1.25rem 1rem;
+  padding: .7rem 1rem;
+  border-radius: 10px;
+  background: rgba(180, 120, 20, .22);
+  border: 1px solid rgba(230, 170, 60, .5);
+  color: #f4d9a6;
+  font-size: 1rem;
+}
+
 /* Across a room: bigger everything, fewer columns. */
 @media (min-width: 1600px) {
   h1 { font-size: 1.9rem; }

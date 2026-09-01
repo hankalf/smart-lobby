@@ -669,6 +669,20 @@
      * environment variable and a redeploy. So it is offered either way, and
      * only the wording changes.
      */
+    /*
+     * Worded as a report and not as a fact, because that is exactly what it
+     * is: nothing has looked at the printer, and nothing can. Saying "the
+     * printer is offline" would be claiming knowledge this system does not
+     * have, and the first time it was wrong nobody would trust the next one.
+     */
+    if (Array.isArray(h.printers) && h.printers.length) {
+      out.push(`<div class="notice error"><b>Visitors say badges are not printing</b> —
+        ${h.printers.map((p) => esc(p.name)).join(', ')}. Nobody has looked at the
+        ${h.printers.length === 1 ? 'printer' : 'printers'}; this is what people at the kiosk reported.
+        Usually out of labels, switched off, or off its Wi-Fi. Sign-ins are still being recorded.
+        Clear it under <b>Printers</b> once it is sorted.</div>`);
+    }
+
     if (h.examples && h.examples.present) {
       out.push(`<div class="notice">${h.examples.real_visits
         ? `Your own visits have started arriving, so the example records this site was set up with have
@@ -2955,8 +2969,15 @@
             <td class="muted">${esc(p.ip_address || (p.port === 'bluetooth' ? '—' : 'auto'))}</td>
             <td class="muted">${esc(p.location_name || '')}</td>
             <td>${p.device_count}</td>
-            <td><span class="pill ${p.active ? 'on' : 'off'}">${p.active ? 'in service' : 'out'}</span></td>
-            <td><button class="btn ghost" data-predit="${p.id}">Edit</button>
+            <td><span class="pill ${p.trouble_since ? 'off' : (p.active ? 'on' : 'off')}">${
+  p.trouble_since ? 'not printing' : (p.active ? 'in service' : 'out')}</span>${
+  p.trouble_since
+    ? `<div class="muted">Since ${esc(fmtDate(p.trouble_since))}${p.trouble_by ? ` · ${esc(p.trouble_by)}` : ''}${
+      p.trouble_note ? `<br>${esc(p.trouble_note)}` : ''}</div>` : ''}</td>
+            <td>${p.trouble_since
+    ? `<button class="btn ghost" data-prok="${p.id}">Working again</button>`
+    : `<button class="btn ghost" data-prdown="${p.id}">Not printing</button>`}
+                <button class="btn ghost" data-predit="${p.id}">Edit</button>
                 <button class="btn ghost" data-prdel="${p.id}">Remove</button></td></tr>`).join('')}</tbody></table>`
           : '<p class="empty">No printers yet. Add the badge printer so devices can point at it.</p>'}</div>
         <p class="muted">Printing itself runs over AirPrint, so a <b>Network</b> printer just needs to share the tablet's
@@ -2995,6 +3016,36 @@
     $$('[data-prdel]').forEach((b) => b.addEventListener('click', () => confirmAction(
       'Remove this printer? Devices pointed at it simply lose the link.',
       async () => { await api(`/printers/${b.dataset.prdel}`, { method: 'DELETE' }); render('printers'); })));
+
+    /*
+     * Marking a printer as not printing, and marking it fixed. Both are a
+     * person's judgement rather than anything observed — nothing here can
+     * reach the printer — so the wording asks what they saw rather than
+     * announcing a fault, and the optional note is the difference between
+     * "somebody will look at it" and "it needs a new roll".
+     */
+    $$('[data-prdown]').forEach((b) => b.addEventListener('click', () => {
+      const bg = modal('Badges are not printing', `
+        <p class="muted" style="margin-top:0">This tells the dashboard, the on-site board and your chat
+          channel at once, so nobody else has to work it out at the gate. Sign-ins carry on as normal —
+          only the badge is missing.</p>
+        <label class="field"><span>What is wrong, if you know</span>
+          <input class="input" id="pr-note" placeholder="Out of labels, switched off, offline…"></label>`,
+      async (box, close) => {
+        await api(`/printers/${b.dataset.prdown}/trouble`,
+          { method: 'POST', body: { note: $('#pr-note', box).value.trim() || null } });
+        close();
+        render('printers');
+      }, 'Mark it');
+      const note = $('#pr-note', bg);
+      if (note) note.focus();
+    }));
+
+    $$('[data-prok]').forEach((b) => b.addEventListener('click', async () => {
+      await api(`/printers/${b.dataset.prok}/working`, { method: 'POST' });
+      toast('Marked as working again');
+      render('printers');
+    }));
   };
 
   /* --------------------------------------------------------- visitor types */
@@ -4642,6 +4693,26 @@
             'The moment the briefing is on record, rather than the moment they walked in')}
           ${chk('notify.on_delivery', 'A parcel arrives')}
         </div>
+
+        <!--
+          Two events that are not about a visitor at all, and were only
+          settable through the API until now — the guides told people to tick a
+          box that did not exist.
+        -->
+        <h4>When the equipment stops</h4>
+        <p class="muted" style="margin-top:0">Neither is a visitor event, so both go to the company channel only —
+          never to a host's own webhook.</p>
+        <div class="check-list">
+          ${chk('notify.on_device_offline', 'A tablet stops checking in',
+            'It checks in every 20 seconds; the message goes once it has been quiet for the window below')}
+          ${chk('notify.on_printer_trouble', 'A badge printer is marked as not printing',
+            'Set by hand from the Printers page — nothing here can reach a printer to ask it')}
+        </div>
+        <div class="form-grid">
+          ${txt('notify.device_quiet_minutes', 'Minutes quiet before saying a tablet is down', 'number')}
+        </div>
+        <p class="muted">Fifteen rather than five on purpose: site wifi drops for two or three minutes often
+          enough that a shorter window produces a channel people mute, which is worse than no channel.</p>
 
         <h4>Who to post about, and who else to tell</h4>
         <p class="muted" style="margin-top:0">One card per visitor type. <b>Post about these</b> covers signing in,

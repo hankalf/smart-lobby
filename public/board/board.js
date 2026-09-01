@@ -147,6 +147,20 @@
       ? listed.map((p) => card(p, { isNew: !rollcall && false })).join('')
       : ((!rollcall && arrivals.length) ? '' : '<p class="empty">Nobody is signed in right now.</p>');
 
+    /*
+     * A printer somebody has marked as not printing. Hidden during a roll
+     * call: at that moment the only question on this screen is who is still
+     * inside, and a badge printer is nobody's problem until afterwards.
+     */
+    const down = Array.isArray(data.printers_down) ? data.printers_down : [];
+    const banner = $('#printer-down');
+    banner.classList.toggle('hidden', rollcall || !down.length);
+    if (!rollcall && down.length) {
+      banner.textContent = down.length === 1
+        ? `${down[0]} is not printing badges — visitors are still being signed in.`
+        : `Not printing badges: ${down.join(', ')} — visitors are still being signed in.`;
+    }
+
     // In a roll call the only question is who is still inside, so who left is
     // noise — and the new arrivals are not a separate group either.
     $('#arrivals-wrap').hidden = rollcall || !arrivals.length;

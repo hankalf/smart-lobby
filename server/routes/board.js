@@ -118,6 +118,15 @@ router.get('/:key/data', boardLimit, allow, (req, res) => {
     recent_since: since,
     onsite,
     left,
+    /*
+     * Printers somebody has marked as not printing. On the board because the
+     * board is the screen the desk actually looks at, and a badge printer that
+     * has quietly stopped is otherwise found out one confused visitor at a
+     * time. Names only — the board is visible to anyone with the address, so
+     * it says which printer, not who reported it or what they said.
+     */
+    printers_down: all('SELECT name FROM printers WHERE trouble_since IS NOT NULL ORDER BY name')
+      .map((p) => p.name),
     now: new Date().toISOString()
   });
 });

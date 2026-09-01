@@ -542,6 +542,27 @@ function migrate() {
   addColumn('devices', 'self_code', 'TEXT');
 
   /*
+   * A badge printer somebody has marked as not printing.
+   *
+   * Worth being plain about why this is a flag a person sets rather than
+   * something observed. Badges print over AirPrint: the browser opens a dialog
+   * and the printer is the tablet's business, not the server's. Nothing here
+   * can ask a printer whether it is alive — not over the internet from a
+   * hosted server, and least of all when the printer is on its own Wireless
+   * Direct network that only the tablet has joined. No browser reports whether
+   * a print succeeded either; the dialog closes the same way whether a label
+   * came out or the printer is switched off in a cupboard.
+   *
+   * So the sensor is reception, who notice the labels have stopped. Set from
+   * the dashboard, and cleared the same way — not by silence, since nobody
+   * mentioning a printer is exactly what a working one and a dead one both
+   * look like on a quiet afternoon.
+   */
+  addColumn('printers', 'trouble_since', 'TEXT');
+  addColumn('printers', 'trouble_by', 'TEXT');
+  addColumn('printers', 'trouble_note', 'TEXT');
+
+  /*
    * A webhook post that fails is worth trying again — Teams having a bad thirty
    * seconds should not cost an arrival its notification. These carry what is
    * needed to send it a second time, and how many goes it has had.
