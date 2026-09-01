@@ -146,6 +146,69 @@ async function req(method, p, body) {
       /\/go\//.test(await phone.evaluate(() => location.pathname)),
       await phone.evaluate(() => location.pathname));
 
+    /*
+     * ---- a refusal at the first tap, not the last ----
+     *
+     * The report this comes from: details filled in, photograph taken, site
+     * rules read and signed, induction sat through, and only then "you are off
+     * site". Right answer, useless moment. So the fence is switched on with
+     * the site somewhere else entirely, and the visitor should get no further
+     * than the first card.
+     */
+    const GATE = { lat: 51.5, lng: -0.12 };            // the site
+    const AWAY = { latitude: 37.7955, longitude: -122.2712, accuracy: 15 };  // the visitor
+    await req('PUT', '/api/admin/settings', {
+      geofence: { enabled: true, lat: GATE.lat, lng: GATE.lng, radius_m: 250, require_location: true }
+    });
+
+    const far = await (await b.newContext({
+      viewport: { width: 414, height: 860 }, geolocation: AWAY, permissions: ['geolocation']
+    })).newPage();
+    await far.goto(link.self, { waitUntil: 'networkidle' });
+    await far.waitForTimeout(1600);
+    await far.locator('.tile').first().click();
+    await far.waitForFunction(() => {
+      const s = document.querySelector('.screen:not([hidden])');
+      return s && s.dataset.screen === 'blocked';
+    }, null, { timeout: 12000 }).catch(() => {});
+
+    const at = await far.evaluate(() => {
+      const s = document.querySelector('.screen:not([hidden])');
+      return s && s.dataset.screen;
+    });
+    ok('a phone away from the site is stopped at the first tap', at === 'blocked', at);
+    ok('…and told why, in words that name the distance',
+      /km from the site|m from the site/.test(await far.textContent('#blocked-message')),
+      (await far.textContent('#blocked-message')).slice(0, 80));
+
+    /* And somebody standing on the site is not stopped at all. */
+    const here = await (await b.newContext({
+      viewport: { width: 414, height: 860 },
+      geolocation: { latitude: GATE.lat + 0.0001, longitude: GATE.lng + 0.0001, accuracy: 15 },
+      permissions: ['geolocation']
+    })).newPage();
+    await here.goto(link.self, { waitUntil: 'networkidle' });
+    await here.waitForTimeout(1600);
+    await here.locator('.tile').first().click();
+    await here.waitForTimeout(2500);
+    const got = await here.evaluate(() => {
+      const s = document.querySelector('.screen:not([hidden])');
+      return s && s.dataset.screen;
+    });
+    ok('a phone on the site carries on into the sign-in', got && got !== 'blocked', got);
+
+    /*
+     * The nudge to turn the phone. Only where it helps: a narrow portrait
+     * screen that scanned a sign, never a tablet bolted to a gate.
+     */
+    ok('a phone is told it reads more easily turned sideways',
+      await here.isVisible('#turn-hint'));
+    const tablet = await (await b.newContext({ viewport: { width: 1024, height: 768 } })).newPage();
+    await tablet.goto(`${BASE}/kiosk/`, { waitUntil: 'networkidle' });
+    await tablet.waitForTimeout(1400);
+    ok('…and a tablet at the gate is not', !await tablet.isVisible('#turn-hint'));
+
+    await req('PUT', '/api/admin/settings', { geofence: BEFORE.geofence || { enabled: false } });
     await b.close();
   } else {
     console.log('  (no browser — the button and the phone are not checked)');

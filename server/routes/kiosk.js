@@ -152,6 +152,67 @@ const writeLimit = ratelimit.limit({
   message: 'Too many sign-ins from this network. Please wait a moment, or ask reception.'
 });
 
+/**
+ * Everything that can refuse a phone check-in, in one place.
+ *
+ * A phone check-in has to prove it is at the site; a tablet at the gate does
+ * not, because it is bolted to the gate. The code is looked up rather than
+ * believed: a request can claim to be a phone check-in, but it cannot make up
+ * a code for a device that has the feature switched on.
+ *
+ * One function because it is asked twice — once before the visitor is allowed
+ * to start, so a refusal arrives before they have typed anything, and again at
+ * submit, because the first answer came from a browser and browsers can be
+ * told to say anything. The two must agree exactly, and the way to guarantee
+ * that is for there to be only one of them.
+ *
+ * @param {string} code   the code off the printed sign
+ * @param {object} where  { lat, lng, accuracy } as the phone reported it
+ * @returns {{ok: true, device: object} | {ok: false, refusal: object}}
+ */
+function selfCheckinGate(code, where) {
+  const device = devices.bySelfCode(code);
+  if (!device) {
+    return { ok: false, refusal: {
+      error: 'self_checkin_closed',
+      message: 'This check-in link is no longer active. Please sign in on the tablet at the entrance.'
+    } };
+  }
+  if (!settings.getSection('kiosk').self_checkin_enabled) {
+    return { ok: false, refusal: {
+      error: 'self_checkin_off',
+      message: 'Checking in from a phone is switched off here. Please use the tablet at the entrance.'
+    } };
+  }
+  const place = geofence.check(where || null);
+  if (!place.ok) {
+    return { ok: false, refusal: { error: `geofence_${place.reason}`, message: place.message } };
+  }
+  return { ok: true, device };
+}
+
+/**
+ * May this phone start a sign-in at all?
+ *
+ * Asked before the first question rather than after the last. From a real
+ * report: somebody filled in their details, took a photograph, read the site
+ * rules, signed them, sat through the induction, and was then told they were
+ * off site — which was not even true, the site simply had no coordinates set.
+ * Every second of that was wasted, and the refusal arrived at the one moment
+ * it could not be acted on.
+ *
+ * Nothing is written here and no visit is created; it is a question, and the
+ * real check still happens at submit.
+ */
+router.post('/precheck', writeLimit, (req, res) => {
+  const b = req.body || {};
+  if (!clean(b.self_code)) return res.json({ ok: true, reason: 'not_a_phone_checkin' });
+
+  const gate = selfCheckinGate(b.self_code, b.location);
+  if (!gate.ok) return res.status(403).json(gate.refusal);
+  res.json({ ok: true, device_id: gate.device.id, name: gate.device.name });
+});
+
 /* ---------------------------------------------------------------- config */
 
 router.get('/config', (req, res) => {
@@ -436,21 +497,9 @@ router.post('/signin', writeLimit, async (req, res) => {
      */
     let selfDevice = null;
     if (clean(b.self_code)) {
-      selfDevice = devices.bySelfCode(b.self_code);
-      if (!selfDevice) {
-        return res.status(403).json({
-          error: 'self_checkin_closed',
-          message: 'This check-in link is no longer active. Please sign in on the tablet at the entrance.'
-        });
-      }
-      if (!settings.getSection('kiosk').self_checkin_enabled) {
-        return res.status(403).json({
-          error: 'self_checkin_off',
-          message: 'Checking in from a phone is switched off here. Please use the tablet at the entrance.'
-        });
-      }
-      const where = geofence.check(b.location || null);
-      if (!where.ok) return res.status(403).json({ error: `geofence_${where.reason}`, message: where.message });
+      const gate = selfCheckinGate(b.self_code, b.location);
+      if (!gate.ok) return res.status(403).json(gate.refusal);
+      selfDevice = gate.device;
     }
 
     if (fields.phone === 'required' && !phone) return res.status(400).json({ error: 'phone_required' });

@@ -691,6 +691,7 @@
     document.documentElement.style.setProperty('--scrim', `rgba(8,18,14,${(Number(org.background_dim) || 0) / 100})`);
     startBackgrounds(org.backgrounds || [], Number(org.background_rotate_seconds) || 12);
     buildSections();
+    armTurnHint();
     document.title = `${org.name} — Reception`;
 
     show($('#w-tracking'), !!deliveries.ask_tracking);
@@ -1010,7 +1011,88 @@
     }));
   }
 
+  /**
+   * Everything that could refuse this check-in, asked before the first
+   * question instead of after the last.
+   *
+   * From a real report: somebody filled in their details on their phone, took
+   * a photograph, read the site rules, signed them, sat through the induction,
+   * and was then told they were off site — which was not even true, the site
+   * simply had no coordinates set. Every second of that was wasted, and the
+   * refusal landed at the one moment nothing could be done about it.
+   *
+   * So the location is asked for here, at the top of the flow, and the server
+   * is asked whether this check-in may proceed at all. Only for a phone that
+   * scanned a sign: a tablet at the gate has nothing to prove.
+   *
+   * @returns {Promise<boolean>} whether to carry on
+   */
+  async function mayCheckIn() {
+    if (!state.selfCode) return true;
+
+    const fenced = !!(state.cfg && state.cfg.geofence && state.cfg.geofence.enabled);
+    if (fenced && !state.location) {
+      toast(t('Checking you are on site…'), 9000);
+      state.location = await askWhereWeAre();
+    }
+
+    try {
+      await api('/precheck', { self_code: state.selfCode, location: state.location || undefined });
+      return true;
+    } catch (err) {
+      /*
+       * A refusal here is the end of the road on this phone, so it is said on
+       * a screen of its own rather than in a toast that slides away while
+       * somebody is still reading it. The server's wording is used as it
+       * stands: it knows which of the three things went wrong.
+       */
+      const data = (err && err.data) || {};
+      const message = t(data.message || '')
+        || t('This check-in cannot be completed on a phone. Please see reception.');
+      if (err.status) { showBlocked(message); return false; }
+      /*
+       * No answer at all is a different matter — the phone has lost the
+       * network, not failed a check. Let them carry on; the sign-in is queued
+       * like any other, and the server checks again when it arrives.
+       */
+      return true;
+    }
+  }
+
+  /*
+   * The nudge to turn the phone sideways, on the phone check-in only.
+   *
+   * Not on a tablet at a gate, which is already landscape and bolted down, and
+   * not on a phone that is already turned — the CSS handles both of those, so
+   * this only decides whether the hint exists at all and remembers being
+   * dismissed. Everything fits in portrait; it is the site rules document and
+   * the 16:9 induction slides that are cramped, and somebody signing a
+   * document they cannot read properly is worth one line about it.
+   */
+  function armTurnHint() {
+    const hint = $('#turn-hint');
+    if (!hint) return;
+    if (!state.selfCode) return;
+    try { if (sessionStorage.getItem('sl_turn_hint') === 'seen') return; } catch { /* private mode */ }
+    show(hint, true);
+    $('#turn-hint-close').addEventListener('click', () => {
+      show(hint, false);
+      try { sessionStorage.setItem('sl_turn_hint', 'seen'); } catch { /* nothing to remember it with */ }
+    });
+  }
+
+  /** A dead end, said plainly, with the way out on it. */
+  function showBlocked(message) {
+    const note = $('#blocked-message');
+    if (note) note.textContent = message;
+    setScreen('blocked');
+  }
+
   async function runAction(action) {
+    // Nothing about a sign-out or a delivery needs the fence — they are not
+    // check-ins, and a courier at a barrier should not be asked for a location.
+    if (action !== 'signout' && action !== 'unlock' && !await mayCheckIn()) return;
+
     // A card that goes straight into a sign-in as a particular type.
     const direct = allTypes().find((ty) => ty.key === action && (ty.mode === 'card' || ty.mode === 'both'));
     if (direct) {

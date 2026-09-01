@@ -30,6 +30,22 @@
      so the page's own defaults never flash before the real screen. -->
 <button id="lang-toggle" class="lang-toggle hidden" style="visibility:hidden" type="button" aria-label="Cambiar idioma">Español</button>
 
+<!--
+  A word about turning the phone sideways, on the phone check-in only.
+  Everything here fits in portrait, but the two steps that carry other
+  people's material — a site rules document, and the induction slides, which
+  are 16:9 — are genuinely cramped held upright, and somebody signing a
+  document they cannot read properly is the one outcome worth a nudge.
+
+  Shown only on a narrow portrait screen, dismissible, and it takes itself
+  away the moment the phone is turned. A hint that has to be argued with is a
+  banner, and a banner is what people learn to tap past without reading.
+-->
+<div id="turn-hint" class="turn-hint hidden">
+  <span>Easier to read with your phone turned sideways.</span>
+  <button type="button" id="turn-hint-close" aria-label="Dismiss">×</button>
+</div>
+
 <div id="app" style="visibility:hidden">
 
   <!-- IDLE ------------------------------------------------------------- -->
@@ -215,6 +231,23 @@
   </section>
 
   <!-- DONE ------------------------------------------------------------- -->
+  <!-- BLOCKED ---------------------------------------------------------- -->
+  <!--
+    A phone check-in that cannot go ahead, said before anything is filled in
+    rather than after everything is. It gets a screen rather than a toast: a
+    message that slides away while somebody is still reading it is no use when
+    it is the end of the road, and the only useful thing left to say is where
+    to go instead.
+  -->
+  <section class="screen" data-screen="blocked" hidden>
+    <div class="panel center">
+      <div class="tick" style="background:none;color:var(--warn)">!</div>
+      <h2>Not from here</h2>
+      <p class="lead" id="blocked-message"></p>
+      <div class="actions"><button class="btn big" data-go="idle">Start again</button></div>
+    </div>
+  </section>
+
   <section class="screen" data-screen="done" hidden>
     <div class="panel center">
       <div class="tick">✓</div>

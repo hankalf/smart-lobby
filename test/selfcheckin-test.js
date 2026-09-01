@@ -159,6 +159,54 @@ const signIn = (extra) => req('POST', '/api/kiosk/signin', {
     wrong.join(' | '));
 
   /*
+   * ---- asked before the first question, not after the last ----
+   *
+   * From a real report: somebody filled in their details on their phone, took
+   * a photograph, read the site rules, signed them, sat through the induction,
+   * and was only then told they were off site. The refusal was right and the
+   * moment was useless.
+   *
+   * The precheck exists to ask the same question at the top of the flow, and
+   * what matters is that it gives the *same* answer — a gate that waves people
+   * through and then refuses them at submit is worse than no gate at all.
+   */
+  const precheck = (body) => req('POST', '/api/kiosk/precheck', body);
+
+  let pre = await precheck({ self_code: code, location: NEAR });
+  ok('a phone on site is told it may start', pre.status === 200 && pre.data.ok === true,
+    JSON.stringify(pre.data));
+
+  pre = await precheck({ self_code: code, location: FAR });
+  const far = await signIn({ host_id: host.id, self_code: code, location: FAR });
+  ok('a phone across town is refused before it is asked anything',
+    pre.status === 403 && pre.data.error === 'geofence_too_far', JSON.stringify(pre.data));
+  ok('…with exactly what the sign-in would have said at the end',
+    pre.data.error === far.data.error && pre.data.message === far.data.message,
+    `${pre.data.error} vs ${far.data.error}`);
+
+  pre = await precheck({ self_code: code, location: null });
+  ok('a phone that will not say where it is is refused up front too',
+    pre.status === 403 && pre.data.error === 'geofence_no_location', JSON.stringify(pre.data));
+
+  pre = await precheck({ self_code: 'nothinglikeacode', location: NEAR });
+  ok('a withdrawn sign is refused before anything is typed',
+    pre.status === 403 && pre.data.error === 'self_checkin_closed', JSON.stringify(pre.data));
+
+  pre = await precheck({});
+  ok('a tablet at the gate has nothing to prove and is not asked',
+    pre.status === 200 && pre.data.ok === true, JSON.stringify(pre.data));
+
+  /*
+   * Nothing is written. A question asked before every sign-in must not leave
+   * anything behind, or a phone opened and abandoned at a gate becomes a visit
+   * nobody made.
+   */
+  const onsiteBefore = (await req('GET', '/api/admin/dashboard')).data.stats.onsite;
+  await precheck({ self_code: code, location: NEAR });
+  ok('…and asking creates nothing',
+    (await req('GET', '/api/admin/dashboard')).data.stats.onsite === onsiteBefore);
+
+  /*
    * ---- a fence switched on before the site was placed ----
    *
    * Zero is a real coordinate — a point in the Gulf of Guinea — and it is also
