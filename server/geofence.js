@@ -36,9 +36,26 @@ function metresBetween(aLat, aLng, bLat, bLng) {
   return Math.round(2 * EARTH_M * Math.asin(Math.min(1, Math.sqrt(h))));
 }
 
+/*
+ * Zero is not a location. It is a real coordinate — a point in the Gulf of
+ * Guinea, several hundred miles off Ghana — and it is also what an empty box
+ * turns into on the way through a form, which is how a fence once ended up
+ * centred there and refused every visitor on earth for being nine thousand
+ * kilometres away. The dashboard no longer sends zeros for empty fields, and
+ * this refuses to believe them if anything ever does again.
+ *
+ * The cost of the guard is that a site genuinely on the equator or on the
+ * prime meridian must nudge a coordinate by a ten-thousandth of a degree —
+ * eleven metres, inside any sane radius. No site is on both.
+ */
+const placed = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) && n !== 0;
+};
+
 const configured = () => {
   const g = settings.getSection('geofence');
-  return !!(g.enabled && Number.isFinite(Number(g.lat)) && Number.isFinite(Number(g.lng)));
+  return !!(g.enabled && placed(g.lat) && placed(g.lng));
 };
 
 /**

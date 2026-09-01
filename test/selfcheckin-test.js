@@ -158,6 +158,34 @@ const signIn = (extra) => req('POST', '/api/kiosk/signin', {
   ok('…and every one of them is actually served from that address', wrong.length === 0,
     wrong.join(' | '));
 
+  /*
+   * ---- a fence switched on before the site was placed ----
+   *
+   * Zero is a real coordinate — a point in the Gulf of Guinea — and it is also
+   * what an empty number box turned into on its way through the settings form.
+   * So ticking "refuse phone check-ins from away from the site" without
+   * filling in the coordinates built a fence off the coast of Ghana and
+   * refused every visitor on earth for standing nine thousand kilometres away,
+   * with nothing on screen to say why.
+   *
+   * A fence with nowhere to be is no fence: check-ins go through, and the
+   * empty boxes on the settings page are the thing that says so.
+   */
+  await req('PUT', '/api/admin/settings',
+    { geofence: { enabled: true, lat: 0, lng: 0, radius_m: 250, require_location: true } });
+  r = await signIn({ host_id: host.id, self_code: code, location: NEAR });
+  ok('a fence enabled before the site is placed lets people in rather than refusing everyone',
+    r.status === 200, JSON.stringify(r.data).slice(0, 120));
+  if (r.data && r.data.visit) made.push(r.data.visit.id);
+
+  const unplaced = await fetch(`${BASE}/api/kiosk/config`).then((x) => x.json());
+  ok('…and the kiosk is told there is no fence, rather than one it cannot see',
+    unplaced.geofence.enabled === false, JSON.stringify(unplaced.geofence));
+
+  // Put the real fence back for the checks that follow.
+  await req('PUT', '/api/admin/settings',
+    { geofence: { enabled: true, lat: SITE.lat, lng: SITE.lng, radius_m: 250, require_location: true } });
+
   /* ---- reissuing stops every sign already printed ---- */
   const fresh = (await req('POST', `/api/admin/devices/${device.id}/self-code`)).data;
   ok('a new link can be issued', !!fresh.code && fresh.code !== code, fresh.code);

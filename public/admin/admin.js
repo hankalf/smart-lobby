@@ -145,6 +145,25 @@
    * "Saving…" while somebody types a new password would be both wrong and
    * alarming.
    */
+  /**
+   * Fill a settings field from code, and have it saved like a typed one.
+   *
+   * The event matters and is easy to get wrong: autoSaveOn below listens for
+   * 'input' on a text or number field and only for 'change' on a checkbox or a
+   * select. Code that filled a number field and fired 'change' — which reads
+   * as the obvious choice — put the value on screen and saved nothing, and the
+   * only symptom was a setting that had quietly reverted next time anybody
+   * looked. Both are fired here so neither kind of field can be missed.
+   */
+  function setSettingField(path, value) {
+    const field = $(`[data-set="${path}"]`);
+    if (!field) return false;
+    field.value = value;
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    field.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }
+
   function autoSaveOn(root, saver, selector = '[data-set]') {
     $$(selector, root).forEach((el) => {
       // A checkbox or a picker is a finished decision; typing is not.
@@ -4444,6 +4463,25 @@
           Monday — not somebody who has decided to cheat and knows how. It applies to phone check-ins only;
           a tablet bolted to the gate answers the question by being there.</p>
         ${chk('geofence.enabled', 'Refuse phone check-ins from away from the site')}
+
+        <!--
+          Three ways to place the site, because each of them fails for
+          somebody: an address is no use for a compound with no postal
+          address, standing on it is no use from an office two hundred miles
+          away, and typing coordinates means finding them somewhere else
+          first.
+        -->
+        <label class="field"><span>Find the site by address</span>
+          <div class="row">
+            <input class="input" id="geo-address" placeholder="14 Riverside Way, Oakland CA"
+              autocomplete="off" style="flex:1 1 20rem">
+            <button class="btn subtle" id="geo-find" type="button">Find</button>
+          </div>
+          <span class="muted">Looked up through OpenStreetMap, and only when you press Find — the address
+            you type is sent to them, nothing else is, and no visitor's data is involved. Pick the right
+            match below and the coordinates fill themselves in.</span></label>
+        <div id="geo-results"></div>
+
         <div class="form-grid">
           ${txt('geofence.lat', 'Site latitude', 'number')}
           ${txt('geofence.lng', 'Site longitude', 'number')}
@@ -5017,9 +5055,26 @@
     const saveSettings = autoSave(async () => {
       const patch = {};
       $$('[data-set]').forEach((input) => {
+        /*
+         * An empty number box is "not set", and must not be sent as 0.
+         *
+         * Number('') is 0, so every save of any setting on this page wrote a
+         * zero into every number field nobody had filled in. Mostly harmless
+         * and once badly not: it put 0 into the site's latitude and longitude,
+         * which are perfectly finite numbers — so ticking "refuse phone
+         * check-ins from away from the site" without placing the site first
+         * built a fence around a point in the Gulf of Guinea and refused every
+         * visitor on earth for standing several thousand kilometres away.
+         *
+         * It also quietly broke per-side badge margins, where empty means
+         * "use the number for all round" and 0 means "no margin at all".
+         */
+        const blank = (input.type === 'number' || input.type === 'range')
+          && String(input.value).trim() === '';
         const value = input.type === 'checkbox' ? input.checked
-          : (input.type === 'number' || input.type === 'range') ? Number(input.value)
-          : input.value;
+          : blank ? null
+            : (input.type === 'number' || input.type === 'range') ? Number(input.value)
+              : input.value;
         setPath(patch, input.dataset.set, value);
       });
       patch.kiosk = patch.kiosk || {};
@@ -5922,14 +5977,8 @@
       navigator.geolocation.getCurrentPosition((pos) => {
         const lat = pos.coords.latitude.toFixed(6);
         const lng = pos.coords.longitude.toFixed(6);
-        const set = (path, value) => {
-          const field = $(`[data-set="${path}"]`);
-          if (!field) return;
-          field.value = value;
-          field.dispatchEvent(new Event('change', { bubbles: true }));
-        };
-        set('geofence.lat', lat);
-        set('geofence.lng', lng);
+        setSettingField('geofence.lat', lat);
+        setSettingField('geofence.lng', lng);
         note.textContent = `Set to ${lat}, ${lng} — accurate to about ${Math.round(pos.coords.accuracy)} m.`;
       }, (err) => {
         note.textContent = err.code === 1
@@ -5937,6 +5986,64 @@
           : 'Could not get a location from this browser.';
       }, { enableHighAccuracy: true, timeout: 10000 });
     });
+
+    /*
+     * Placing the site by address, for whoever is setting this up from an
+     * office rather than standing at the gate.
+     *
+     * The matches are listed rather than the first one taken: a street name
+     * exists in forty towns, and a fence quietly placed on the wrong one is
+     * found out by a visitor who cannot sign in, which is the worst way to
+     * find anything out.
+     */
+    const findBtn = $('#geo-find');
+    if (findBtn) {
+      const box = $('#geo-address');
+      const list = $('#geo-results');
+
+      const setCoords = (lat, lng) => {
+        setSettingField('geofence.lat', lat);
+        setSettingField('geofence.lng', lng);
+      };
+
+      const find = async () => {
+        const q = box.value.trim();
+        if (q.length < 3) { list.innerHTML = '<p class="muted">Type a few more characters.</p>'; return; }
+        list.innerHTML = '<p class="muted">Looking…</p>';
+        findBtn.disabled = true;
+        let out;
+        try {
+          out = await api(`/geocode?q=${encodeURIComponent(q)}`);
+        } catch {
+          out = { message: 'Could not reach the address lookup from this server.' };
+        }
+        findBtn.disabled = false;
+
+        if (!out.results || !out.results.length) {
+          list.innerHTML = `<p class="muted">${esc(out.message || 'Nothing found for that.')}</p>`;
+          return;
+        }
+        list.innerHTML = `<div class="check-list">${out.results.map((r) => `
+          <button class="btn ghost" type="button" style="text-align:left"
+            data-geopick="${esc(r.lat)},${esc(r.lng)}">
+            ${esc(r.label)}<br><span class="muted">${r.lat.toFixed(5)}, ${r.lng.toFixed(5)}</span>
+          </button>`).join('')}</div>`;
+
+        $$('[data-geopick]', list).forEach((b) => b.addEventListener('click', () => {
+          const [lat, lng] = b.dataset.geopick.split(',');
+          setCoords(lat, lng);
+          list.innerHTML = `<p class="muted">Set to ${esc(lat)}, ${esc(lng)}. `
+            + 'Check the radius covers the whole site, then look at the map of your choice '
+            + 'to be sure it is the right place.</p>';
+        }));
+      };
+
+      findBtn.addEventListener('click', find);
+      // Enter searches rather than submitting whatever form it lands in.
+      box.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); find(); }
+      });
+    }
 
     $('#backup-now').addEventListener('click', async (e) => {
       const btn = e.currentTarget;

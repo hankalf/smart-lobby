@@ -288,6 +288,49 @@ const ok = (n, c, x) => { if (c) { pass++; console.log(`  ok  ${n}`); } else { f
   ok('the sub-lists hide again',
     await page.$$eval('#nav .subnav', (s) => s.every((x) => x.hidden)));
 
+  /*
+   * ---- a setting filled in by a button, rather than typed ----
+   *
+   * "Use where I am now" fills the site's coordinates from the browser of
+   * whoever is standing on the site. It put the numbers on screen and saved
+   * none of them: the auto-save listens for 'input' on a number field and only
+   * for 'change' on a checkbox, and the button fired 'change' — the obvious
+   * choice, and the wrong one. The only symptom was a geofence that had
+   * quietly reverted the next time anybody looked, which is a fence nobody
+   * would trust once they noticed.
+   *
+   * So this presses the button and then asks the server, because what the box
+   * says was never the part that was broken.
+   */
+  await page.context().grantPermissions(['geolocation'], { origin: BASE });
+  await page.context().setGeolocation({ latitude: 37.7955, longitude: -122.2712, accuracy: 12 });
+  // The sub-list is only open while Settings is the view; earlier checks here
+  // have moved off it.
+  await page.click('#nav > button[data-view="settings"]');
+  await page.waitForSelector('#nav .subnav[data-for="settings"] button[data-section="flow"]');
+  await page.click('#nav [data-section="flow"]');
+  await page.waitForSelector('#geo-here');
+  await page.click('#geo-here');
+  await page.waitForFunction(() =>
+    (document.querySelector('[data-set="geofence.lat"]') || {}).value, null, { timeout: 8000 })
+    .catch(() => {});
+  ok('“use where I am now” fills the coordinates in',
+    /37\.79/.test(await page.inputValue('[data-set="geofence.lat"]')),
+    await page.inputValue('[data-set="geofence.lat"]'));
+
+  // Long enough for the auto-save to have run.
+  await page.waitForTimeout(2000);
+  const stored = await page.evaluate(() =>
+    fetch('/api/admin/settings').then((r) => r.json()).then((s) => s.geofence));
+  // Compared with a tolerance, not by rounding to a string: 37.7955 does not
+  // survive toFixed(3) as anybody would guess it does.
+  ok('…and they are actually saved, not just shown',
+    Math.abs(Number(stored.lat) - 37.7955) < 0.001 && Math.abs(Number(stored.lng) + 122.2712) < 0.001,
+    JSON.stringify(stored));
+
+  /* The address box is offered alongside it, for whoever is not on site. */
+  ok('an address can be typed instead of coordinates', await page.isVisible('#geo-address'));
+
   ok('no javascript errors anywhere', errors.length === 0, errors.slice(0, 3).join(' | '));
 
   console.log(`\n${pass} passed, ${fail} failed`);

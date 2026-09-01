@@ -919,6 +919,21 @@ router.delete('/agreements/:id/file', (req, res) => {
   res.json({ ok: true, agreement: get('SELECT * FROM agreements WHERE id = ?', doc.id) });
 });
 
+/**
+ * An address, turned into coordinates for the geofence.
+ *
+ * Proxied rather than called from the page: the content security policy stops
+ * a browser here from talking to anything outside this server, and rightly —
+ * the alternative puts a visitor-facing app in direct touch with a third
+ * party. See server/geocode.js for what it asks and what it promises.
+ */
+router.get('/geocode', async (req, res) => {
+  const out = await require('../geocode').lookup(req.query.q);
+  // A lookup that found nothing is not a server fault; say so with a 200 and
+  // let the page show the message rather than an error box.
+  res.json(out);
+});
+
 /* -------------------------------------------------------------- printers */
 
 const PRINTER_PORTS = ['network', 'wireless_direct', 'bluetooth'];
