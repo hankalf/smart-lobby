@@ -558,6 +558,23 @@ function migrate() {
    * mentioning a printer is exactly what a working one and a dead one both
    * look like on a quiet afternoon.
    */
+  /*
+   * How a sign-in was made: at a tablet, on the visitor's own phone through a
+   * scanned QR sign, or typed in at the desk by somebody.
+   *
+   * Recorded rather than worked out later, because it cannot be worked out
+   * later: a phone check-in and a tablet check-in both end as a row with a
+   * device on it, and the difference — whether a person stood at a device you
+   * control or scanned a code with their own — is exactly the thing somebody
+   * reading an arrival notification wants to know. It is also the difference
+   * between a photograph taken by your camera and one taken by theirs.
+   *
+   * Null on every visit recorded before this existed, which is honest: those
+   * were not measured, and guessing 'tablet' for them would be inventing
+   * history.
+   */
+  addColumn('visits', 'source', 'TEXT');
+
   addColumn('printers', 'trouble_since', 'TEXT');
   addColumn('printers', 'trouble_by', 'TEXT');
   addColumn('printers', 'trouble_note', 'TEXT');

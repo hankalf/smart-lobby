@@ -234,6 +234,49 @@ const signIn = (extra) => req('POST', '/api/kiosk/signin', {
   await req('PUT', '/api/admin/settings',
     { geofence: { enabled: true, lat: SITE.lat, lng: SITE.lng, radius_m: 250, require_location: true } });
 
+  /*
+   * ---- the record says how they got in ----
+   *
+   * A phone check-in and a tablet check-in both end as a row with a device on
+   * it, and the difference matters to whoever reads the notification: the
+   * photograph and the location on a phone check-in came from the visitor's
+   * own device rather than one of yours. It cannot be worked out afterwards,
+   * so it is written down at the time.
+   */
+  await req('PUT', '/api/admin/settings', {
+    geofence: { enabled: true, lat: SITE.lat, lng: SITE.lng, radius_m: 250, require_location: true }
+  });
+  const byPhone = track(await signIn({ host_id: host.id, self_code: code, location: NEAR }));
+  const byTablet = track(await signIn({ host_id: host.id }));
+
+  const phoneVisit = (await req('GET', `/api/admin/visits/${byPhone.data.visit.id}`)).data;
+  const tabletVisit = (await req('GET', `/api/admin/visits/${byTablet.data.visit.id}`)).data;
+  ok('a phone check-in is recorded as one', phoneVisit.source === 'phone', phoneVisit.source);
+  ok('…and a tablet sign-in as a tablet', tabletVisit.source === 'tablet', tabletVisit.source);
+  /*
+   * And it says which entrance, taken from the sign rather than from a device
+   * the phone never talked to — otherwise a phone check-in is a visit from
+   * nowhere in particular.
+   */
+  ok('…and a phone check-in still says which entrance it happened at',
+    phoneVisit.device_name === 'Phone Gate Sign', phoneVisit.device_name);
+
+  /* The notification card says so too, which is the point of recording it. */
+  const cards = require('../server/notify-card');
+  const built = cards.buildModel('signin', phoneVisit, {}, {
+    org: {}, fmtTime: () => '09:40', baseUrl: () => BASE, boardUrl: () => null, now: null
+  });
+  const said = built.fields.find((f) => /checked in/i.test(f.label));
+  ok('the arrival card says they used their own phone',
+    !!said && /QR code/i.test(said.value), JSON.stringify(said || built.fields.map((f) => f.label)));
+
+  const plain = cards.buildModel('signin', tabletVisit, {}, {
+    org: {}, fmtTime: () => '09:40', baseUrl: () => BASE, boardUrl: () => null, now: null
+  });
+  ok('…and says nothing at all for an ordinary tablet sign-in',
+    !plain.fields.some((f) => /checked in/i.test(f.label)),
+    JSON.stringify(plain.fields.map((f) => f.label)));
+
   /* ---- reissuing stops every sign already printed ---- */
   const fresh = (await req('POST', `/api/admin/devices/${device.id}/self-code`)).data;
   ok('a new link can be issued', !!fresh.code && fresh.code !== code, fresh.code);

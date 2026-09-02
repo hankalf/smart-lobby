@@ -1155,6 +1155,14 @@
           ${v.reference ? `Reference: ${esc(v.reference)}${v.movement ? ' · ' + esc(v.movement) : ''}<br>` : ''}
           ${v.id_number ? `Licence: ${esc(v.id_name || '')} · ${esc(v.id_number)}${v.id_state ? ' · ' + esc(v.id_state) : ''}<br>` : ''}
           ${v.location_name ? `Signed in at: ${esc(v.location_name)}${v.device_name ? ` (${esc(v.device_name)})` : ''}<br>` : ''}
+          <!--
+            Only when it is not the ordinary case. A tablet sign-in needs no
+            explaining; somebody letting themselves in on their own phone does,
+            because the photograph and the location on this record came from
+            their device rather than from one of yours.
+          -->
+          ${v.source === 'phone' ? 'Checked in on their own phone, by QR code<br>' : ''}
+          ${v.source === 'desk' ? 'Signed in at the desk by reception<br>' : ''}
           In: ${fmtDate(v.signed_in_at)} · Out: ${fmtDate(v.signed_out_at)}</p>
         </div>
       </div>

@@ -492,7 +492,14 @@ router.get('/visits', (req, res) => {
       { label: 'Staff member', key: 'host_name' }, { label: 'Badge', key: 'badge_no' }, { label: 'Vehicle', key: 'vehicle_reg' },
       { label: 'Reference', key: 'reference' }, { label: 'Pick-Up / Delivery', key: 'movement' },
       { label: 'Signed in', key: 'signed_in_at' }, { label: 'Signed out', key: 'signed_out_at' },
-      { label: 'Status', key: 'status' }, { label: 'Site', key: 'site_name' }
+      { label: 'Status', key: 'status' }, { label: 'Site', key: 'site_name' },
+      /*
+       * How they signed in. On the export because the question it answers —
+       * "was this person actually at the gate, or did their phone say so?" —
+       * is the sort a spreadsheet gets opened for months later, and it cannot
+       * be reconstructed from anything else on the row.
+       */
+      { label: 'Checked in via', key: 'source' }
     ]);
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="visits-${Date.now()}.csv"`);

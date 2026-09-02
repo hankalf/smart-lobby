@@ -38,6 +38,23 @@ const VISIT_FIELDS = [
   { id: 'site', label: 'Site', value: (v) => v.site_name },
   { id: 'location', label: 'Location', value: (v) => v.location_name },
   { id: 'device', label: 'Signed in at', value: (v) => v.device_name },
+  /*
+   * How they signed in, and specifically whether they let themselves in with
+   * their own phone off a printed QR sign rather than standing at a tablet you
+   * control. Worth saying on the card: it is the difference between a
+   * photograph your camera took and one theirs did, and between somebody who
+   * was demonstrably at the gate and somebody whose phone said they were.
+   *
+   * Only ever says something when there is something to say. A tablet sign-in
+   * is the ordinary case and does not need announcing, and a visit recorded
+   * before this was kept says nothing rather than guessing.
+   */
+  {
+    id: 'source',
+    label: 'Checked in',
+    value: (v) => (v.source === 'phone' ? 'On their own phone, by QR code'
+      : v.source === 'desk' ? 'At the desk, by reception' : null)
+  },
   { id: 'time', label: 'Time', value: (v, ctx) => ctx.fmtTime(v.signed_in_at) },
   { id: 'signed_out', label: 'Signed out', value: (v, ctx) => v.signed_out_at && ctx.fmtTime(v.signed_out_at) },
   { id: 'duration', label: 'On site for', value: (v) => duration(v.signed_in_at, v.signed_out_at) },
@@ -137,7 +154,13 @@ const EVENTS = [
       title_template: '{name} has arrived to see {host}',
       subtitle_template: '{company}',
       mention_template: '{host} — your visitor is here.',
-      fields: ['company', 'type', 'project', 'host', 'purpose', 'vehicle', 'badge', 'time'],
+      /*
+       * `source` is in the default list, and costs a site that never uses
+       * phone check-in nothing — it produces no line for an ordinary tablet
+       * sign-in. A site that has already designed its own card keeps its own
+       * list, as it should, and can add this from the designer.
+       */
+      fields: ['company', 'type', 'project', 'host', 'purpose', 'vehicle', 'badge', 'source', 'time'],
       header_style: 'accent',
       show_photo: true
     }

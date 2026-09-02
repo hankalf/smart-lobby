@@ -648,16 +648,27 @@ router.post('/signin', writeLimit, async (req, res) => {
 
     let visitRes;
     try {
+      /*
+       * A phone check-in carries the code off a printed sign; a tablet does
+       * not. That is the whole difference, and it is worth keeping: an arrival
+       * notification reads differently when the person let themselves in with
+       * their own phone rather than standing at a device you control.
+       *
+       * The device is taken from the sign as well, so a phone check-in still
+       * says which entrance it happened at.
+       */
+      const at = selfDevice || device;
       visitRes = run(`INSERT INTO visits
         (site_id, visitor_id, host_id, visit_type, purpose, vehicle_reg, badge_no, checkout_code, photo_path,
          induction_shown, signed_in_at, status, device_id, location_id, reference, movement, project_id,
-         language, client_ref, id_name, id_number, id_state, created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,'onsite',?,?,?,?,?,?,?,?,?,?,?)`,
+         language, client_ref, id_name, id_number, id_state, source, created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,'onsite',?,?,?,?,?,?,?,?,?,?,?,?)`,
         site ? site.id : null, visitor.id, b.host_id ? Number(b.host_id) : null, visitType,
         clean(b.purpose) || null, (clean(b.vehicle_reg) || '').toUpperCase() || null, badgeNo, code, photoPath,
-        b.induction_completed ? 1 : 0, signedInAt, device ? device.id : null,
-        device ? device.location_id : null, clean(b.reference) || null, clean(b.movement) || null,
-        project ? project.id : null, language, clientRef, idName, idNumber, idState, nowISO());
+        b.induction_completed ? 1 : 0, signedInAt, at ? at.id : null,
+        at ? at.location_id : null, clean(b.reference) || null, clean(b.movement) || null,
+        project ? project.id : null, language, clientRef, idName, idNumber, idState,
+        selfDevice ? 'phone' : 'tablet', nowISO());
     } catch (err) {
       /*
        * Two retries of the same queued sign-in racing each other: the earlier
