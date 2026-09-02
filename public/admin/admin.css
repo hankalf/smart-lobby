@@ -29,6 +29,52 @@
 .brand-mark.has-logo { width: auto; height: auto; max-width: 120px; background: #fff; padding: 5px 7px; border-radius: 10px; }
 .brand-mark.has-logo img { display: block; max-height: 30px; max-width: 106px; object-fit: contain; }
 .gate-logo { display: block; max-height: 64px; max-width: 200px; object-fit: contain; margin: 0 auto 1rem; }
+/*
+ * The search box, and the results that drop out of it.
+ *
+ * Anchored to the sidebar rather than floating over the page: the results are
+ * a list of records to pick from, not a dialogue, and the page behind stays
+ * readable while somebody scans them.
+ */
+.side-search { position: relative; }
+.side-search .input {
+  width: 100%; background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.16);
+  color: #fff; font-size: .9rem; padding: .5rem .7rem;
+}
+.side-search .input::placeholder { color: rgba(223,234,229,.55); }
+.side-search .input:focus { background: rgba(255,255,255,.15); outline: 2px solid var(--brand); }
+
+/*
+ * Fixed, not absolute, and placed from the input's own position in script.
+ *
+ * The sidebar scrolls, which means it clips — and an absolutely positioned
+ * panel inside a scrolling box is cut off at its edge however wide it is
+ * asked to be. The results came out sliced down the middle of every name.
+ * Fixed positioning escapes that; the cost is having to place it by hand,
+ * which searchPlace() does.
+ */
+.search-results {
+  position: fixed; z-index: 60;
+  max-height: 60vh; overflow-y: auto;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.28);
+  padding: .35rem;
+  /* A name and a company do not fit in the width of the sidebar. */
+  width: min(26rem, calc(100vw - 2rem));
+}
+
+.search-group { padding: .35rem .5rem .1rem; font-size: .72rem; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-soft); }
+.search-hit {
+  display: block; width: 100%; text-align: left; background: none; border: 0; cursor: pointer;
+  padding: .45rem .5rem; border-radius: 7px; font: inherit; color: var(--ink); line-height: 1.35;
+}
+.search-hit:hover, .search-hit.here { background: var(--wash); }
+.search-hit b { font-weight: 600; }
+.search-hit span { display: block; font-size: .82rem; color: var(--ink-soft); }
+.search-empty { padding: .6rem .5rem; font-size: .88rem; color: var(--ink-soft); }
+.search-more { padding: .1rem .5rem .45rem; font-size: .78rem; color: var(--ink-soft); }
+
 #nav { display: flex; flex-direction: column; gap: .15rem; }
 #nav button {
   text-align: left; background: none; border: 0; color: #cfe0d8; padding: .6rem .75rem;
@@ -557,3 +603,13 @@ td .avatar[data-bigphoto]:hover, .visit-photo:hover {
 }
 .qr-url { margin: .5rem 0 .25rem; overflow-wrap: anywhere; }
 .qr-url code { font-size: .8rem; }
+
+/*
+ * The row a search result landed on. A page of forty rows with the right one
+ * somewhere in it is only half an answer, so it says which.
+ */
+.found { animation: found-flash 2.2s ease-out; }
+@keyframes found-flash {
+  0%, 40% { background: var(--wash); box-shadow: inset 3px 0 0 var(--brand); }
+  100% { background: transparent; box-shadow: none; }
+}

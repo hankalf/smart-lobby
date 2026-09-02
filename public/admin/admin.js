@@ -6709,6 +6709,172 @@
     };
   }
 
+  /* ------------------------------------------------------- global search */
+
+  /*
+   * Where each kind of result lives, and how to put it in front of somebody
+   * once they are on that page.
+   *
+   * `filter` is the page's own search box, filled in with what they typed so
+   * the list is already narrowed. `row` is the attribute the page marks its
+   * rows with, used to scroll to the record and flash it — a page of forty
+   * rows with the right one somewhere in it is only half an answer.
+   */
+  const SEARCH_TARGETS = {
+    visitors: { filter: '#p-q', row: 'data-person' },
+    visits: { filter: '#v-q', row: 'data-visit' },
+    expected: { row: 'data-exedit' },
+    companies: { row: 'data-co' },
+    staff: { row: 'data-hedit' },
+    projects: { row: 'data-pjedit' },
+    devices: { row: 'data-dvedit' }
+  };
+
+  async function openSearchHit(go, query) {
+    const target = SEARCH_TARGETS[go.view] || {};
+    markNav(go.view);
+    location.hash = `#${go.view}`;
+    await render(go.view);
+
+    /*
+     * The page's own filter, so the list is narrowed to what was typed. Fired
+     * as 'input' because that is what these boxes listen for — the same
+     * mistake that made "Use where I am now" save nothing.
+     */
+    if (target.filter && query) {
+      const box = $(target.filter);
+      if (box) {
+        box.value = query;
+        box.dispatchEvent(new Event('input', { bubbles: true }));
+        // Long enough for a list that reloads from the server to come back.
+        await new Promise((done) => setTimeout(done, 450));
+      }
+    }
+
+    if (!target.row) return;
+    const row = $(`[${target.row}="${go.open}"]`);
+    if (!row) return;
+    const line = row.closest('tr, .card, li') || row;
+    line.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    line.classList.add('found');
+    setTimeout(() => line.classList.remove('found'), 2200);
+  }
+
+  /*
+   * Waits for somebody to stop typing before asking. Without it every
+   * keystroke is a query, and the answers come back out of order as often as
+   * not — which is how a search box ends up showing results for "mar" while
+   * the box says "marguerite".
+   */
+  function debounce(fn, ms) {
+    let timer = null;
+    return (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), ms);
+    };
+  }
+
+  function wireGlobalSearch() {
+    const box = $('#global-search');
+    const panel = $('#search-results');
+    if (!box || !panel) return;
+
+    let seq = 0;
+    let hits = [];
+    let at = -1;
+
+    const close = () => { panel.classList.add('hidden'); panel.innerHTML = ''; hits = []; at = -1; };
+
+    /*
+     * The panel is fixed rather than absolute — see the note in admin.css: the
+     * sidebar scrolls, and a scrolling box clips what is positioned inside it,
+     * which sliced every result down the middle. Fixed escapes the clip and
+     * costs this: it has to be put where the box is, by hand, whenever the box
+     * moves.
+     */
+    const place = () => {
+      const at = box.getBoundingClientRect();
+      panel.style.top = `${Math.round(at.bottom + 6)}px`;
+      // Nudged back on screen if the sidebar is too near the right edge to
+      // hold it, which is what a narrow window does.
+      const width = panel.offsetWidth || 416;
+      panel.style.left = `${Math.round(Math.max(8, Math.min(at.left, window.innerWidth - width - 8)))}px`;
+    };
+    window.addEventListener('resize', () => { if (!panel.classList.contains('hidden')) place(); });
+    // The sidebar is what scrolls, so that is what has to be listened to.
+    const side = document.querySelector('.side');
+    if (side) side.addEventListener('scroll', () => { if (!panel.classList.contains('hidden')) place(); });
+
+    const draw = (data) => {
+      hits = [];
+      if (!data.groups.length) {
+        panel.innerHTML = `<p class="search-empty">${data.too_short
+          ? 'Keep typing…'
+          : `Nothing matching “${esc(data.query)}”.`}</p>`;
+        panel.classList.remove('hidden');
+        place();
+        return;
+      }
+      panel.innerHTML = data.groups.map((g) => `
+        <div class="search-group">${esc(g.label)}</div>
+        ${g.results.map((r) => {
+    hits.push({ go: r.go, query: data.query });
+    return `<button class="search-hit" type="button" data-hit="${hits.length - 1}">
+            <b>${esc(r.title)}</b>
+            ${r.detail || r.note ? `<span>${esc([r.detail, r.note].filter(Boolean).join(' · '))}</span>` : ''}
+          </button>`;
+  }).join('')}
+        ${g.more ? '<p class="search-more">More on the page itself</p>' : ''}`).join('');
+      panel.classList.remove('hidden');
+      place();
+
+      $$('[data-hit]', panel).forEach((b) => b.addEventListener('click', async () => {
+        const hit = hits[Number(b.dataset.hit)];
+        close();
+        box.value = '';
+        await openSearchHit(hit.go, hit.query);
+      }));
+    };
+
+    const look = debounce(async () => {
+      const q = box.value.trim();
+      if (q.length < 2) return close();
+      const mine = ++seq;
+      try {
+        const data = await api(`/search?q=${encodeURIComponent(q)}`);
+        // An older answer arriving late must not replace a newer one.
+        if (mine === seq) draw(data);
+      } catch { if (mine === seq) close(); }
+    }, 220);
+
+    box.addEventListener('input', look);
+    box.addEventListener('focus', () => { if (box.value.trim().length >= 2) look(); });
+
+    /* Arrow keys through the list, Enter to open, Escape to give up. */
+    box.addEventListener('keydown', (e) => {
+      const buttons = $$('[data-hit]', panel);
+      if (e.key === 'Escape') { close(); box.blur(); return; }
+      if (!buttons.length) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        at = e.key === 'ArrowDown'
+          ? Math.min(at + 1, buttons.length - 1)
+          : Math.max(at - 1, 0);
+        buttons.forEach((b, i) => b.classList.toggle('here', i === at));
+        buttons[at].scrollIntoView({ block: 'nearest' });
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        (buttons[at] || buttons[0]).click();
+      }
+    });
+
+    // A click anywhere else puts it away, but never a click inside the list.
+    document.addEventListener('click', (e) => {
+      if (!panel.contains(e.target) && e.target !== box) close();
+    });
+  }
+
   async function start() {
     try {
       ME = await api('/me');
@@ -6721,6 +6887,7 @@
     document.documentElement.style.setProperty('--brand-dark', SETTINGS.org.accent_color || '#123a2c');
     applyBranding();
     applyPermissions();
+    wireGlobalSearch();
     $('#shell').classList.remove('hidden');
     // #settings/retention opens the settings page on that panel.
     const [hashView, section] = (location.hash || '#dashboard').slice(1).split('/');

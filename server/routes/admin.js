@@ -920,6 +920,19 @@ router.delete('/agreements/:id/file', (req, res) => {
 });
 
 /**
+ * One box that finds anything the caller is allowed to see.
+ *
+ * The area check lives inside search.js rather than here, because it has to be
+ * per source: this one request reaches people, visits, firms, staff, jobs and
+ * tablets, and a single verdict on the whole request could only be right by
+ * being the strictest of them — which would mean reception, who can see five
+ * of those six, searching none of them.
+ */
+router.get('/search', (req, res) => {
+  res.json(require('../search').search(req.query.q, req.user.role));
+});
+
+/**
  * An address, turned into coordinates for the geofence.
  *
  * Proxied rather than called from the page: the content security policy stops

@@ -30,6 +30,22 @@
 <div id="shell" class="shell hidden">
   <aside class="side">
     <div class="brand"><span class="brand-mark" id="brand-mark">SL</span><span id="brand-name">Smart Lobby</span></div>
+
+    <!--
+      One box that finds anything. Above the menu because the menu is the thing
+      it replaces: reception know the name and want the record, and having to
+      work out which page a thing lives on first — a name might be a visitor, a
+      member of staff or a company — is the slow part of a busy morning.
+
+      It only ever finds what this login could already open. See
+      server/search.js; the areas are the same ones that decide the menu.
+    -->
+    <div class="side-search">
+      <input class="input" id="global-search" type="search" autocomplete="off"
+        placeholder="Search everything…" aria-label="Search everything">
+      <div id="search-results" class="search-results hidden" role="listbox"></div>
+    </div>
+
     <nav id="nav">
       <button data-view="dashboard" data-area="dashboard" class="active">Dashboard</button>
       <button data-view="expected" data-area="visits">Expected today</button>

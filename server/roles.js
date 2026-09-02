@@ -134,6 +134,18 @@ function areaForRequest(method, urlPath) {
    * feature detected nothing at all.
    */
   if (segment === 'printers' && /^\/printers\/\d+\/(trouble|working)$/.test(path)) return 'dashboard';
+  /*
+   * Search reaches people, visits, firms, staff, jobs and tablets in one
+   * request, so no single area can be right for it: the strictest would be
+   * 'admin', which would leave reception unable to search five things they can
+   * already open from the menu.
+   *
+   * It is let through here and filtered per source inside server/search.js,
+   * against these same areas — a source whose area the caller does not hold is
+   * never queried at all. That is the only place the decision is made, so the
+   * menu and the search box cannot come to different conclusions.
+   */
+  if (segment === 'search') return null;
   return AREA_BY_PREFIX[segment] || 'admin';
 }
 
