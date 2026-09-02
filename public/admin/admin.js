@@ -4671,6 +4671,16 @@
           <p class="muted">For an individual person, the same thing with the <i>chat</i> template, pasted into their
             record on the <b>Staff</b> tab. Full instructions for both, including what to do when your tenant hides
             the chat template, are on that tab under <b>Setting up a chat webhook</b>.</p>
+          <!--
+            Asked every time somebody sets this up, and the answer is not
+            reassuring unless it is specific: nothing we send names anybody,
+            so there is no setting here that could change it.
+          -->
+          <p class="muted"><b>Why do the messages say they are from me?</b> Teams credits the post to whoever created
+            the workflow — nothing Smart Lobby sends names a person, so no setting here can change it. Create the
+            workflow from a shared or service account instead and the posts come from that account. Worth doing
+            anyway: a workflow owned by one person stops working when they leave, and the first anybody knows is a
+            visitor at the gate with nobody told.</p>
         </details>
 
         <h3>What the message looks like</h3>

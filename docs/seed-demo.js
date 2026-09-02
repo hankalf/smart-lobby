@@ -152,10 +152,10 @@ if (!process.env.DATA_DIR) {
 
 (async () => {
   const setup = await req('POST', '/api/admin/setup', {
-    email: 'hankalfr@gmail.com', password: 'Testing123!', name: 'Hank Alfred',
+    email: 'robin.vale@naturestouch.example', password: 'Testing123!', name: 'Robin Vale',
     org_name: "Nature's Touch Builds"
   });
-  if (setup.status !== 200) await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  if (setup.status !== 200) await req('POST', '/api/admin/login', { email: 'robin.vale@naturestouch.example', password: 'Testing123!' });
 
   const localtime = require('../server/localtime');
   const db = require('../server/db');

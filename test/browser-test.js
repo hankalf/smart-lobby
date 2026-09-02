@@ -33,7 +33,7 @@ async function drawOn(page, sel) {
 async function armDeckSignature() {
   const login = await fetch(`${BASE}/api/admin/login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'hankalfr@gmail.com', password: 'Testing123!' })
+    body: JSON.stringify({ email: 'owner@example.test', password: 'Testing123!' })
   });
   const cookie = (login.headers.get('set-cookie') || '').split(';')[0];
   const body = await fetch(`${BASE}/api/admin/slideshows`, { headers: { cookie } }).then((r) => r.json());
@@ -57,7 +57,7 @@ async function armDeckSignature() {
 async function armBadge() {
   const login = await fetch(`${BASE}/api/admin/login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'hankalfr@gmail.com', password: 'Testing123!' })
+    body: JSON.stringify({ email: 'owner@example.test', password: 'Testing123!' })
   });
   const cookie = (login.headers.get('set-cookie') || '').split(';')[0];
   const before = await fetch(`${BASE}/api/admin/settings`, { headers: { cookie } }).then((r) => r.json());
@@ -230,7 +230,7 @@ async function armBadge() {
   /* ---- server has the induction signature ---- */
   const res = await fetch(`${BASE}/api/admin/login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'hankalfr@gmail.com', password: 'Testing123!' })
+    body: JSON.stringify({ email: 'owner@example.test', password: 'Testing123!' })
   });
   const cookie = res.headers.get('set-cookie').split(';')[0];
   const visits = await (await fetch(`${BASE}/api/admin/visits?limit=5`, { headers: { cookie } })).json();

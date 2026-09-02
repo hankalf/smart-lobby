@@ -21,7 +21,7 @@ const upload = async (p, buffer, name = 'backup.zip') => {
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 (async () => {
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
   const host = (await req('POST', '/api/admin/staff', { name: 'John Doe 44', email: 'bk@x.test', active: 1 })).data;
 
   /* ---- something worth backing up: a visit, a photo, a signature ---- */

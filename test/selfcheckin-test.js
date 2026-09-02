@@ -35,7 +35,7 @@ const signIn = (extra) => req('POST', '/api/kiosk/signin', {
 });
 
 (async () => {
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
   const staff = (await req('GET', '/api/admin/staff')).data || [];
   const host = staff[0]
     || (await req('POST', '/api/admin/staff', { name: 'Phone Host', email: 'ph@example.com', active: 1 })).data;

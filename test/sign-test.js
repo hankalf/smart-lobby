@@ -34,7 +34,7 @@ async function req(method, p, body) {
 }
 
 (async () => {
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
   const BEFORE = (await req('GET', '/api/admin/settings')).data;
 
   const where = (await req('POST', '/api/admin/locations', { name: 'Sign Test Gate' })).data;

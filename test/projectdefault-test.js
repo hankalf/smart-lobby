@@ -25,7 +25,7 @@ const lookup = (body) => req('POST', '/api/kiosk/lookup', { visit_type: 'contrac
   .then((r) => r.data);
 
 (async () => {
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
   const BEFORE = (await req('GET', '/api/admin/settings')).data.projects || { default_by_type: {} };
 
   const warehouse = (await req('POST', '/api/admin/projects', { name: 'Default Warehouse', code: 'DW', active: 1 })).data;

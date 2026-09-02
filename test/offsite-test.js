@@ -38,7 +38,7 @@ const FLOW_URL = 'http://127.0.0.1:2755/offsite';
 
 (async () => {
   await new Promise((r) => flow.listen(2755, '127.0.0.1', r));
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
 
   const DATA_DIR = process.env.DATA_DIR || require('../server/db').DATA_DIR;
   const photos = path.join(DATA_DIR, 'uploads', 'private', 'photos');

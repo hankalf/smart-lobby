@@ -15,7 +15,7 @@ async function req(method, path, body) {
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 (async () => {
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
   const staff = (await req('POST', '/api/admin/staff', {
     name: 'John Doe 70', email: 'parcels@x.test', active: 1 })).data;
   ok('somebody for a parcel to be for', !!staff.id);

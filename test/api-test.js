@@ -31,7 +31,7 @@ const SIG = `data:image/png;base64,${PNG_B64}`;
 
 (async () => {
   /* ---- setup + login ---- */
-  let r = await post('/api/admin/setup', { name: 'Hank', email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  let r = await post('/api/admin/setup', { name: 'Test Owner', email: 'owner@example.test', password: 'Testing123!' });
   ok('first-run setup creates admin', r.status === 200);
   r = await get_('/api/admin/me');
   ok('session cookie works', r.status === 200 && r.data && r.data.email);

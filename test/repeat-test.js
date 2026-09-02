@@ -16,7 +16,7 @@ async function req(method, path, body) {
 }
 
 (async () => {
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
 
   const docs = (await req('GET', '/api/admin/agreements')).data;
   const doc = docs[docs.length - 1]; // the site-rules document api-test had signed

@@ -11,7 +11,7 @@ async function req(method, path, body) {
 }
 
 (async () => {
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
 
   /* ---- deleting things that are referenced ---- */
   let r = await req('GET', '/api/admin/devices');

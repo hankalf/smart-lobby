@@ -13,7 +13,7 @@ async function req(method, path, body) {
 const anon = (path) => fetch(BASE + path, { cache: 'no-store' });
 
 (async () => {
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
 
   /* ---- off by default, and nothing is served ---- */
   let r = await req('GET', '/api/admin/board');

@@ -21,7 +21,7 @@ function findAll(node, type, out = []) {
 }
 
 (async () => {
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
 
   /* ---- a host with an email, so the tag has an address to use ---- */
   const host = (await req('POST', '/api/admin/staff', { name: 'Jane Roe', email: 'hank@card.test', active: 1 })).data;

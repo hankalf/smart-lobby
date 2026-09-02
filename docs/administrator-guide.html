@@ -701,6 +701,28 @@ node scripts/reset-password.js you@example.com 'a new password'</code></pre>
   channel when a tablet stops checking in, and again when it returns. It is not a visitor event and
   never reaches a host's own webhook. Off by default, and the timing is in Chapter 11.</p>
 
+<h2>Who Teams says the message is from</h2>
+
+<p>Teams credits an incoming webhook post to the account that created the workflow behind it. What
+  Smart Lobby sends is a bare <code>{"type":"message","attachments":[…]}</code> carrying the adaptive
+  card and <strong>no sender field of any kind</strong> — so a message reading as being from a
+  particular person is Teams naming the workflow's owner, and nothing in this system can change it.
+  There is no setting for it because there is nothing here to set.</p>
+
+<p>The fix is to own the workflow somewhere other than a person: create it from a shared or service
+  account, then paste that URL in. Some tenants also offer a <em>Post as: Flow bot</em> choice on the
+  Teams action inside Power Automate, which posts as Power Automate rather than as anybody —
+  Microsoft moves that option around between the Workflows templates and the older connector, so it is
+  worth looking for rather than relying on.</p>
+
+<div class="warn">
+  <span class="label">The name is the smaller half of the problem</span>
+  <p>A workflow owned by one person stops the day that person leaves, loses a licence, or has their
+    account disabled. Arrivals then go unannounced with nothing failing loudly — the sign-in still
+    records, the notification log shows the failure, and nobody reads the notification log. A service
+    account outlives all of that.</p>
+</div>
+
 <h2>What has been sent</h2>
 
 <p><span class="path">Settings → Notifications → What has been sent</span> lists the last 50 attempts

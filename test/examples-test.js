@@ -15,7 +15,7 @@ async function req(method, path, body) {
 const NAMES = ['John Doe', 'Jane Doe', 'Sam Doe', 'Alex Doe'];
 
 (async () => {
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
 
   /*
    * Found by the flag, not by name: a real visitor may well be called John

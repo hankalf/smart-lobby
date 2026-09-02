@@ -199,7 +199,7 @@ function summarise(out) {
     const setup = await fetch(`${BASE}/api/admin/setup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'hankalfr@gmail.com', password: 'Testing123!', name: 'Hank', org_name: "Nature's Touch Builds" })
+      body: JSON.stringify({ email: 'owner@example.test', password: 'Testing123!', name: 'Test Owner', org_name: "Nature's Touch Builds" })
     }).catch(() => null);
     const jar = setup && (setup.headers.get('set-cookie') || '').split(';')[0];
     // A project and a device, because a contractor sign-in needs a project and

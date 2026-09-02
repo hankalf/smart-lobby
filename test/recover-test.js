@@ -80,7 +80,7 @@ async function step(page, at) {
 
   const jar = await fetch(`${BASE}/api/admin/login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'hankalfr@gmail.com', password: 'Testing123!' })
+    body: JSON.stringify({ email: 'owner@example.test', password: 'Testing123!' })
   });
   const cookie = (jar.headers.get('set-cookie') || '').split(';')[0];
   const staff = await fetch(`${BASE}/api/admin/staff`, { headers: { cookie } }).then((r) => r.json());

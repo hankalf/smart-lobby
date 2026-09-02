@@ -17,11 +17,11 @@ async function req(method, path, body) {
   r = await req('GET', '/api/admin/settings');
   ok('settings refuse an anonymous request', r.status === 401 || r.status === 403, String(r.status));
 
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
 
   /* ---- bad login ---- */
   const bad = await fetch(BASE + '/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'hankalfr@gmail.com', password: 'wrong' }) });
+    body: JSON.stringify({ email: 'owner@example.test', password: 'wrong' }) });
   ok('a wrong password is refused', bad.status === 401, String(bad.status));
 
   /* ---- kiosk input validation ---- */

@@ -19,7 +19,7 @@ const post = (p, b) => fetch(BASE + p, { method: 'POST', headers: { 'Content-Typ
   ok('every answer names the same visit', ids.size === 1, JSON.stringify([...ids]));
 
   const login = await fetch(BASE + '/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'hankalfr@gmail.com', password: 'Testing123!' }) });
+    body: JSON.stringify({ email: 'owner@example.test', password: 'Testing123!' }) });
   const cookie = login.headers.get('set-cookie').split(';')[0];
   const visits = await (await fetch(`${BASE}/api/admin/visits?limit=50`, { headers: { cookie } })).json();
   const rows = visits.rows || visits;

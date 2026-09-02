@@ -19,7 +19,7 @@ const signin = (name, company, extra = {}) => req('POST', '/api/kiosk/signin', {
 const byName = (list, name) => (list || []).find((c) => c.name === name);
 
 (async () => {
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
   const DETAILS_BEFORE = (await req('GET', '/api/admin/settings')).data.details;
   await req('PUT', '/api/admin/settings', {
     details: { visitor: { photo: 'off', company: 'required', phone: 'required', staff: 'off', purpose: 'off' } }

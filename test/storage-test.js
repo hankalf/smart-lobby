@@ -30,7 +30,7 @@ async function req(method, p, body) {
 }
 
 (async () => {
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
 
   const db = require('../server/db');
   const storage = require('../server/storage');
@@ -128,7 +128,7 @@ async function req(method, p, body) {
   /* ---- reception cannot delete the site's photos ---- */
   await req('POST', '/api/admin/logout');
   const staffPass = 'Reception123!';
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
   const rec = (await req('POST', '/api/admin/users', {
     email: `shed-reception-${Date.now()}@example.com`, name: 'Shed Reception', role: 'reception', password: staffPass, must_change: false
   })).data;
@@ -138,7 +138,7 @@ async function req(method, p, body) {
     const denied = await req('POST', '/api/admin/storage/shed', { force: true });
     ok('reception cannot delete the site’s photos', denied.status === 403, String(denied.status));
     await req('POST', '/api/admin/logout');
-    await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+    await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
     await req('DELETE', `/api/admin/users/${rec.id}`);
   } else {
     ok('reception cannot delete the site’s photos', false, `could not create the account: ${JSON.stringify(rec)}`);

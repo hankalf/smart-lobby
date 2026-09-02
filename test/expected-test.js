@@ -26,7 +26,7 @@ const today = () => localtime.today();
 const dayAhead = (n) => new Date(Date.parse(`${today()}T12:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
 
 (async () => {
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
   const staff = (await req('GET', '/api/admin/staff')).data || [];
   const host = staff[0]
     || (await req('POST', '/api/admin/staff', { name: 'Expect Host', email: 'ex@example.com', active: 1 })).data;
@@ -157,7 +157,7 @@ const dayAhead = (n) => new Date(Date.parse(`${today()}T12:00:00Z`) + n * 864e5)
   ok('nobody signed out can read who is coming to the site', nobody === 401, String(nobody));
 
   /* ---- clearing up ---- */
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
   await req('DELETE', `/api/admin/users/${rec.id}`);
   for (const id of made) await req('DELETE', `/api/admin/expected/${id}`);
   await req('DELETE', `/api/admin/visits/${signin.data.visit.id}`);

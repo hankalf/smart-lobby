@@ -298,8 +298,8 @@ freshShot('first-run', 'The only screen a new install shows', async (page) => {
     if (await f.count() && await f.isVisible()) await f.fill(v).catch(() => {});
   };
   await fill('#gate-org', "Nature's Touch Builds");
-  await fill('#gate-name', 'Hank Alfred');
-  await fill('#gate-email', 'hank@naturestouch.example');
+  await fill('#gate-name', 'Robin Vale');
+  await fill('#gate-email', 'robin.vale@naturestouch.example');
   await page.waitForTimeout(300);
   return { clip: await trimmed(page, '.gate-card') };
 }, NARROW);
@@ -308,19 +308,19 @@ freshShot('sign-in-screen', 'Signing in afterwards', async (page) => {
   // Set up in passing, so the gate has an account to ask about.
   await fetch(`${BASE}/api/admin/setup`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'hank@naturestouch.example', password: 'Testing123!',
-      name: 'Hank Alfred', org_name: "Nature's Touch Builds" })
+    body: JSON.stringify({ email: 'robin.vale@naturestouch.example', password: 'Testing123!',
+      name: 'Robin Vale', org_name: "Nature's Touch Builds" })
   }).catch(() => {});
   await page.goto(`${BASE}/admin/`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(1200);
-  await page.locator('#gate-email').fill('hank@naturestouch.example').catch(() => {});
+  await page.locator('#gate-email').fill('robin.vale@naturestouch.example').catch(() => {});
   return { clip: await trimmed(page, '.gate-card') };
 }, NARROW);
 
 freshShot('day-one-dashboard', 'The dashboard on day one', async (page) => {
   await page.goto(`${BASE}/admin/`, { waitUntil: 'networkidle' });
   if (await page.locator('#gate-email').count()) {
-    await page.fill('#gate-email', 'hank@naturestouch.example');
+    await page.fill('#gate-email', 'robin.vale@naturestouch.example');
     await page.fill('#gate-pass', 'Testing123!');
     await page.click('#gate-submit');
     await page.waitForSelector('#shell:not(.hidden)', { timeout: 10000 });
@@ -334,7 +334,7 @@ freshShot('day-one-dashboard', 'The dashboard on day one', async (page) => {
 async function signIn(page) {
   await page.goto(`${BASE}/admin/`, { waitUntil: 'networkidle' });
   if (await page.locator('#gate-email').count()) {
-    await page.fill('#gate-email', 'hankalfr@gmail.com');
+    await page.fill('#gate-email', 'robin.vale@naturestouch.example');
     await page.fill('#gate-pass', 'Testing123!');
     await page.click('#gate-submit');
     await page.waitForSelector('#shell:not(.hidden)', { timeout: 10000 });
@@ -373,7 +373,7 @@ async function openSection(page, section) {
   if (!FRESH) {
     const jar = await fetch(`${BASE}/api/admin/login`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'hankalfr@gmail.com', password: 'Testing123!' })
+      body: JSON.stringify({ email: 'robin.vale@naturestouch.example', password: 'Testing123!' })
     });
     const cookie = (jar.headers.get('set-cookie') || '').split(';')[0];
     const link = await fetch(`${BASE}/api/admin/board/link`, { headers: { cookie } }).then((r) => r.json());

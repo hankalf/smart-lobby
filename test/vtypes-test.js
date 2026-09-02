@@ -8,7 +8,7 @@ const ok = (n, c, x) => { if (c) { pass++; console.log(`  ok  ${n}`); } else { f
 (async () => {
   const login = await fetch(`${BASE}/api/admin/login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'hankalfr@gmail.com', password: 'Testing123!' })
+    body: JSON.stringify({ email: 'owner@example.test', password: 'Testing123!' })
   });
   const cookie = (login.headers.get('set-cookie') || '').split(';')[0];
   // Spanish on, so the preview's language picker is there to test.
@@ -37,7 +37,7 @@ const ok = (n, c, x) => { if (c) { pass++; console.log(`  ok  ${n}`); } else { f
     null, { timeout: 10000 });
 
   await page.goto(`${BASE}/admin/`);
-  await page.fill('#gate-email', 'hankalfr@gmail.com');
+  await page.fill('#gate-email', 'owner@example.test');
   await page.fill('#gate-pass', 'Testing123!');
   await page.click('#gate-submit');
   await page.waitForSelector('#shell:not(.hidden)');

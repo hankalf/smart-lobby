@@ -48,7 +48,7 @@ const post = (path, body, headers = {}) =>
   ok('anonymous cannot delete records', del.status !== 200, String(del.status));
 
   /* ============ 2. Session and login ============ */
-  const badLogin = await post('/api/admin/login', { email: 'hankalfr@gmail.com', password: 'wrong' });
+  const badLogin = await post('/api/admin/login', { email: 'owner@example.test', password: 'wrong' });
   ok('a wrong password is refused', badLogin.status === 401, String(badLogin.status));
 
   // Session fixation / forged cookie
@@ -65,7 +65,7 @@ const post = (path, body, headers = {}) =>
 
   /* ============ 3. Cookie hardening ============ */
   const good = await raw('/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: 'hankalfr@gmail.com', password: 'Testing123!' }) });
+    body: JSON.stringify({ email: 'owner@example.test', password: 'Testing123!' }) });
   const setCookie = good.headers.get('set-cookie') || '';
   const cookie = setCookie.split(';')[0];
   ok('the session cookie is HttpOnly', /HttpOnly/i.test(setCookie), setCookie);
@@ -80,7 +80,7 @@ const post = (path, body, headers = {}) =>
   const behindProxy = await raw('/api/admin/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Forwarded-Proto': 'https' },
-    body: JSON.stringify({ email: 'hankalfr@gmail.com', password: 'Testing123!' })
+    body: JSON.stringify({ email: 'owner@example.test', password: 'Testing123!' })
   });
   const proxied = behindProxy.headers.get('set-cookie') || '';
   ok('the session cookie is Secure when the proxy says https', /;\s*Secure/i.test(proxied), proxied);
@@ -153,7 +153,7 @@ const post = (path, body, headers = {}) =>
 
   // Brute-forcing the admin password
   const loginBurst = await Promise.all(Array.from({ length: 25 }, () =>
-    post('/api/admin/login', { email: 'hankalfr@gmail.com', password: 'guess' })));
+    post('/api/admin/login', { email: 'owner@example.test', password: 'guess' })));
   const loginLimited = loginBurst.filter((b) => b.status === 429).length;
   ok('login attempts are rate-limited', loginLimited > 0, `25 wrong passwords, ${loginLimited} blocked`);
 

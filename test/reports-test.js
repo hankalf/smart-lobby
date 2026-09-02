@@ -21,7 +21,7 @@ const at = (offset, hour) => `${day(offset)}T${String(hour).padStart(2, '0')}:00
 const stats = (q = '') => req('GET', `/api/admin/stats${q ? `?${q}` : ''}`).then((r) => r.data);
 
 (async () => {
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
 
   /* ---- two projects with known hours on them ---- */
   const alpha = (await req('POST', '/api/admin/projects', { name: 'Report Alpha', code: 'RA', active: 1 })).data;

@@ -18,7 +18,7 @@ const signIn = async (email, password) =>
   (await req('POST', '/api/admin/login', { email, password }, null));
 
 (async () => {
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
 
   const levels = (await req('GET', '/api/admin/roles')).data;
   ok('the access levels are listed', Array.isArray(levels) && levels.length === 4, JSON.stringify((levels || []).map((l) => l.key)));

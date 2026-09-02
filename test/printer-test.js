@@ -33,7 +33,7 @@ const dashPrinters = () => req('GET', '/api/admin/dashboard')
   .then((r) => ((r.data || {}).health || {}).printers || []);
 
 (async () => {
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
 
   const made = (await req('POST', '/api/admin/printers',
     { name: 'Trouble Test Printer', label_type: 'DK-2251 62mm continuous' })).data;
@@ -55,7 +55,7 @@ const dashPrinters = () => req('GET', '/api/admin/dashboard')
    * Who and what, because "the printer is broken" a day later is useless and
    * "Hank said it was out of labels at 09:40" is somebody's next five minutes.
    */
-  ok('…with who said so', row.trouble_by === 'Hank', row.trouble_by);
+  ok('…with who said so', row.trouble_by === 'Test Owner', row.trouble_by);
   ok('…and what they said about it', row.trouble_note === 'Out of labels', row.trouble_note);
 
   ok('the dashboard shows it', (await dashPrinters()).some((p) => p.id === made.id));

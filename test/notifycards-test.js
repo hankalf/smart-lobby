@@ -205,7 +205,7 @@ function unit() {
     null, { timeout: 10000 });
 
   await page.goto(`${BASE}/admin/`);
-  await page.fill('#gate-email', 'hankalfr@gmail.com');
+  await page.fill('#gate-email', 'owner@example.test');
   await page.fill('#gate-pass', 'Testing123!');
   await page.click('#gate-submit');
   await page.waitForSelector('#shell:not(.hidden)');

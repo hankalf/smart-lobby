@@ -16,7 +16,7 @@ async function req(method, path, body, jar) {
 }
 
 (async () => {
-  const OWNER = 'hankalfr@gmail.com';
+  const OWNER = 'owner@example.test';
   let ownerPass = 'Testing123!';
   await req('POST', '/api/admin/login', { email: OWNER, password: ownerPass });
 

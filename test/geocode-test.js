@@ -31,7 +31,7 @@ async function req(method, p, body) {
 const geocode = (q) => req('GET', `/api/admin/geocode?q=${encodeURIComponent(q)}`);
 
 (async () => {
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
 
   const before = (await geocode('Riverside Way')).data;
   /*

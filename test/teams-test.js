@@ -31,7 +31,7 @@ const cardText = (p) => JSON.stringify(p.body);
 
 (async () => {
   await new Promise((r) => teams.listen(2700, '127.0.0.1', r));
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
 
   await req('PUT', '/api/admin/settings', { notify: {
     on_signin: true, on_delivery: true, global_webhook_url: CHANNEL,

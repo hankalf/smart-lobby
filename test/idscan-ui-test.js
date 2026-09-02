@@ -11,7 +11,7 @@ async function api(path, body, method = 'POST', cookie = '') {
 }
 
 (async () => {
-  const login = await api('/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  const login = await api('/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
   const cookie = login.headers.get('set-cookie').split(';')[0];
   const setScan = async (mode) => {
     const s = (await api('/api/admin/settings', null, 'GET', cookie)).data;

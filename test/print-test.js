@@ -30,7 +30,7 @@ const day = (offset) => new Date(Date.parse(`${localtime.today()}T12:00:00Z`) + 
 const at = (offset, hour) => `${day(offset)}T${String(hour).padStart(2, '0')}:00:00.000Z`;
 
 (async () => {
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
 
   /* ---- two projects with known hours, as the screen would show them ---- */
   const alpha = (await req('POST', '/api/admin/projects', { name: 'Print Alpha', code: 'PA', active: 1 })).data;
@@ -130,7 +130,7 @@ const at = (offset, hour) => `${day(offset)}T${String(hour).padStart(2, '0')}:00
     denied.status === 403, String(denied.status));
 
   await req('POST', '/api/admin/logout');
-  await req('POST', '/api/admin/login', { email: 'hankalfr@gmail.com', password: 'Testing123!' });
+  await req('POST', '/api/admin/login', { email: 'owner@example.test', password: 'Testing123!' });
   await req('DELETE', `/api/admin/users/${rec.id}`);
   await req('DELETE', `/api/admin/users/${clerk.id}`);
 

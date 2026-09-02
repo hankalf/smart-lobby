@@ -568,6 +568,17 @@
 <p>Start with one. Teams or Slack is the usual answer, because the message can tag the person being
   visited and they are already looking at it.</p>
 
+<div class="note">
+  <span class="label">Set the Teams workflow up as a shared account, not as yourself</span>
+  <p>Teams credits every post to whoever created the workflow, so a flow you make under your own
+    account produces arrival messages that read as being from you. Nothing Smart Lobby sends names a
+    person — there is no setting anywhere in it that changes this — so the only way to change the name
+    is to create the workflow from a different account.</p>
+  <p>Use a shared or service account for it. The name is the smaller half of the reason: a workflow
+    owned by one person stops working the day they leave or their licence changes, and the first sign
+    anybody gets is a visitor standing at a gate with nobody told.</p>
+</div>
+
 <h2>Two places at once</h2>
 
 <p>Chat notifications go to a <strong>company channel</strong> that sees every arrival, and to each
@@ -916,6 +927,11 @@
 <h3>Teams returns a 400</h3>
 <p>The URL is probably a legacy Office 365 connector rather than a Workflows one. Create the flow
   again from "When an HTTP request is received".</p>
+
+<h3>The Teams messages look like they are from me</h3>
+<p>Teams credits the post to whoever created the workflow. Nothing Smart Lobby sends names a person,
+  so no setting here changes it — re-create the workflow from a shared or service account and paste
+  the new URL in. Chapter 16.</p>
 
 <h3>An @-mention shows as raw markup</h3>
 <p>That person has no email address on their staff record, or one Teams cannot resolve. Add it under
