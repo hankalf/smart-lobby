@@ -954,6 +954,54 @@ router.get('/geocode', async (req, res) => {
   res.json(out);
 });
 
+/**
+ * One square of the map behind the geofence circle.
+ *
+ * Fetched by this server for the same reason the geocoder is: the content
+ * security policy lets a page here load pictures from this origin only, and
+ * widening it for a tile host would widen it for the kiosk and the board as
+ * well. See server/tiles.js.
+ *
+ * Administrative, by the default in roles.js — the map is one panel of the
+ * settings, and this is a route that makes an outbound request for whoever
+ * calls it, which is not something to leave open a millimetre wider than the
+ * page that needs it.
+ */
+/**
+ * Whether there is a basemap to be had at all, asked once before a dozen
+ * tiles are requested that cannot arrive.
+ *
+ * An install with no route out to the internet is a normal way to run this,
+ * and without this the map would ask for twelve tiles, collect twelve failures
+ * and fill the browser's console with them — every time the settings page was
+ * opened. Asked here instead, in one request that always answers, so a page
+ * that cannot have a map goes straight to drawing the fence on paper.
+ *
+ * Cheap after the first: tile 0/0/0 is the whole world and is cached like any
+ * other.
+ */
+router.get('/tiles/probe', async (req, res) => {
+  const out = await require('../tiles').tile(0, 0, 0);
+  res.json({ ok: !out.error, error: out.error || null });
+});
+
+router.get('/tiles/:z/:x/:y', async (req, res) => {
+  // The row arrives as `12345.png`, because that is the shape every map
+  // library and every cache expects a tile address to have.
+  const row = String(req.params.y).replace(/\.[a-z]+$/i, '');
+  const out = await require('../tiles').tile(req.params.z, req.params.x, row);
+  if (out.error) {
+    const mine = out.error === 'bad_tile' || out.error === 'out_of_range';
+    return res.status(mine ? 400 : 502).json({ error: out.error });
+  }
+  /*
+   * Private, because it went through a login to get here. A day is far shorter
+   * than a map changes and long enough that panning about the settings page
+   * asks this server for nothing.
+   */
+  res.type(out.type).set('Cache-Control', 'private, max-age=86400').send(out.body);
+});
+
 /* -------------------------------------------------------------- printers */
 
 const PRINTER_PORTS = ['network', 'wireless_direct', 'bluetooth'];

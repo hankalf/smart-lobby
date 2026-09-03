@@ -60,6 +60,8 @@ const SUITES = [
   { name: 'printer', file: 'printer-test.js' },
   { name: 'sign', file: 'sign-test.js', browser: true },
   { name: 'geocode', file: 'geocode-test.js' },
+  // Drives a browser for half of it, and puts the geofence settings back after.
+  { name: 'map', file: 'map-test.js', browser: true },
   { name: 'search', file: 'search-test.js' },
   { name: 'visits', file: 'visits-test.js' },
   { name: 'undo', file: 'undo-test.js' },

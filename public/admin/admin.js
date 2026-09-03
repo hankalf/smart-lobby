@@ -4497,6 +4497,33 @@
         </div>
         <div class="row"><button class="btn subtle" id="geo-here" type="button">Use where I am now</button>
           <span class="muted" id="geo-here-note">Stand on the site and press this from a phone or laptop.</span></div>
+
+        <!--
+          The fence, drawn, because two decimal numbers and a radius in metres
+          are not something anybody can check by reading. A digit in the wrong
+          place puts the gate in the next county and nothing on this page would
+          have said so; the circle on the map either sits over the site or it
+          obviously does not.
+
+          The map is drawn by hand rather than by a mapping library, and the
+          tiles come through this server. Both for the same reason: the content
+          security policy admits scripts and pictures from this origin only,
+          and it is doing real work — widening it here would widen it for the
+          kiosk a visitor holds too.
+        -->
+        <div class="site-map" id="site-map">
+          <div class="site-map-frame" id="site-map-frame" hidden>
+            <div class="site-map-tiles" id="site-map-tiles"></div>
+            <svg class="site-map-overlay" id="site-map-overlay" aria-hidden="true"></svg>
+            <div class="site-map-zoom">
+              <button class="btn subtle" data-mapzoom="1" type="button" aria-label="Zoom in">+</button>
+              <button class="btn subtle" data-mapzoom="-1" type="button" aria-label="Zoom out">−</button>
+            </div>
+            <div class="site-map-credit" id="site-map-credit">© OpenStreetMap contributors</div>
+          </div>
+          <p class="muted" id="site-map-note"></p>
+        </div>
+
         ${chk('geofence.require_location', 'Refuse a phone that will not say where it is')}
         <p class="muted">With that off, a visitor whose phone has location switched off is let through and the
           visit is recorded as usual — which is often the right trade, because a real visitor with a stubborn
@@ -6051,8 +6078,8 @@
           const [lat, lng] = b.dataset.geopick.split(',');
           setCoords(lat, lng);
           list.innerHTML = `<p class="muted">Set to ${esc(lat)}, ${esc(lng)}. `
-            + 'Check the radius covers the whole site, then look at the map of your choice '
-            + 'to be sure it is the right place.</p>';
+            + 'Check the map below: the circle should sit over the site with the '
+            + 'whole of it inside.</p>';
         }));
       };
 
@@ -6061,6 +6088,276 @@
       box.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); find(); }
       });
+    }
+
+    /*
+     * The fence, drawn.
+     *
+     * "37.795500, −122.271200, 250 m" is not something anybody can check by
+     * reading it. A digit in the wrong place puts the gate in the next county,
+     * a radius meant for a yard swallows the town, and neither shows up until
+     * a visitor is standing at the gate unable to sign in — which is the worst
+     * possible moment to find out, and how this was found out.
+     *
+     * Drawn by hand rather than with a mapping library, which is less code
+     * than it sounds: a tile is a 256-pixel square at a known place in a known
+     * projection, so placing them is arithmetic. The alternative was a library
+     * from a CDN, which the content security policy forbids and which would
+     * have to be vendored and carried instead. Nothing here needs dragging or
+     * animating; it needs to show one circle in the right place.
+     */
+    const mapBox = $('#site-map');
+    if (mapBox) {
+      const TILE = 256;
+      /* Metres to a pixel at zoom 0 on the equator, for 256-pixel tiles. */
+      const EQUATOR_MPP = 156543.03392;
+      const frame = $('#site-map-frame');
+      const tileLayer = $('#site-map-tiles');
+      const overlay = $('#site-map-overlay');
+      const note = $('#site-map-note');
+      /* How far the +/- buttons have moved off the zoom that fits the circle. */
+      let nudge = 0;
+      /*
+       * Whether there is a basemap to be had: null until asked, then true or
+       * false. Asked once rather than discovered a dozen failed pictures at a
+       * time, because an install with no way out to the internet is a normal
+       * way to run this and should not spend every redraw finding that out.
+       */
+      let basemap = null;
+      /* So a slow tile from an abandoned draw cannot report on the current one. */
+      let generation = 0;
+
+      const setting = (path) => {
+        const field = $(`[data-set="${path}"]`, root);
+        const raw = field ? String(field.value).trim() : '';
+        const n = Number(raw);
+        return raw !== '' && Number.isFinite(n) ? n : NaN;
+      };
+
+      /** A round number of metres landing near a quarter of the frame. */
+      const niceScale = (metres) => {
+        const steps = [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000, 10000, 20000];
+        for (let i = steps.length - 1; i >= 0; i--) if (steps[i] <= metres) return steps[i];
+        return steps[0];
+      };
+
+      const metres = (m) => (m >= 1000 ? `${(m / 1000).toFixed(m % 1000 ? 1 : 0)} km` : `${Math.round(m)} m`);
+
+      function draw() {
+        const lat = setting('geofence.lat');
+        const lng = setting('geofence.lng');
+        const radiusIn = setting('geofence.radius_m');
+        const radius = Number.isFinite(radiusIn) && radiusIn > 0 ? radiusIn : 250;
+        const on = !!($('[data-set="geofence.enabled"]', root) || {}).checked;
+
+        /*
+         * Zero is not a place. It is what an empty box used to become on the
+         * way to the server, and it is in the Atlantic — so it is treated as
+         * "not set yet" here exactly as the fence itself treats it, rather
+         * than drawn as a site nobody has.
+         */
+        const placed = Number.isFinite(lat) && Number.isFinite(lng)
+          && (lat !== 0 || lng !== 0) && Math.abs(lat) <= 85 && Math.abs(lng) <= 180;
+
+        frame.hidden = !placed;
+        if (!placed) {
+          /*
+           * Emptied, not just hidden. A cleared coordinate leaving the last
+           * circle sitting in the markup is how a stale drawing comes back on
+           * screen the moment something unhides the frame again.
+           */
+          tileLayer.innerHTML = '';
+          overlay.innerHTML = '';
+          note.textContent = 'Fill in the latitude and longitude — by address, by standing on the site, or by '
+            + 'hand — and the fence is drawn here so you can see it land on the right place.';
+          return;
+        }
+
+        const W = Math.max(240, Math.round(frame.clientWidth || 640));
+        const H = Math.max(200, Math.round(frame.clientHeight || 320));
+
+        /*
+         * Zoom so the whole circle fits with room around it. Worked out from
+         * the radius rather than fixed, because the same panel has to show a
+         * 50 m yard and a 5 km quarry and be useful for both.
+         */
+        const atLat = EQUATOR_MPP * Math.cos(lat * Math.PI / 180);
+        /*
+         * Aim for the circle across four fifths of the shorter side. Tiles
+         * only come at whole zoom levels and this rounds down to keep the
+         * circle inside the frame, so what it actually lands on is somewhere
+         * between two fifths and four fifths — which is a map with the fence
+         * on it either way.
+         */
+        const want = (radius * 2) / (Math.min(W, H) * 0.8);    // metres a pixel must cover
+        let z = Math.floor(Math.log2(atLat / want)) + nudge;
+        z = Math.max(1, Math.min(19, z));
+        const mpp = atLat / (2 ** z);
+
+        /* Web Mercator: longitude is linear, latitude is not. */
+        const span = 2 ** z;
+        const latRad = lat * Math.PI / 180;
+        const worldX = ((lng + 180) / 360) * span * TILE;
+        const worldY = ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * span * TILE;
+        const originX = worldX - W / 2;
+        const originY = worldY - H / 2;
+
+        const mine = ++generation;
+        let asked = 0;
+        let failed = 0;
+
+        tileLayer.innerHTML = '';
+        /*
+         * No basemap, so none is asked for. Twelve requests that cannot arrive
+         * are twelve failures in the browser's console every time this panel
+         * is opened, which buries the real ones.
+         */
+        if (basemap !== true) {
+          paper(basemap === false, on, radius, lat, lng, z, nudge);
+          overlay.innerHTML = fenceSvg(W, H, radius, mpp);
+          return;
+        }
+        frame.classList.remove('no-tiles');
+        for (let ty = Math.floor(originY / TILE); ty <= Math.floor((originY + H) / TILE); ty++) {
+          // Above the pole and below it there is no map, so nothing is asked for.
+          if (ty < 0 || ty >= span) continue;
+          for (let tx = Math.floor(originX / TILE); tx <= Math.floor((originX + W) / TILE); tx++) {
+            const col = ((tx % span) + span) % span;           // the world wraps at the date line
+            const img = new Image();
+            img.className = 'site-map-tile';
+            img.alt = '';
+            img.style.left = `${tx * TILE - originX}px`;
+            img.style.top = `${ty * TILE - originY}px`;
+            asked++;
+            /*
+             * Whether the basemap arrived at all is the thing worth reporting.
+             * A map that silently draws a circle on grey nothing looks like a
+             * bug in the circle, and an install with no way out to the
+             * internet — which is a normal way to run this — would look
+             * broken rather than merely mapless.
+             */
+            /*
+             * A tile that fails after the probe said there was a basemap is
+             * the exceptional case, and it still has to be legible: a circle
+             * on grey nothing reads as a bug in the circle rather than as a
+             * missing map.
+             */
+            img.addEventListener('error', () => {
+              // Taken off the page rather than left to draw a torn-picture
+              // icon in the middle of the map.
+              img.remove();
+              if (mine !== generation) return;
+              failed++;
+              if (failed === asked) paper(true, on, radius, lat, lng, z, nudge);
+            });
+            img.src = `/api/admin/tiles/${z}/${col}/${ty}.png`;
+            tileLayer.append(img);
+          }
+        }
+
+        overlay.innerHTML = fenceSvg(W, H, radius, mpp);
+        note.textContent = noteFor(on, radius, lat, lng, z, nudge);
+      }
+
+      /** The circle, the pin and a scale bar — the part that is not a basemap. */
+      function fenceSvg(W, H, radius, mpp) {
+        const cx = W / 2;
+        const cy = H / 2;
+        const ring = radius / mpp;
+        const barMetres = niceScale(W * mpp / 4);
+        const barPx = barMetres / mpp;
+        overlay.setAttribute('viewBox', `0 0 ${W} ${H}`);
+        return `
+          <circle cx="${cx}" cy="${cy}" r="${ring.toFixed(1)}" class="fence-ring"/>
+          <line x1="${cx}" y1="${cy}" x2="${(cx + ring).toFixed(1)}" y2="${cy}" class="fence-radius"/>
+          <text x="${(cx + ring / 2).toFixed(1)}" y="${cy - 6}" class="fence-label"
+            text-anchor="middle">${esc(metres(radius))}</text>
+          <path d="M ${cx} ${cy} L ${cx - 7} ${cy - 15} A 9 9 0 1 1 ${cx + 7} ${cy - 15} Z" class="fence-pin"/>
+          <circle cx="${cx}" cy="${cy - 21}" r="3.2" class="fence-pin-hole"/>
+          <g class="scale-bar">
+            <line x1="14" y1="${H - 16}" x2="${(14 + barPx).toFixed(1)}" y2="${H - 16}"/>
+            <line x1="14" y1="${H - 21}" x2="14" y2="${H - 11}"/>
+            <line x1="${(14 + barPx).toFixed(1)}" y1="${H - 21}" x2="${(14 + barPx).toFixed(1)}" y2="${H - 11}"/>
+            <text x="${(14 + barPx / 2).toFixed(1)}" y="${H - 22}" text-anchor="middle">${esc(metres(barMetres))}</text>
+          </g>`;
+      }
+
+      /**
+       * The fence on squared paper, for when there is no basemap to draw it on.
+       *
+       * @param {boolean} known  whether it has been established that there is
+       *   no map to be had. Until that is settled this is just what the map
+       *   looks like for the moment it takes to ask, and saying it failed then
+       *   would be a lie that flashes up on every good install.
+       */
+      function paper(known, on, radius, lat, lng, z, off) {
+        frame.classList.toggle('no-tiles', known);
+        if (!known) { note.textContent = noteFor(on, radius, lat, lng, z, off); return; }
+        note.innerHTML = `${esc(noteFor(on, radius, lat, lng, z, off))} `
+          + '<b>The map itself could not be loaded</b> — this server may have no way out to the '
+          + 'internet, or the tile service may be down. The circle above is still drawn to scale, '
+          + 'so it shows how big the fence is, just not where.';
+      }
+
+      function noteFor(on, radius, lat, lng, z, off) {
+        const where = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+        const zoomed = off ? ' Zoomed in or out by hand; the buttons only change the view, not the fence.' : '';
+        return (on
+          ? `A phone check-in is refused anywhere outside this circle — ${metres(radius)} from ${where}.`
+          : `Drawn for reference. The fence is switched off, so phone check-ins are accepted from anywhere; `
+            + `switch it on above and this circle — ${metres(radius)} from ${where} — is what would apply.`)
+          + zoomed;
+      }
+
+      /*
+       * Redrawn from the events the fields already fire, rather than from the
+       * buttons that fill them. setSettingField dispatches 'input', so the
+       * address picker and "Use where I am now" arrive here too, and there is
+       * no third way of setting a coordinate that could be forgotten.
+       */
+      let pending = null;
+      const redraw = () => { clearTimeout(pending); pending = setTimeout(draw, 150); };
+
+      /*
+       * Asked once, when the panel is wired rather than when a coordinate is
+       * typed, so the answer is in by the time there is anything to draw.
+       */
+      api('/tiles/probe')
+        .then((r) => { basemap = !!r.ok; })
+        .catch(() => { basemap = false; })
+        .then(draw);
+      root.addEventListener('input', (e) => {
+        if (e.target.matches && e.target.matches('[data-set^="geofence."]')) { nudge = 0; redraw(); }
+      });
+      root.addEventListener('change', (e) => {
+        if (e.target.matches && e.target.matches('[data-set="geofence.enabled"]')) redraw();
+      });
+
+      $$('[data-mapzoom]', mapBox).forEach((b) => b.addEventListener('click', () => {
+        nudge = Math.max(-6, Math.min(6, nudge + Number(b.dataset.mapzoom)));
+        draw();
+      }));
+
+      /*
+       * Redrawn whenever the frame's width actually changes, which covers three
+       * things at once: the window being resized, the settings panel being
+       * opened for the first time, and the first layout after this runs. The
+       * last one matters — the panel can still be off-screen when this wires
+       * up, and a map laid out against a width of zero puts every tile in the
+       * wrong place with nothing to say it did.
+       */
+      let drawnAt = -1;
+      if (window.ResizeObserver) {
+        new ResizeObserver(() => {
+          const w = Math.round(frame.clientWidth);
+          if (!w || w === drawnAt) return;
+          drawnAt = w;
+          redraw();
+        }).observe(frame);
+      } else {
+        window.addEventListener('resize', redraw);
+      }
+      draw();
     }
 
     $('#backup-now').addEventListener('click', async (e) => {

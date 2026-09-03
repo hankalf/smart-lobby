@@ -651,6 +651,34 @@ node scripts/reset-password.js you@example.com 'a new password'</code></pre>
   far away — the setting <em>Refuse a phone that will not say where it is</em> decides it. Turned
   off, they are let through and the visit is recorded as usual.</p>
 
+<h3>Placing the site, and checking where it landed</h3>
+
+<p>Three ways in, all of them writing the same two numbers: <em>Find the site by address</em> (an
+  OpenStreetMap lookup, made by this server when you press <em>Find</em>, listing every match rather
+  than taking the first), <em>Use where I am now</em> (the browser you press it in, so press it
+  standing on site), or typing the coordinates. Coordinates of exactly 0,0 are treated as not set —
+  that is the Atlantic, and it is what an empty box used to become on the way to the server.</p>
+
+<p>Underneath them is a map with the fence drawn on it to scale. It exists because nobody can
+  proof-read a latitude. The circle is the radius in force, the pin is the coordinates, and the
+  scale bar is there so the size can be judged against something. If the fence is switched off the
+  map still draws it and says plainly that it is off — a circle on a map is exactly the thing
+  somebody would otherwise read as "this is on and working".</p>
+
+<div class="note">
+  <span class="label">Where the map comes from</span>
+  <p>The tiles are fetched by this server and passed on from its own address, never loaded by the
+    browser from a mapping service. Two reasons. The content security policy allows pictures from
+    this origin only, and it is doing real work — widening it for a tile host would widen it for the
+    kiosk a visitor is holding, to serve one settings panel. And it means no browser here is ever
+    put in touch with a third party, so nothing leaks a site's address or a referrer to one.</p>
+  <p>OpenStreetMap by default, cached in memory, at most two requests in flight. Set
+    <code>TILE_URL</code> to your own tile server — the usual <code>{z}/{x}/{y}</code> template — to
+    use that instead. An install with no way out to the internet gets the circle drawn on squared
+    paper and a line saying the map itself could not be loaded, which still answers "is the radius
+    the right size" if not "is it the right place".</p>
+</div>
+
 <div class="warn">
   <span class="label">Be straight about this with whoever asks</span>
   <p>A browser reports whatever coordinates it chooses to. A phone can be told to lie, and a laptop

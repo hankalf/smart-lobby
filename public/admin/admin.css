@@ -613,3 +613,65 @@ td .avatar[data-bigphoto]:hover, .visit-photo:hover {
   0%, 40% { background: var(--wash); box-shadow: inset 3px 0 0 var(--brand); }
   100% { background: transparent; box-shadow: none; }
 }
+
+/* -------------------------------------------------------------- site map */
+/*
+ * The geofence, drawn: a basemap of 256-pixel tiles with the circle over it.
+ *
+ * Everything is positioned in pixels by the script, because the tile grid is
+ * arithmetic in a projection rather than a layout — so the only job here is
+ * the frame, the clipping, and what the circle looks like.
+ */
+.site-map { margin: .75rem 0 1rem; }
+.site-map-frame {
+  position: relative; overflow: hidden; height: 340px; max-width: 720px;
+  border: 1px solid var(--line); border-radius: 12px; background: #e8eae4;
+  /* Nothing here is a link or a text selection; a stray drag should not look
+     like the map is about to pan, because it is not going to. */
+  user-select: none;
+}
+.site-map-tiles { position: absolute; inset: 0; }
+.site-map-tile { position: absolute; width: 256px; height: 256px; }
+.site-map-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+/*
+ * With no basemap the circle is still to scale, so the frame becomes squared
+ * paper rather than an empty grey box — which reads as a broken map.
+ */
+.site-map-frame.no-tiles {
+  background-color: #fbfbf7;
+  background-image:
+    linear-gradient(rgba(18, 58, 44, .07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(18, 58, 44, .07) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+.site-map-frame.no-tiles .site-map-credit { display: none; }
+
+.fence-ring { fill: rgba(47, 125, 93, .16); stroke: var(--brand); stroke-width: 2; }
+.fence-radius { stroke: var(--brand-dark); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.fence-label {
+  font: 600 12px/1 system-ui, sans-serif; fill: var(--brand-dark);
+  paint-order: stroke; stroke: rgba(255, 255, 255, .85); stroke-width: 3px;
+}
+.fence-pin { fill: #b3261e; stroke: #fff; stroke-width: 1.5; }
+.fence-pin-hole { fill: #fff; }
+.scale-bar line { stroke: #17241d; stroke-width: 2; }
+.scale-bar text {
+  font: 600 11px/1 system-ui, sans-serif; fill: #17241d;
+  paint-order: stroke; stroke: rgba(255, 255, 255, .9); stroke-width: 3px;
+}
+
+.site-map-zoom { position: absolute; top: 8px; right: 8px; display: grid; gap: 4px; }
+.site-map-zoom .btn {
+  width: 2rem; height: 2rem; padding: 0; font-size: 1.1rem; line-height: 1;
+  background: rgba(255, 255, 255, .92);
+}
+/*
+ * Whose map it is. OpenStreetMap ask to be credited wherever their tiles are
+ * shown, which is a small thing to honour for something given away.
+ */
+.site-map-credit {
+  position: absolute; right: 0; bottom: 0; padding: 2px 6px;
+  font-size: .68rem; color: #33413a; background: rgba(255, 255, 255, .82);
+  border-top-left-radius: 6px;
+}
