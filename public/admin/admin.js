@@ -2522,6 +2522,22 @@
             the action <b>“Post message in a chat or channel”</b> with <i>Post as</i> = <b>Flow bot</b>,
             <i>Post in</i> = <b>Chat with Flow bot</b> and <i>Recipient</i> = your own address. Save, then copy the
             trigger's HTTP URL.</p>
+          <!--
+            Named verbatim because that is what somebody will paste into a
+            search box at five past six, and because the failure arrives by
+            email from Microsoft rather than anywhere in this app: the webhook
+            answers 202 the moment it takes the request and fails afterwards,
+            so nothing here can see it.
+          -->
+          <div class="notice warn"><b>If Power Automate emails you “Call made for a thread which is not a
+            ChatThread”</b> — the flow is set to post into a <i>chat</i> but was given a <i>channel</i>, which
+            happens when the workflow was created from a channel and then pointed at a chat. The message never
+            arrives and you get a failed-run email for every visitor, so it is worth fixing rather than muting.
+            <br><br>Open the flow at <b>make.powerautomate.com</b> → <b>My flows</b> → edit → the
+            <b>Post card in a chat or channel</b> step, and set <i>Post in</i> = <b>Chat with Flow bot</b> with
+            <i>Recipient</i> = the person's address. That variant needs no existing thread, which is exactly why
+            it does not hit this. Save and test again. Rebuilding from the chat template works too, but it has to
+            be started from the chat itself, not from a channel.</div>
           <p class="muted">The message arrives from <b>Flow bot</b> rather than from a person, which is normal.
             Some tenants restrict the chat template — if you cannot see it, your IT admin controls that.
             Microsoft is also retiring the older Office 365 connectors; if your tenant still offers
@@ -2723,7 +2739,8 @@
           method: 'POST', body: { url: $('#se-hook', m.bg).value.trim() }
         });
         box.innerHTML = r.ok
-          ? '<div class="notice"><b>Delivered.</b> Check the chat it should have landed in.</div>'
+          ? `<div class="notice ${r.accepted_only ? 'warn' : ''}"><b>${r.accepted_only ? 'Accepted.' : 'Delivered.'}</b>
+             ${esc(r.detail || 'Check the chat it should have landed in.')}</div>`
           : `<div class="notice error"><b>Not delivered.</b> ${esc(r.detail || r.error || '')}</div>`;
       });
     }));
@@ -5770,7 +5787,10 @@
         await saveSettings.now();
         const r = await api('/settings/test-webhook', { method: 'POST', body: { url, event: 'signin', visit_type: type } });
         note.textContent = r.ok
-          ? 'Posted — it should be in that channel now, from Flow bot. Nobody was tagged.'
+          ? (r.accepted_only
+            ? 'Accepted by the workflow — check the channel. If nothing appears, the flow failed after taking it; '
+              + 'its run history in Power Automate says why.'
+            : 'Posted — it should be in that channel now, from Flow bot. Nobody was tagged.')
           : `It was refused: ${r.detail || 'no reason given'}`;
       } catch (err) {
         note.textContent = `Could not post: ${err.message || 'the server did not answer'}`;

@@ -46,6 +46,20 @@ const cardText = (p) => JSON.stringify(p.body);
   posts.length = 0;
   r = await req('POST', '/api/admin/settings/test-webhook', { url: CHANNEL });
   ok('test posts to the channel', r.data.ok === true && posts.length === 1, JSON.stringify(r.data));
+  /*
+   * A Teams workflow's webhook is an HTTP trigger: it answers 202 the moment
+   * it takes the request and runs the flow — the step that actually posts the
+   * card — afterwards. Reporting that as "Delivered" is how a workflow that
+   * fails every run can sit behind a test button saying everything is fine,
+   * which is exactly what happened: Microsoft emailed the failures while this
+   * app said the message had landed.
+   */
+  ok('a 202 is reported as accepted, not as delivered',
+    r.data.accepted_only === true && /Accepted/.test(r.data.detail) && !/Delivered/.test(r.data.detail),
+    JSON.stringify(r.data).slice(0, 140));
+  ok('…and says where to look when nothing turns up',
+    /run history/.test(r.data.detail || ''), String(r.data.detail).slice(0, 160));
+
   ok('test uses the Teams Adaptive Card envelope',
     posts[0] && posts[0].body.type === 'message' && posts[0].body.attachments[0].contentType.includes('adaptive'),
     posts[0] && cardText(posts[0]).slice(0, 120));

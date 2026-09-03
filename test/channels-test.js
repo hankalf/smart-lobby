@@ -286,9 +286,14 @@ const settle = () => new Promise((done) => setTimeout(done, 1400));
       const el = document.querySelector('[data-routetestnote="contractor"]');
       return el && el.textContent && !/Posting/.test(el.textContent);
     }, null, { timeout: 15000 });
-    ok('the test button posts to that channel and says so',
+    /*
+     * "Accepted", not "posted". A Teams workflow answers 202 when it takes the
+     * request and posts the card afterwards, so that is the whole of what this
+     * knows — see the same distinction in teams-test.
+     */
+    ok('the test button reaches that channel and says what it knows',
       posts.length === 1 && posts[0].path.endsWith('/contractors')
-      && /Posted/.test(await page.$eval('[data-routetestnote="contractor"]', (el) => el.textContent)),
+      && /Accepted by the workflow/.test(await page.$eval('[data-routetestnote="contractor"]', (el) => el.textContent)),
       `${posts.map((p) => p.path).join(', ')} — ${await page.$eval('[data-routetestnote="contractor"]', (el) => el.textContent)}`);
 
     /*

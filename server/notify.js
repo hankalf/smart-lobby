@@ -166,7 +166,13 @@ async function sendWebhook({ url, model, visit_id, delivery_id }) {
     const worthRetrying = !res.ok && (res.status === 429 || res.status >= 500);
     logFinish(logId, res.ok ? 'sent' : `http_${res.status}`, res.ok ? null : text.slice(0, 500),
       { retryable: worthRetrying, payload: worthRetrying ? { url: target, model } : null });
-    return { ok: res.ok, status: res.status, detail: explainWebhookError(res.status, text, format) };
+    return {
+      ok: res.ok,
+      status: res.status,
+      // Told apart so the page can say "accepted" where that is all we know.
+      accepted_only: res.status === 202,
+      detail: explainWebhookError(res.status, text, format)
+    };
   } catch (err) {
     /*
      * Notifications live or die on this now, so the reason has to be readable
@@ -189,6 +195,24 @@ async function sendWebhook({ url, model, visit_id, delivery_id }) {
 }
 
 function explainWebhookError(status, body, format) {
+  /*
+   * 202 is not "delivered", and the difference matters.
+   *
+   * A Teams workflow's webhook is an HTTP trigger: it accepts the request and
+   * answers 202 straight away, then runs the flow — the step that actually
+   * posts the card — afterwards. So a 202 says the message was accepted, and
+   * says nothing at all about whether it arrived.
+   *
+   * This used to report "Delivered." for it, which is how a workflow that was
+   * failing every single run for a fortnight could sit behind a test button
+   * that said everything was fine. Nothing here can see the flow's own run
+   * history; the honest thing is to say where to look.
+   */
+  if (status === 202) {
+    return 'Accepted. A Teams workflow answers this the moment it takes the request and posts the card '
+      + 'afterwards, so it can still fail at that step — if nothing appears in the chat or channel, open '
+      + 'the flow in Power Automate and read its run history.';
+  }
   if (status >= 200 && status < 300) return 'Delivered.';
   const text = String(body || '').slice(0, 300);
   if (status === 400 && format === 'teams') {
