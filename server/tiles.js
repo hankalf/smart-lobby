@@ -30,10 +30,41 @@
  */
 
 /*
- * Overridable so a site can point at its own tile server, and so the tests can
- * answer for it without reaching the internet.
+ * Two ways of looking at the same ground, because they answer different
+ * questions. The drawn map is better for "is this the right street"; the
+ * photograph is better for "is that our yard, and does the circle cover the
+ * far gate" — which on a site with no useful postal address is the only
+ * question that can be answered at all.
+ *
+ * Both are overridable, so a site can point at its own tiles, and so the tests
+ * can answer for them without reaching the internet.
+ *
+ * A word about the imagery, because it is worth knowing before relying on it:
+ * OpenStreetMap have no satellite tiles, so the default is Esri's World
+ * Imagery, which is what most small mapping applications use and asks only to
+ * be credited. It is somebody else's free service. A site that would rather
+ * not depend on one — or has a paid imagery subscription already — sets
+ * TILE_URL_SATELLITE and TILE_ATTRIBUTION_SATELLITE and nothing else changes.
+ * Nothing here breaks if it goes away: the layer reports itself unavailable
+ * and the button for it is not offered.
  */
-const TEMPLATE = process.env.TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const LAYERS = {
+  map: {
+    url: process.env.TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    credit: process.env.TILE_ATTRIBUTION || '\u00a9 OpenStreetMap contributors',
+    label: 'Map'
+  },
+  satellite: {
+    // Note the order: Esri's addresses are {z}/{y}/{x}, not {z}/{x}/{y}.
+    url: process.env.TILE_URL_SATELLITE
+      || 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    credit: process.env.TILE_ATTRIBUTION_SATELLITE
+      || 'Imagery \u00a9 Esri, Maxar, Earthstar Geographics',
+    label: 'Satellite'
+  }
+};
+
+const LAYER_IDS = Object.keys(LAYERS);
 
 const AGENT = process.env.TILE_AGENT || process.env.GEOCODE_AGENT
   || 'SmartLobby/1.0 (self-hosted visitor management; geofence map)';
@@ -91,12 +122,15 @@ function remember(key, value) {
 /**
  * One square of map.
  *
+ * @param {string} layer  'map' or 'satellite'
  * @param {*} z  zoom, 0 at the whole world
  * @param {*} x  column, 0 to 2^z - 1
  * @param {*} y  row, same range
  * @returns {Promise<{body?: Buffer, type?: string, error?: string}>}
  */
-async function tile(z, x, y) {
+async function tile(layer, z, x, y) {
+  const source = LAYERS[layer];
+  if (!source) return { error: 'no_such_layer' };
   const zoom = Number(z);
   const col = Number(x);
   const row = Number(y);
@@ -113,7 +147,7 @@ async function tile(z, x, y) {
   const span = 2 ** zoom;
   if (col < 0 || col >= span || row < 0 || row >= span) return { error: 'out_of_range' };
 
-  const key = `${zoom}/${col}/${row}`;
+  const key = `${layer}/${zoom}/${col}/${row}`;
   const held = cache.get(key);
   if (held) {
     const age = Date.now() - held.at;
@@ -126,7 +160,7 @@ async function tile(z, x, y) {
     cache.delete(key);
   }
 
-  const url = TEMPLATE
+  const url = source.url
     .replace('{z}', String(zoom))
     .replace('{x}', String(col))
     .replace('{y}', String(row));
@@ -168,6 +202,23 @@ async function tile(z, x, y) {
 }
 
 /** For the tests, and for anyone wondering what the map is costing. */
-const stats = () => ({ cached: cache.size, template: TEMPLATE });
+const stats = () => ({ cached: cache.size, layers: LAYER_IDS });
 
-module.exports = { tile, stats, MAX_ZOOM };
+/**
+ * Which of the layers can actually be had from here, asked once so the page
+ * does not request a dozen tiles that cannot arrive — nor offer a Satellite
+ * button that would only ever show squared paper.
+ *
+ * Tile 0/0/0 is the whole world in one square, and is cached like any other,
+ * so this is one small request per layer for the life of the process.
+ */
+async function probe() {
+  const out = {};
+  for (const id of LAYER_IDS) {
+    const got = await tile(id, 0, 0, 0);
+    out[id] = { ok: !got.error, error: got.error || null, credit: LAYERS[id].credit, label: LAYERS[id].label };
+  }
+  return { ok: LAYER_IDS.some((id) => out[id].ok), layers: out };
+}
+
+module.exports = { tile, probe, stats, MAX_ZOOM, LAYER_IDS };

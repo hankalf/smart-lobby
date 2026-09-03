@@ -665,6 +665,17 @@ node scripts/reset-password.js you@example.com 'a new password'</code></pre>
   map still draws it and says plainly that it is off — a circle on a map is exactly the thing
   somebody would otherwise read as "this is on and working".</p>
 
+<p>The map is also the fourth way of placing the site, and in practice the one that finishes the
+  job: <strong>drag the pin</strong> and the coordinates follow it, written to six decimal places
+  (about a tenth of a metre) and saved like any typed value. <strong>Drag the map</strong> to look
+  around without moving the site; the two gestures are told apart by what was under the finger when
+  it went down. Typing a coordinate, looking one up or pressing <em>Use where I am now</em> recentres
+  the view on the new site, so the map never sits somewhere a drag happened to leave it.</p>
+
+<p>Two basemaps: <strong>Map</strong> (drawn) and <strong>Satellite</strong> (photographic). The
+  switch appears only when both can actually be fetched, and the circle is restyled over imagery —
+  a dark green line on a dark green yard is no line at all.</p>
+
 <div class="note">
   <span class="label">Where the map comes from</span>
   <p>The tiles are fetched by this server and passed on from its own address, never loaded by the
@@ -672,11 +683,25 @@ node scripts/reset-password.js you@example.com 'a new password'</code></pre>
     this origin only, and it is doing real work — widening it for a tile host would widen it for the
     kiosk a visitor is holding, to serve one settings panel. And it means no browser here is ever
     put in touch with a third party, so nothing leaks a site's address or a referrer to one.</p>
-  <p>OpenStreetMap by default, cached in memory, at most two requests in flight. Set
-    <code>TILE_URL</code> to your own tile server — the usual <code>{z}/{x}/{y}</code> template — to
-    use that instead. An install with no way out to the internet gets the circle drawn on squared
-    paper and a line saying the map itself could not be loaded, which still answers "is the radius
-    the right size" if not "is it the right place".</p>
+  <p>Cached in memory, at most two requests in flight, and probed once per process so an install
+    with no way out asks for nothing rather than a dozen tiles at a time. The drawn map is
+    OpenStreetMap; the imagery is Esri's World Imagery, which is what most small mapping
+    applications use and asks only to be credited. Both are somebody else's free service, and both
+    are replaceable:</p>
+  <table>
+    <thead><tr><th>Variable</th><th>What it sets</th></tr></thead>
+    <tbody>
+      <tr><td><code>TILE_URL</code></td><td>The drawn map, as a <code>{z}/{x}/{y}</code> template.</td></tr>
+      <tr><td><code>TILE_URL_SATELLITE</code></td><td>The imagery. Note that Esri's own addresses are
+        <code>{z}/{y}/{x}</code> — the order differs by provider.</td></tr>
+      <tr><td><code>TILE_ATTRIBUTION</code>, <code>TILE_ATTRIBUTION_SATELLITE</code></td>
+        <td>The credit shown in the corner of each.</td></tr>
+    </tbody>
+  </table>
+  <p>Nothing breaks if a layer goes away: it reports itself unavailable, its button is not offered,
+    and an install that can reach neither gets the circle drawn on squared paper with a line saying
+    the basemap could not be loaded — which still answers "is the radius the right size" if not "is
+    it the right place".</p>
 </div>
 
 <div class="warn">

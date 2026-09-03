@@ -955,7 +955,7 @@ router.get('/geocode', async (req, res) => {
 });
 
 /**
- * One square of the map behind the geofence circle.
+ * One square of the map behind the geofence circle, from one of its layers.
  *
  * Fetched by this server for the same reason the geocoder is: the content
  * security policy lets a page here load pictures from this origin only, and
@@ -981,17 +981,16 @@ router.get('/geocode', async (req, res) => {
  * other.
  */
 router.get('/tiles/probe', async (req, res) => {
-  const out = await require('../tiles').tile(0, 0, 0);
-  res.json({ ok: !out.error, error: out.error || null });
+  res.json(await require('../tiles').probe());
 });
 
-router.get('/tiles/:z/:x/:y', async (req, res) => {
+router.get('/tiles/:layer/:z/:x/:y', async (req, res) => {
   // The row arrives as `12345.png`, because that is the shape every map
   // library and every cache expects a tile address to have.
   const row = String(req.params.y).replace(/\.[a-z]+$/i, '');
-  const out = await require('../tiles').tile(req.params.z, req.params.x, row);
+  const out = await require('../tiles').tile(req.params.layer, req.params.z, req.params.x, row);
   if (out.error) {
-    const mine = out.error === 'bad_tile' || out.error === 'out_of_range';
+    const mine = out.error === 'bad_tile' || out.error === 'out_of_range' || out.error === 'no_such_layer';
     return res.status(mine ? 400 : 502).json({ error: out.error });
   }
   /*

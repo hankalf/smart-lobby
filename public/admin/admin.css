@@ -642,12 +642,23 @@ td .avatar[data-bigphoto]:hover, .visit-photo:hover {
 .site-map-frame {
   position: relative; overflow: hidden; height: 340px; max-width: 720px;
   border: 1px solid var(--line); border-radius: 12px; background: #e8eae4;
-  /* Nothing here is a link or a text selection; a stray drag should not look
-     like the map is about to pan, because it is not going to. */
   user-select: none;
+  /*
+   * The map takes the whole gesture, so a drag pans it instead of scrolling
+   * the page behind it. It is 340px on a page that is much taller, so there
+   * is always somewhere else to put a finger to scroll.
+   */
+  touch-action: none;
+  cursor: grab;
 }
+.site-map-frame.dragging-map { cursor: grabbing; }
+.site-map-frame.dragging-pin { cursor: grabbing; }
 .site-map-tiles { position: absolute; inset: 0; }
-.site-map-tile { position: absolute; width: 256px; height: 256px; }
+.site-map-tile {
+  position: absolute; width: 256px; height: 256px;
+  /* Dragged as a picture, not saved as one; and never dragged out of the map. */
+  pointer-events: none; -webkit-user-drag: none;
+}
 .site-map-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 
 /*
@@ -671,15 +682,42 @@ td .avatar[data-bigphoto]:hover, .visit-photo:hover {
 }
 .fence-pin { fill: #b3261e; stroke: #fff; stroke-width: 1.5; }
 .fence-pin-hole { fill: #fff; }
+/*
+ * The pin is the one thing on the overlay that can be grabbed, so it is the
+ * one thing that takes pointer events. The grab circle is invisible and much
+ * larger than the pin, because a fingertip is not a mouse cursor.
+ */
+.fence-marker { pointer-events: auto; cursor: grab; }
+.fence-grab { fill: transparent; }
+.site-map-frame.dragging-pin .fence-marker { cursor: grabbing; }
+.site-map-frame.dragging-pin .fence-pin { filter: drop-shadow(0 3px 4px rgba(0, 0, 0, .45)); }
 .scale-bar line { stroke: #17241d; stroke-width: 2; }
 .scale-bar text {
   font: 600 11px/1 system-ui, sans-serif; fill: #17241d;
   paint-order: stroke; stroke: rgba(255, 255, 255, .9); stroke-width: 3px;
 }
 
-.site-map-zoom { position: absolute; top: 8px; right: 8px; display: grid; gap: 4px; }
+.site-map-tools {
+  position: absolute; top: 8px; right: 8px; display: flex; align-items: flex-start;
+  gap: 6px; flex-direction: row-reverse;
+}
+.site-map-zoom { display: grid; gap: 4px; }
 .site-map-zoom .btn {
   width: 2rem; height: 2rem; padding: 0; font-size: 1.1rem; line-height: 1;
+  background: rgba(255, 255, 255, .92);
+}
+/* Map or photograph. Offered only when both can actually be fetched. */
+.site-map-layers {
+  display: flex; border-radius: 8px; overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+}
+.site-map-layers .btn {
+  border-radius: 0; border: 0; padding: .3rem .6rem; font-size: .8rem;
+  background: rgba(255, 255, 255, .92); color: var(--brand-dark);
+}
+.site-map-layers .btn.on { background: var(--brand); color: #fff; }
+.site-map-recentre {
+  position: absolute; left: 8px; top: 8px; font-size: .78rem; padding: .3rem .6rem;
   background: rgba(255, 255, 255, .92);
 }
 /*
@@ -689,5 +727,15 @@ td .avatar[data-bigphoto]:hover, .visit-photo:hover {
 .site-map-credit {
   position: absolute; right: 0; bottom: 0; padding: 2px 6px;
   font-size: .68rem; color: #33413a; background: rgba(255, 255, 255, .82);
-  border-top-left-radius: 6px;
+  border-top-left-radius: 6px; pointer-events: none;
 }
+/*
+ * On the photograph the drawn circle has to survive being over anything from
+ * a white roof to a dark yard, so it gets a heavier line and its labels a
+ * proper halo.
+ */
+.site-map-frame.satellite .fence-ring { stroke-width: 3; fill: rgba(255, 255, 255, .18); stroke: #ffd75e; }
+.site-map-frame.satellite .fence-radius { stroke: #fff; }
+.site-map-frame.satellite .fence-label { fill: #fff; stroke: rgba(0, 0, 0, .65); }
+.site-map-frame.satellite .scale-bar line { stroke: #fff; }
+.site-map-frame.satellite .scale-bar text { fill: #fff; stroke: rgba(0, 0, 0, .65); }

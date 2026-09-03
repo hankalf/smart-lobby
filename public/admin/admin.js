@@ -4550,12 +4550,24 @@
         <div class="site-map" id="site-map">
           <div class="site-map-frame" id="site-map-frame" hidden>
             <div class="site-map-tiles" id="site-map-tiles"></div>
+            <!--
+              Two overlays rather than one. Everything that belongs to the
+              ground — the circle and the pin — moves with the map while it is
+              being dragged; the scale bar belongs to the frame and stays put,
+              because a ruler that slides about as you drag is worse than none.
+            -->
             <svg class="site-map-overlay" id="site-map-overlay" aria-hidden="true"></svg>
-            <div class="site-map-zoom">
-              <button class="btn subtle" data-mapzoom="1" type="button" aria-label="Zoom in">+</button>
-              <button class="btn subtle" data-mapzoom="-1" type="button" aria-label="Zoom out">−</button>
+            <svg class="site-map-overlay site-map-fixed" id="site-map-scale" aria-hidden="true"></svg>
+            <div class="site-map-tools">
+              <div class="site-map-layers hidden" id="site-map-layers"></div>
+              <div class="site-map-zoom">
+                <button class="btn subtle" data-mapzoom="1" type="button" aria-label="Zoom in">+</button>
+                <button class="btn subtle" data-mapzoom="-1" type="button" aria-label="Zoom out">−</button>
+              </div>
             </div>
-            <div class="site-map-credit" id="site-map-credit">© OpenStreetMap contributors</div>
+            <button class="btn subtle site-map-recentre hidden" id="site-map-recentre"
+              type="button">Back to the site</button>
+            <div class="site-map-credit" id="site-map-credit"></div>
           </div>
           <p class="muted" id="site-map-note"></p>
         </div>
@@ -6238,18 +6250,40 @@
       const frame = $('#site-map-frame');
       const tileLayer = $('#site-map-tiles');
       const overlay = $('#site-map-overlay');
+      const scaleBar = $('#site-map-scale');
+      const credit = $('#site-map-credit');
+      const layerBar = $('#site-map-layers');
+      const recentre = $('#site-map-recentre');
       const note = $('#site-map-note');
+
       /* How far the +/- buttons have moved off the zoom that fits the circle. */
       let nudge = 0;
       /*
-       * Whether there is a basemap to be had: null until asked, then true or
-       * false. Asked once rather than discovered a dozen failed pictures at a
-       * time, because an install with no way out to the internet is a normal
-       * way to run this and should not spend every redraw finding that out.
+       * Where the map is looking, which is not the same thing as where the site
+       * is. Null means "at the site" — the state it starts in and returns to.
+       * Dragging the map sets it, so somebody can look at the gate two streets
+       * over without the pin springing back to the middle.
        */
-      let basemap = null;
+      let view = null;
+      /* Which basemap: the drawn one or the photograph. */
+      let layer = 'map';
+      /*
+       * What layers can actually be had from here, asked once. An install with
+       * no way out to the internet is a normal way to run this, and it should
+       * not spend every redraw discovering that a dozen tiles at a time — nor
+       * offer a Satellite button that could only ever show squared paper.
+       */
+      let layers = null;
       /* So a slow tile from an abandoned draw cannot report on the current one. */
       let generation = 0;
+      /*
+       * The last draw's projection, kept so a drag can turn pixels back into
+       * coordinates. Reading it off the screen is the only way to answer "what
+       * is under the finger", and it changes on every redraw.
+       */
+      let world = null;
+      /* Set while the map itself is writing the coordinate fields — see below. */
+      let fromMap = false;
 
       const setting = (path) => {
         const field = $(`[data-set="${path}"]`, root);
@@ -6259,13 +6293,37 @@
       };
 
       /** A round number of metres landing near a quarter of the frame. */
-      const niceScale = (metres) => {
+      const niceScale = (m) => {
         const steps = [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000, 10000, 20000];
-        for (let i = steps.length - 1; i >= 0; i--) if (steps[i] <= metres) return steps[i];
+        for (let i = steps.length - 1; i >= 0; i--) if (steps[i] <= m) return steps[i];
         return steps[0];
       };
 
       const metres = (m) => (m >= 1000 ? `${(m / 1000).toFixed(m % 1000 ? 1 : 0)} km` : `${Math.round(m)} m`);
+
+      /* ---- Web Mercator, both ways. Longitude is linear, latitude is not. ---- */
+
+      const toWorld = (lat, lng, span) => {
+        const latRad = lat * Math.PI / 180;
+        return {
+          x: ((lng + 180) / 360) * span * TILE,
+          y: ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * span * TILE
+        };
+      };
+
+      const fromWorld = (x, y, span) => {
+        const n = Math.PI - (2 * Math.PI * y) / (span * TILE);
+        return {
+          lat: (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))),
+          lng: (x / (span * TILE)) * 360 - 180
+        };
+      };
+
+      /** Where a point on the frame is, in the world. */
+      function pointAt(px, py) {
+        if (!world) return null;
+        return fromWorld(world.originX + px, world.originY + py, world.span);
+      }
 
       function draw() {
         const lat = setting('geofence.lat');
@@ -6292,6 +6350,8 @@
            */
           tileLayer.innerHTML = '';
           overlay.innerHTML = '';
+          scaleBar.innerHTML = '';
+          world = null;
           note.textContent = 'Fill in the latitude and longitude — by address, by standing on the site, or by '
             + 'hand — and the fence is drawn here so you can see it land on the right place.';
           return;
@@ -6304,27 +6364,46 @@
          * Zoom so the whole circle fits with room around it. Worked out from
          * the radius rather than fixed, because the same panel has to show a
          * 50 m yard and a 5 km quarry and be useful for both.
-         */
-        const atLat = EQUATOR_MPP * Math.cos(lat * Math.PI / 180);
-        /*
+         *
          * Aim for the circle across four fifths of the shorter side. Tiles
          * only come at whole zoom levels and this rounds down to keep the
          * circle inside the frame, so what it actually lands on is somewhere
          * between two fifths and four fifths — which is a map with the fence
          * on it either way.
          */
+        const atLat = EQUATOR_MPP * Math.cos(lat * Math.PI / 180);
         const want = (radius * 2) / (Math.min(W, H) * 0.8);    // metres a pixel must cover
         let z = Math.floor(Math.log2(atLat / want)) + nudge;
         z = Math.max(1, Math.min(19, z));
         const mpp = atLat / (2 ** z);
 
-        /* Web Mercator: longitude is linear, latitude is not. */
         const span = 2 ** z;
-        const latRad = lat * Math.PI / 180;
-        const worldX = ((lng + 180) / 360) * span * TILE;
-        const worldY = ((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * span * TILE;
-        const originX = worldX - W / 2;
-        const originY = worldY - H / 2;
+        const middle = view || { lat, lng };
+        const eye = toWorld(middle.lat, middle.lng, span);
+        const originX = eye.x - W / 2;
+        const originY = eye.y - H / 2;
+        const site = toWorld(lat, lng, span);
+        const sx = site.x - originX;
+        const sy = site.y - originY;
+
+        world = { z, span, originX, originY, mpp, W, H, sx, sy };
+        tileLayer.style.transform = '';
+        overlay.style.transform = '';
+        // A dark green line on a dark green yard is no line at all, so the
+        // drawing is restyled over a photograph. See admin.css.
+        frame.classList.toggle('satellite', layer === 'satellite' && available(layer));
+
+        overlay.innerHTML = fenceSvg(W, H, sx, sy, radius, mpp);
+        scaleBar.innerHTML = scaleSvg(W, H, mpp);
+
+        /*
+         * Offered only once the site has actually gone somewhere. A button
+         * saying "back to the site" while the pin is in the middle of the
+         * frame is a button that does nothing, which teaches people to ignore
+         * the ones that do.
+         */
+        const adrift = sx < W * 0.25 || sx > W * 0.75 || sy < H * 0.25 || sy > H * 0.75;
+        recentre.classList.toggle('hidden', !adrift);
 
         const mine = ++generation;
         let asked = 0;
@@ -6336,9 +6415,8 @@
          * are twelve failures in the browser's console every time this panel
          * is opened, which buries the real ones.
          */
-        if (basemap !== true) {
-          paper(basemap === false, on, radius, lat, lng, z, nudge);
-          overlay.innerHTML = fenceSvg(W, H, radius, mpp);
+        if (!available(layer)) {
+          paper(layers !== null, on, radius, lat, lng, z, nudge);
           return;
         }
         frame.classList.remove('no-tiles');
@@ -6354,13 +6432,6 @@
             img.style.top = `${ty * TILE - originY}px`;
             asked++;
             /*
-             * Whether the basemap arrived at all is the thing worth reporting.
-             * A map that silently draws a circle on grey nothing looks like a
-             * bug in the circle, and an install with no way out to the
-             * internet — which is a normal way to run this — would look
-             * broken rather than merely mapless.
-             */
-            /*
              * A tile that fails after the probe said there was a basemap is
              * the exceptional case, and it still has to be legible: a circle
              * on grey nothing reads as a bug in the circle rather than as a
@@ -6374,31 +6445,46 @@
               failed++;
               if (failed === asked) paper(true, on, radius, lat, lng, z, nudge);
             });
-            img.src = `/api/admin/tiles/${z}/${col}/${ty}.png`;
+            img.src = `/api/admin/tiles/${layer}/${z}/${col}/${ty}.png`;
             tileLayer.append(img);
           }
         }
 
-        overlay.innerHTML = fenceSvg(W, H, radius, mpp);
         note.textContent = noteFor(on, radius, lat, lng, z, nudge);
       }
 
-      /** The circle, the pin and a scale bar — the part that is not a basemap. */
-      function fenceSvg(W, H, radius, mpp) {
-        const cx = W / 2;
-        const cy = H / 2;
+      /** Whether a named basemap can be had from this server. */
+      const available = (id) => !!(layers && layers[id] && layers[id].ok);
+
+      /** The circle and the pin — the part that belongs to the ground. */
+      function fenceSvg(W, H, cx, cy, radius, mpp) {
         const ring = radius / mpp;
-        const barMetres = niceScale(W * mpp / 4);
-        const barPx = barMetres / mpp;
         overlay.setAttribute('viewBox', `0 0 ${W} ${H}`);
         return `
-          <circle cx="${cx}" cy="${cy}" r="${ring.toFixed(1)}" class="fence-ring"/>
-          <line x1="${cx}" y1="${cy}" x2="${(cx + ring).toFixed(1)}" y2="${cy}" class="fence-radius"/>
-          <text x="${(cx + ring / 2).toFixed(1)}" y="${cy - 6}" class="fence-label"
+          <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${ring.toFixed(1)}" class="fence-ring"/>
+          <line x1="${cx.toFixed(1)}" y1="${cy.toFixed(1)}" x2="${(cx + ring).toFixed(1)}" y2="${cy.toFixed(1)}"
+            class="fence-radius"/>
+          <text x="${(cx + ring / 2).toFixed(1)}" y="${(cy - 6).toFixed(1)}" class="fence-label"
             text-anchor="middle">${esc(metres(radius))}</text>
-          <path d="M ${cx} ${cy} L ${cx - 7} ${cy - 15} A 9 9 0 1 1 ${cx + 7} ${cy - 15} Z" class="fence-pin"/>
-          <circle cx="${cx}" cy="${cy - 21}" r="3.2" class="fence-pin-hole"/>
-          <g class="scale-bar">
+          <g class="fence-marker" id="fence-marker">
+            <!--
+              A finger is about nine millimetres across and the pin is nine
+              pixels. This is the part that gets hold of: invisible, generous,
+              and the reason dragging works on a tablet at all.
+            -->
+            <circle cx="${cx.toFixed(1)}" cy="${(cy - 10).toFixed(1)}" r="22" class="fence-grab"/>
+            <path d="M ${cx.toFixed(1)} ${cy.toFixed(1)} L ${(cx - 7).toFixed(1)} ${(cy - 15).toFixed(1)}
+              A 9 9 0 1 1 ${(cx + 7).toFixed(1)} ${(cy - 15).toFixed(1)} Z" class="fence-pin"/>
+            <circle cx="${cx.toFixed(1)}" cy="${(cy - 21).toFixed(1)}" r="3.2" class="fence-pin-hole"/>
+          </g>`;
+      }
+
+      /** The ruler, which belongs to the frame rather than to the ground. */
+      function scaleSvg(W, H, mpp) {
+        const barMetres = niceScale(W * mpp / 4);
+        const barPx = barMetres / mpp;
+        scaleBar.setAttribute('viewBox', `0 0 ${W} ${H}`);
+        return `<g class="scale-bar">
             <line x1="14" y1="${H - 16}" x2="${(14 + barPx).toFixed(1)}" y2="${H - 16}"/>
             <line x1="14" y1="${H - 21}" x2="14" y2="${H - 11}"/>
             <line x1="${(14 + barPx).toFixed(1)}" y1="${H - 21}" x2="${(14 + barPx).toFixed(1)}" y2="${H - 11}"/>
@@ -6418,9 +6504,9 @@
         frame.classList.toggle('no-tiles', known);
         if (!known) { note.textContent = noteFor(on, radius, lat, lng, z, off); return; }
         note.innerHTML = `${esc(noteFor(on, radius, lat, lng, z, off))} `
-          + '<b>The map itself could not be loaded</b> — this server may have no way out to the '
-          + 'internet, or the tile service may be down. The circle above is still drawn to scale, '
-          + 'so it shows how big the fence is, just not where.';
+          + `<b>The ${layer === 'satellite' ? 'satellite imagery' : 'map itself'} could not be loaded</b> — this `
+          + 'server may have no way out to the internet, or the service may be down. The circle above is still '
+          + 'drawn to scale, so it shows how big the fence is, just not where.';
       }
 
       function noteFor(on, radius, lat, lng, z, off) {
@@ -6430,7 +6516,124 @@
           ? `A phone check-in is refused anywhere outside this circle — ${metres(radius)} from ${where}.`
           : `Drawn for reference. The fence is switched off, so phone check-ins are accepted from anywhere; `
             + `switch it on above and this circle — ${metres(radius)} from ${where} — is what would apply.`)
-          + zoomed;
+          + zoomed
+          + ' Drag the pin to move the site, or drag the map to look around.';
+      }
+
+      /**
+       * Writing the coordinates from the map.
+       *
+       * Six decimal places is about a tenth of a metre, which is finer than
+       * anything this is for and stops the fields filling with the seventeen
+       * digits a double happens to have.
+       *
+       * Goes through setSettingField so it saves exactly as a typed one does —
+       * and sets a flag first, because the redraw those events trigger would
+       * otherwise reset the zoom and snap the view back to the middle, which
+       * on a drag means the ground moves out from under the pin as you drop it.
+       */
+      function placeSite(lat, lng) {
+        fromMap = true;
+        setSettingField('geofence.lat', lat.toFixed(6));
+        setSettingField('geofence.lng', lng.toFixed(6));
+        fromMap = false;
+        draw();
+      }
+
+      /* ---------------------------------------------------------- dragging */
+
+      /*
+       * One set of pointer handlers for both gestures, because they are the
+       * same gesture until it is known what was grabbed. Pointer events rather
+       * than mouse or touch ones: this is set up on a laptop and used on the
+       * tablet at the gate, and the tablet is the one that matters.
+       */
+      let drag = null;
+
+      frame.addEventListener('pointerdown', (e) => {
+        // The buttons on top of the map are buttons, not map.
+        if (e.target.closest('button')) return;
+        if (!world) return;
+        const box = frame.getBoundingClientRect();
+        drag = {
+          id: e.pointerId,
+          pin: !!e.target.closest('.fence-marker'),
+          fromX: e.clientX, fromY: e.clientY,
+          atX: e.clientX - box.left, atY: e.clientY - box.top,
+          dx: 0, dy: 0, moved: false
+        };
+        frame.setPointerCapture(e.pointerId);
+        frame.classList.add(drag.pin ? 'dragging-pin' : 'dragging-map');
+        e.preventDefault();
+      });
+
+      frame.addEventListener('pointermove', (e) => {
+        if (!drag || e.pointerId !== drag.id) return;
+        drag.dx = e.clientX - drag.fromX;
+        drag.dy = e.clientY - drag.fromY;
+        // A few pixels is a tap with a shaky hand, not a drag.
+        if (Math.abs(drag.dx) > 3 || Math.abs(drag.dy) > 3) drag.moved = true;
+        const shift = `translate(${drag.dx}px, ${drag.dy}px)`;
+        if (drag.pin) {
+          const marker = $('#fence-marker', overlay);
+          if (marker) marker.setAttribute('transform', `translate(${drag.dx} ${drag.dy})`);
+        } else {
+          /*
+           * Moved with a transform rather than redrawn. Rebuilding the tile
+           * grid on every frame would ask the server for the same squares
+           * sixty times a second and flicker while it did.
+           */
+          tileLayer.style.transform = shift;
+          overlay.style.transform = shift;
+        }
+      });
+
+      function endDrag(e) {
+        if (!drag || e.pointerId !== drag.id) return;
+        const done = drag;
+        drag = null;
+        frame.classList.remove('dragging-pin', 'dragging-map');
+        try { frame.releasePointerCapture(done.id); } catch { /* already gone */ }
+        if (!done.moved || !world) { draw(); return; }
+
+        if (done.pin) {
+          /*
+           * The site moves to where it was dropped, and the view stays where
+           * it is rather than recentring — the map jumping the moment you let
+           * go is disorienting, and the pin is where you put it either way.
+           */
+          const at = pointAt(world.sx + done.dx, world.sy + done.dy);
+          view = pointAt(world.W / 2, world.H / 2);
+          if (at) placeSite(at.lat, at.lng);
+          else draw();
+        } else {
+          view = fromWorld(world.originX - done.dx + world.W / 2,
+            world.originY - done.dy + world.H / 2, world.span);
+          draw();
+        }
+      }
+
+      frame.addEventListener('pointerup', endDrag);
+      frame.addEventListener('pointercancel', endDrag);
+
+      recentre.addEventListener('click', () => { view = null; draw(); });
+
+      /* ------------------------------------------------------------ layers */
+
+      /** The Map / Satellite switch, built from what the server can actually get. */
+      function drawLayerBar() {
+        const usable = Object.entries(layers || {}).filter(([, l]) => l.ok);
+        // One layer is not a choice, and a switch with nothing to switch to is
+        // a control that can only disappoint.
+        layerBar.classList.toggle('hidden', usable.length < 2);
+        layerBar.innerHTML = usable.map(([id, l]) => `<button class="btn subtle${id === layer ? ' on' : ''}"
+          type="button" data-maplayer="${esc(id)}">${esc(l.label || id)}</button>`).join('');
+        $$('[data-maplayer]', layerBar).forEach((b) => b.addEventListener('click', () => {
+          layer = b.dataset.maplayer;
+          drawLayerBar();
+          draw();
+        }));
+        credit.textContent = (layers && layers[layer] && layers[layer].credit) || '';
       }
 
       /*
@@ -6447,11 +6650,26 @@
        * typed, so the answer is in by the time there is anything to draw.
        */
       api('/tiles/probe')
-        .then((r) => { basemap = !!r.ok; })
-        .catch(() => { basemap = false; })
-        .then(draw);
+        .then((r) => { layers = (r && r.layers) || {}; })
+        .catch(() => { layers = {}; })
+        .then(() => {
+          // Whichever is available, preferring the drawn map — it is the one
+          // that answers "is this the right street".
+          if (!available(layer)) layer = Object.keys(layers).find((id) => available(id)) || layer;
+          drawLayerBar();
+          draw();
+        });
+
       root.addEventListener('input', (e) => {
-        if (e.target.matches && e.target.matches('[data-set^="geofence."]')) { nudge = 0; redraw(); }
+        if (fromMap) return;      // the map's own writing; see placeSite
+        if (e.target.matches && e.target.matches('[data-set^="geofence."]')) {
+          // A coordinate typed, looked up or taken from a browser is a new
+          // site, so the view goes back to it rather than staying where a
+          // drag happened to leave it.
+          nudge = 0;
+          view = null;
+          redraw();
+        }
       });
       root.addEventListener('change', (e) => {
         if (e.target.matches && e.target.matches('[data-set="geofence.enabled"]')) redraw();
