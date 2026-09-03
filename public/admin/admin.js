@@ -4269,8 +4269,20 @@
    * Somebody with no email is shown but cannot be ticked: there is no address
    * to tag, and a silently ignored choice is worse than a disabled one.
    */
+  /** Which of a type's notifications reach a channel of its own. */
+  const ROUTED_EVENTS = [
+    ['signin', 'Arrivals'],
+    ['signout', 'Sign-outs'],
+    ['induction', 'Inductions completed']
+  ];
+
   function routeCard(ty, s, staff) {
-    const chosen = (((s.notify.type_routing || {})[ty.key] || {}).staff || []).map(Number);
+    const mine = (s.notify.type_routing || {})[ty.key] || {};
+    const chosen = (mine.staff || []).map(Number);
+    const hook = mine.webhook_url || '';
+    // Absent means yes, the same rule the server applies when it decides where
+    // to post — so a channel added today hears about an event added next year.
+    const wants = (id) => (mine.events || {})[id] !== false;
     const posting = (s.notify.types_notified || {})[ty.key] !== false;
     const taggable = staff.filter((h) => h.email);
     const named = taggable.filter((h) => chosen.includes(h.id)).map((h) => h.name);
@@ -4303,6 +4315,30 @@
           ${taggable.length ? '' : '<p class="muted" style="margin:.5rem 0 0">Nobody on the Staff tab has an email '
             + 'address yet, so there is nobody who can be tagged.</p>'}`
           : '<p class="muted" style="margin:.25rem 0 0">Nobody on the <b>Staff</b> tab yet.</p>'}
+
+        <!--
+          A channel, as opposed to the named people above. The difference is
+          who maintains the list: adding a person here needs an administrator
+          in this panel, whereas a Contractors team in Teams is kept up to
+          date by whoever runs that team.
+        -->
+        <div class="route-channel">
+          <label class="field"><span>A channel of its own</span>
+            <input class="input" data-routehook="${esc(ty.key)}" value="${esc(hook)}"
+              placeholder="https://…  Teams workflow link" autocomplete="off" spellcheck="false"></label>
+          <div class="route-events${hook ? '' : ' hidden'}" data-routeevents="${esc(ty.key)}">
+            <span class="muted">Post to it:</span>
+            ${ROUTED_EVENTS.map(([id, label]) => `<label class="check"><input type="checkbox"
+              data-routeevent="${esc(ty.key)}" value="${id}" ${wants(id) ? 'checked' : ''}>
+              <span>${label}</span></label>`).join('')}
+          </div>
+          <div class="row route-channel-foot${hook ? '' : ' hidden'}">
+            <button class="btn ghost" type="button" data-routetest="${esc(ty.key)}">Send a test to it</button>
+            <span class="muted" data-routetestnote="${esc(ty.key)}"></span>
+          </div>
+          <p class="muted route-channel-help">Only this type's notifications go here, and only the ones ticked.
+            The company channel above still gets everything.</p>
+        </div>
       </div>
     </div>`;
   }
@@ -4683,7 +4719,16 @@
           tagged in the post using the email on their <b>Staff</b> record — so they get a notification without
           anybody setting up a link of their own. A staff member who wants their own direct message can still paste
           a personal Teams link on their record.</p>
-        ${chk('notify.webhook_channel_always', 'Post every arrival to the company channel',
+        <!--
+          Worth naming what "everything" covers, because the label used to say
+          "every arrival" and this channel has quietly grown to carry six
+          different kinds of message.
+        -->
+        <p class="muted">The <b>company channel</b> is the one that hears everything: arrivals, sign-outs, finished
+          inductions and parcels, whatever the visitor type — and a tablet gone quiet or a badge printer somebody has
+          reported down. That is the one to point at a plant manager's channel. Further down, each visitor type can
+          also have a channel of its own that gets only that type.</p>
+        ${chk('notify.webhook_channel_always', 'Post everything to the company channel',
           'With this off, the channel is only used for people who have no Teams link of their own')}
         <div class="form-grid">
           ${txt('notify.global_webhook_url', 'Company channel link')}
@@ -4865,6 +4910,15 @@
           somebody who wants a whole kind of visitor regardless of who they came to see — a safety officer who wants
           every contractor, an HR manager who wants every interview. They are tagged in the channel post, and get it
           as a direct message as well if they have a chat webhook on their <b>Staff</b> record.</p>
+        <!--
+          Two ways of telling other people, and which one to use is a question
+          about who keeps the list up to date rather than about the software.
+        -->
+        <p class="muted" style="margin-top:0"><b>A channel of its own</b> is the other way, and the difference is who
+          maintains the list. Naming people above needs an administrator in here every time somebody joins or leaves.
+          A channel does not: give the Contractors team its own Teams workflow link, tick which of that type's
+          notifications go to it, and whoever runs that team adds and removes people themselves. The company channel
+          above still receives everything either way — that is the one for whoever needs the lot.</p>
         <div class="route-cards">
           ${routeTypes().map((ty) => routeCard(ty, s, staff)).join('')
             || '<div class="section-row off"><span>No visitor types yet.</span></div>'}
@@ -5139,6 +5193,25 @@
       // A rejected value — a time zone Intl cannot parse — is worth interrupting
       // for, because it was not saved and nothing else on screen would say so.
       if (SETTINGS.warnings && SETTINGS.warnings.length) toast(SETTINGS.warnings.join(' '), 7000);
+      /*
+       * A channel link the server refused is taken back off the screen.
+       *
+       * Leaving it in the box would show a link that is not stored and will
+       * never be posted to, which is precisely the failure this checking
+       * exists to prevent — the toast says why, and the empty box says it is
+       * not saved.
+       */
+      const stored = (SETTINGS.notify || {}).type_routing || {};
+      $$('[data-routehook]').forEach((box) => {
+        const kept = (stored[box.dataset.routehook] || {}).webhook_url || '';
+        if (!box.value.trim() || kept === box.value.trim()) return;
+        box.value = kept;
+        // Set directly rather than by firing 'input', which would start
+        // another save of a change the server has already had.
+        const card = box.closest('.route-card');
+        $('[data-routeevents]', card).classList.toggle('hidden', !kept);
+        $('.route-channel-foot', card).classList.toggle('hidden', !kept);
+      });
       applyBranding();
       document.documentElement.style.setProperty('--brand', SETTINGS.org.primary_color || '#2f7d5d');
       document.documentElement.style.setProperty('--brand-dark', SETTINGS.org.accent_color || '#123a2c');
@@ -5368,8 +5441,18 @@
     VIEWS.settings.collectRouting = () => {
       const out = {};
       $$('[data-routecard]').forEach((card) => {
+        const hook = $('[data-routehook]', card);
+        /*
+         * Every event written out, ticked or not. A missing entry means yes on
+         * the server — which is the right default for a channel nobody has
+         * narrowed, and the wrong answer for a box somebody has just unticked.
+         */
+        const events = {};
+        $$('[data-routeevent]', card).forEach((box) => { events[box.value] = box.checked; });
         out[card.dataset.routecard] = {
-          staff: $$('[data-routestaff]:checked', card).map((box) => Number(box.value))
+          staff: $$('[data-routestaff]:checked', card).map((box) => Number(box.value)),
+          webhook_url: hook ? hook.value.trim() : '',
+          events
         };
       });
       return out;
@@ -5631,6 +5714,47 @@
         .map((box) => box.closest('.route-person').querySelector('span').childNodes[0].textContent.trim());
       label.textContent = names.length ? joinNames(names) : 'Nobody — just the host and the channel';
     }
+
+    /*
+     * A type's own channel. The event ticks and the test button are hidden
+     * until there is a link to apply them to, because a row of checkboxes
+     * governing nothing reads as a feature that is switched on.
+     */
+    $$('[data-routehook]').forEach((box) => box.addEventListener('input', () => {
+      const card = box.closest('.route-card');
+      const has = !!box.value.trim();
+      $('[data-routeevents]', card).classList.toggle('hidden', !has);
+      $('.route-channel-foot', card).classList.toggle('hidden', !has);
+      $(`[data-routetestnote="${box.dataset.routehook}"]`, card).textContent = '';
+      saveSettings.soon();
+    }));
+    $$('[data-routeevent]').forEach((box) => box.addEventListener('change', () => saveSettings.soon()));
+
+    /*
+     * A test posted to the type's own channel, built as that type's arrival —
+     * so what lands is the card contractors will actually get, in the channel
+     * they will actually get it in. Saved first: a link typed and tested
+     * without a save behind it is the one that passes here and then never
+     * delivers anything.
+     */
+    $$('[data-routetest]').forEach((btn) => btn.addEventListener('click', async () => {
+      const type = btn.dataset.routetest;
+      const card = $(`[data-routecard="${type}"]`);
+      const note = $(`[data-routetestnote="${type}"]`, card);
+      const url = $('[data-routehook]', card).value.trim();
+      if (!url) return;
+      btn.disabled = true;
+      note.textContent = 'Posting…';
+      try {
+        await saveSettings.now();
+        const r = await api('/settings/test-webhook', { method: 'POST', body: { url, event: 'signin', visit_type: type } });
+        note.textContent = r.ok
+          ? 'Posted — it should be in that channel now, from Flow bot. Nobody was tagged.'
+          : `It was refused: ${r.detail || 'no reason given'}`;
+      } catch (err) {
+        note.textContent = `Could not post: ${err.message || 'the server did not answer'}`;
+      } finally { btn.disabled = false; }
+    }));
 
     /*
      * Filtering hides rows rather than removing them, so a name ticked and

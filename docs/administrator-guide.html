@@ -824,6 +824,37 @@ node scripts/reset-password.js you@example.com 'a new password'</code></pre>
   checkboxes against the staff you already have, are tagged in the post, and are sent it directly if
   they have a webhook of their own. Staff marked inactive are dropped automatically.</p>
 
+<h2>A channel per visitor type</h2>
+
+<p>The same card carries <em>A channel of its own</em>: a webhook for that visitor type alone, with
+  ticks for which of its notifications go there — arrivals, sign-outs, inductions completed. An
+  event with no entry either way counts as wanted, so a channel set up today still hears about an
+  event added to the software later rather than silently not.</p>
+
+<p>Three gates, in this order: the site must be posting that event at all
+  (<code>notify.on_signin</code> and the rest), the visitor type must be one the site posts about
+  (<em>Post about these</em>), and the event must be ticked for that channel. A type switched off
+  entirely reaches nobody, its own channel included. A cancelled sign-in — the correction posted
+  when somebody undoes an arrival at the kiosk — follows the arrival wherever it went, including
+  that channel: a correction that misses people who read the thing it corrects is worse than none.</p>
+
+<p>Stored as <code>notify.type_routing[type].webhook_url</code> and <code>.events</code>, alongside
+  the <code>.staff</code> list. Naming the same URL as the company channel posts once, not twice.</p>
+
+<div class="note">
+  <span class="label">Two mechanisms, one question</span>
+  <p>Named staff and a channel answer "who else needs to know", and the choice between them is about
+    who maintains the list. Named people are tagged by name and messaged directly, which is right
+    for one safety officer and wrong for a team of eight — every joiner and leaver is an
+    administrator's job in here. A channel is a place: whoever runs that team in Teams keeps its
+    membership themselves, and Smart Lobby never needs to know who is in it.</p>
+  <p>A channel link is checked before it is stored. Anything that is not an http(s) URL is refused,
+    and so specifically is a <code>teams.microsoft.com</code> channel link — the one people actually
+    paste by mistake, which looks like a URL, would save without complaint and would never deliver
+    anything. Both come back as a warning naming the type, and the field is cleared rather than left
+    showing a link that was not saved.</p>
+</div>
+
 <div class="note">
   <span class="label">Tagging only works when Teams can resolve the person</span>
   <p>A mention needs a name and an email address Teams recognises. Somebody with no email on their

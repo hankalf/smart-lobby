@@ -1424,6 +1424,19 @@ router.put('/settings', (req, res) => {
     }
   }
 
+  /*
+   * A channel link that is not one is stored as empty rather than stored and
+   * silently never delivered to. Named by their labels in the warning, because
+   * "contractor" is the key and "Contractor (Sub)" is what is on the screen.
+   */
+  if (patch.notify && patch.notify.type_routing !== undefined) {
+    const labels = Object.fromEntries(((patch.types || settings.getAll().types || [])
+      .filter((t) => t && t.key)).map((t) => [t.key, t.label || t.key]));
+    const { routing, warnings: routeWarnings } = settings.sanitizeRouting(patch.notify.type_routing, labels);
+    patch.notify.type_routing = routing;
+    warnings.push(...routeWarnings);
+  }
+
   const updated = settings.setAll(patch);
   audit(req, 'update', 'settings', null, Object.keys(patch));
   res.json({ ...updated, warnings });

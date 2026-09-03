@@ -247,6 +247,38 @@ function routedStaff(visitType) {
 }
 
 /**
+ * The channel this kind of visitor has of its own, if this event is one it
+ * wants.
+ *
+ * Different in kind from routedStaff above, and the difference is the point: a
+ * routed person is tagged by name and messaged directly, which is right for a
+ * safety officer and wrong for a team of eight. A channel is a place — whoever
+ * needs to know about contractors is added to the Contractors team in Teams by
+ * whoever runs it, rather than one at a time in these settings by an
+ * administrator who has to be asked.
+ *
+ * The site's own channel still hears everything; this is in addition to it,
+ * never instead of it.
+ *
+ * @param {string} visitType
+ * @param {'signin'|'signout'|'induction'} event
+ * @returns {string|null}
+ */
+function typeChannel(visitType, event) {
+  const routing = settings.getSection('notify').type_routing || {};
+  const mine = routing[visitType] || {};
+  const url = String(mine.webhook_url || '').trim();
+  if (!url) return null;
+  /*
+   * Absent means yes. A channel set up for contractors should hear about an
+   * event added to the software next year, rather than quietly not — the same
+   * rule types_notified uses, for the same reason.
+   */
+  const events = mine.events || {};
+  return events[event] === false ? null : url;
+}
+
+/**
  * The board's own address, for a card that offers a link to it.
  *
  * Null when the board is off or has no key: a button leading to a 404 is
@@ -281,7 +313,8 @@ async function notifyArrival(visitId) {
   }));
 
   await sendWebhooks({
-    ownUrl: v.host_webhook, extraUrls: also.map((p) => p.webhook_url),
+    ownUrl: v.host_webhook,
+    extraUrls: [...also.map((p) => p.webhook_url), typeChannel(v.visit_type, 'signin')],
     model, visit_id: visitId
   });
 }
@@ -299,7 +332,8 @@ async function notifyDeparture(visitId) {
     fallbackTitle: `${v.full_name} has signed out`
   }));
   await sendWebhooks({
-    ownUrl: v.host_webhook, extraUrls: also.map((p) => p.webhook_url),
+    ownUrl: v.host_webhook,
+    extraUrls: [...also.map((p) => p.webhook_url), typeChannel(v.visit_type, 'signout')],
     model, visit_id: visitId
   });
 }
@@ -426,7 +460,8 @@ async function notifyInduction(visitId) {
     fallbackTitle: `${v.full_name} has completed the site induction`
   }));
   await sendWebhooks({
-    ownUrl: v.host_webhook, extraUrls: also.map((p) => p.webhook_url),
+    ownUrl: v.host_webhook,
+    extraUrls: [...also.map((p) => p.webhook_url), typeChannel(v.visit_type, 'induction')],
     model, visit_id: visitId
   });
 }
@@ -456,8 +491,14 @@ async function notifyCancelled(v) {
   model.links = [];
   model.footer = null;
 
+  /*
+   * Wherever the sign-in went, including the type's own channel: a correction
+   * that does not reach everyone who read the thing it corrects is worse than
+   * no correction at all.
+   */
   await sendWebhooks({
-    ownUrl: v.host_webhook, extraUrls: also.map((p) => p.webhook_url),
+    ownUrl: v.host_webhook,
+    extraUrls: [...also.map((p) => p.webhook_url), typeChannel(v.visit_type, 'signin')],
     model, visit_id: null
   });
 }

@@ -291,13 +291,33 @@ const DEFAULTS = {
     /*
      * And who else, beyond the person being visited.
      *
-     * Keyed by visitor type: { contractor: { staff: [3, 7] } }. Those people
-     * are tagged in the channel post and get it through their own chat
-     * webhook if they have one — a safety officer who wants every contractor,
-     * an HR manager who wants every interview, without either of them having
-     * to watch a channel for the three arrivals a week that concern them.
+     * Keyed by visitor type:
+     *
+     *   contractor: {
+     *     staff: [3, 7],                       // people, tagged and messaged
+     *     webhook_url: 'https://…',            // a channel of this type's own
+     *     events: { signin: true, signout: false, induction: true }
+     *   }
+     *
+     * Two different things, deliberately. `staff` are named people: they are
+     * tagged in the post and get it through their own chat webhook if they
+     * have one — a safety officer who wants every contractor, without having
+     * to watch a general channel for the three arrivals a week that concern
+     * them. `webhook_url` is a channel instead: a Contractors team that hears
+     * about contractors and nothing else, so the people who need to know can
+     * be added and removed in Teams by whoever runs that team, rather than
+     * one at a time in here.
+     *
+     * `events` decides which of this type's notifications reach that channel.
+     * A missing entry means yes, so a channel added today still hears about
+     * an event added to the software next year rather than silently not.
      */
     type_routing: {},
+    /*
+     * The channel that hears everything: every arrival, departure, induction,
+     * delivery, tablet gone quiet and printer reported down, whatever the
+     * visitor type and whoever the host is. The plant manager's channel.
+     */
     global_webhook_url: '',
     webhook_channel_always: true,
     webhook_format: 'teams',
@@ -511,6 +531,70 @@ function sanitizeTypes(list) {
     });
   }
   return out.length ? out : null;
+}
+
+/** The notifications a visitor type can have a channel of its own for. */
+const ROUTED_EVENTS = ['signin', 'signout', 'induction'];
+
+/**
+ * The per-type routing as sent by the dashboard, made safe to store.
+ *
+ * The webhook is the part worth checking. This server posts to whatever is
+ * stored here, so it has to be a web address and nothing else — and the
+ * mistake that actually happens is somebody pasting a Teams channel's "Copy
+ * link" instead of a workflow's webhook, which looks like a URL, saves
+ * without complaint, and simply never delivers anything. Refusing it here with
+ * a sentence saying why is the difference between a five-minute fix and a
+ * fortnight of "the contractors channel doesn't work".
+ *
+ * @returns {{routing: object, warnings: string[]}}
+ */
+function sanitizeRouting(map, labels = {}) {
+  const warnings = [];
+  const routing = {};
+  if (!map || typeof map !== 'object') return { routing, warnings };
+
+  for (const [type, entry] of Object.entries(map)) {
+    if (!entry || typeof entry !== 'object') continue;
+    const name = labels[type] || type;
+    const clean = {
+      staff: (Array.isArray(entry.staff) ? entry.staff : [])
+        .map(Number).filter((id) => Number.isInteger(id) && id > 0).slice(0, 50)
+    };
+
+    const url = String(entry.webhook_url == null ? '' : entry.webhook_url).trim();
+    if (!url) {
+      clean.webhook_url = '';
+    } else {
+      let parsed = null;
+      try { parsed = new URL(url); } catch { parsed = null; }
+      if (!parsed || !/^https?:$/.test(parsed.protocol)) {
+        warnings.push(`The channel link for ${name} was not saved — it is not a web address. `
+          + 'Paste the URL the Teams workflow gives you, which starts with https://');
+        clean.webhook_url = '';
+      } else if (/^https:\/\/teams\.microsoft\.com\//i.test(url)) {
+        /*
+         * The specific wrong thing people paste. It is a link to the channel
+         * for a human to click, not somewhere a message can be posted, and
+         * nothing about it looks wrong until nothing arrives.
+         */
+        warnings.push(`The channel link for ${name} was not saved — that is the link that opens the channel in `
+          + 'Teams, not a webhook. In Teams: right-click the channel → Workflows → "Post to a channel when a '
+          + 'webhook request is received", and paste the address it gives you at the end.');
+        clean.webhook_url = '';
+      } else {
+        clean.webhook_url = url.slice(0, 2000);
+      }
+    }
+
+    const events = (entry.events && typeof entry.events === 'object') ? entry.events : null;
+    if (events) {
+      clean.events = {};
+      for (const id of ROUTED_EVENTS) if (events[id] !== undefined) clean.events[id] = events[id] !== false;
+    }
+    routing[type] = clean;
+  }
+  return { routing, warnings };
 }
 
 /**
@@ -749,4 +833,5 @@ function publicSettings() {
 
 module.exports = { DEFAULTS, getAll, getSection, setSection, setAll, publicSettings, privacyNotice, deepMerge,
   isValidTimeZone, isValidLocale, PHONE_COUNTRIES, phoneCountry, DETAIL_FIELDS, fieldsFor,
-  FLOW_STEPS, flowFor, configRev, bumpConfigRev, LANGUAGES, inLanguage, sanitizeTypes, TYPE_MODES };
+  FLOW_STEPS, flowFor, configRev, bumpConfigRev, LANGUAGES, inLanguage, sanitizeTypes, TYPE_MODES,
+  sanitizeRouting, ROUTED_EVENTS };

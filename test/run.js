@@ -72,6 +72,14 @@ const SUITES = [
   // Forty people through one gate in one day, and every view of them agreeing.
   { name: 'day', file: 'day-test.js' },
   { name: 'notifycards', file: 'notifycards-test.js', browser: true },
+  /*
+   * Where each post lands: the channel that hears everything, and one per
+   * type. After card-test and notifycards rather than before, because opening
+   * the notifications panel saves a design per event — which is the panel
+   * doing its job, and which leaves card-test's older shared design no longer
+   * the one in force. Every browser suite that drives that panel sits here.
+   */
+  { name: 'channels', file: 'channels-test.js' },
   { name: 'board', file: 'board-test.js' },
   { name: 'account', file: 'account-test.js' },
   { name: 'backup', file: 'backup-test.js' },

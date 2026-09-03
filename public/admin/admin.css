@@ -478,7 +478,23 @@ code.token { background: var(--bg); padding: .15rem .4rem; border-radius: 5px; f
 .route-card.not-posting .route-off-note { display: block; }
 .route-card.not-posting .route-also-head,
 .route-card.not-posting .route-filter,
+.route-card.not-posting .route-channel,
 .route-card.not-posting .route-people { opacity: .45; }
+
+/*
+ * A channel of this type's own, separated from the people above it by a rule:
+ * they are two different mechanisms that happen to answer the same question,
+ * and running them together as one list is how somebody ends up ticking names
+ * when they wanted a team.
+ */
+.route-channel { margin-top: .8rem; padding-top: .7rem; border-top: 1px solid var(--line); }
+.route-channel .field { margin: 0; }
+.route-channel input { font-size: .85rem; }
+.route-events { display: flex; flex-wrap: wrap; gap: .25rem .8rem; align-items: center; margin-top: .5rem; }
+.route-events .check { margin: 0; font-size: .85rem; }
+.route-channel-foot { margin-top: .5rem; align-items: baseline; }
+.route-channel-foot .muted { font-size: .78rem; overflow-wrap: anywhere; }
+.route-channel-help { font-size: .78rem; margin: .5rem 0 0; }
 .tp-at { background: #e8ebfa; color: #4f52b2; border-radius: 3px; padding: 0 .2rem; font-weight: 600; }
 
 /* ------------------------------------ the kiosk, as these settings make it */
