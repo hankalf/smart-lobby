@@ -184,6 +184,69 @@ function findAll(node, type, out = []) {
   await req('PUT', '/api/admin/settings', { notify: { card: { title_template: '{name} has arrived to see {host}', fields: ['company', 'type'], show_photo: true } } });
   ok('preview still builds after all that', !!(await preview(undefined)).model);
 
+  /* ---- the line a design must not be able to drop ---- */
+
+  /*
+   * A card design saved before a field existed carries its own list of lines
+   * and silently drops anything added afterwards. That is fine for a detail —
+   * one fewer fact on a card costs nothing. It was not fine for "checked in by
+   * QR code", which says how somebody got onto the site without passing the
+   * tablet at the gate: the field was added, every install that had ever
+   * opened the card designer kept posting arrivals with no mention of it, and
+   * nothing anywhere said so.
+   *
+   * Exercised against the module rather than through a preview, because the
+   * preview builds from whatever real visit happens to be most recent — and
+   * the whole point is what happens for a particular value of `source`.
+   */
+  // `cards` is the notify-card module, required earlier in this suite.
+  const visit = {
+    id: 1, full_name: 'Marguerite Oyelaran', company: 'Ashcroft Surveying', visit_type: 'contractor',
+    host_name: 'Priya Raman', host_email: 'priya@example.test', signed_in_at: new Date().toISOString()
+  };
+  const ctx = { org: { name: 'Example' }, fmtTime: () => '09:41', baseUrl: 'http://x', boardUrl: null };
+  // A design from before the field existed: exactly what every configured
+  // install was carrying.
+  const older = { cards: { signin: { fields: ['company', 'type', 'host', 'time'] } } };
+  const labels = (notify, source) =>
+    cards.buildModel('signin', { ...visit, source }, notify, ctx).fields.map((f) => f.label);
+  const said = (notify, source) => {
+    const f = cards.buildModel('signin', { ...visit, source }, notify, ctx).fields
+      .find((x) => x.label === 'Checked in');
+    return f ? f.value : null;
+  };
+
+  ok('a QR check-in says so even on a design that never asked for the line',
+    said(older, 'phone') === 'On their own phone, by QR code', JSON.stringify(labels(older, 'phone')));
+  ok('…placed above the time, not tacked on after it',
+    labels(older, 'phone').indexOf('Checked in') === labels(older, 'phone').indexOf('Time') - 1,
+    JSON.stringify(labels(older, 'phone')));
+
+  /*
+   * And nowhere else. A line forced onto every card would be noise on the
+   * ordinary case, which is somebody standing at the tablet — and noise is how
+   * a card stops being read.
+   */
+  ok('a tablet sign-in at the gate adds nothing', said(older, 'tablet') === null,
+    JSON.stringify(labels(older, 'tablet')));
+  ok('nor does one typed in by reception', said(older, 'desk') === null,
+    JSON.stringify(labels(older, 'desk')));
+  ok('nor a visit recorded before any of this was kept', said(older, null) === null,
+    JSON.stringify(labels(older, null)));
+
+  /* A design that does name it keeps its own order. */
+  const names = { cards: { signin: { fields: ['company', 'source', 'host', 'time'] } } };
+  ok('a design that names the line puts it where it chose', labels(names, 'phone')[1] === 'Checked in',
+    JSON.stringify(labels(names, 'phone')));
+  ok('…and it is not added twice', labels(names, 'phone').filter((l) => l === 'Checked in').length === 1,
+    JSON.stringify(labels(names, 'phone')));
+
+  /* The designer has to say so, rather than showing it as left out. */
+  const catalogue = cards.catalogue();
+  const sourceField = catalogue.events.find((e) => e.id === 'signin').fields.find((f) => f.id === 'source');
+  ok('the catalogue marks the line as one the card sends regardless',
+    sourceField && sourceField.always === 'phone', JSON.stringify(sourceField));
+
   /* ---- neither endpoint is open to the world ---- */
   ok('the preview needs a login', (await fetch(BASE + '/api/admin/notify/preview')).status !== 200);
 

@@ -5472,6 +5472,15 @@
 
     const fieldDef = (id) => (cdEventDef().fields.find((f) => f.id === id) || { id, label: id });
     const SENSITIVE_NOTE = ' <span class="muted">— everyone in the channel can read this</span>';
+    /*
+     * A line the card sends whether or not it is chosen here. Said plainly in
+     * the list rather than left to be discovered: a designer that shows a
+     * field as left out while the card sends it anyway is a designer that
+     * lies, and this exists precisely because the opposite lie — a field
+     * quietly dropped from every card — went unnoticed for a day.
+     */
+    const ALWAYS_NOTE = ' <span class="muted">— sent anyway when somebody checks in by QR code, '
+      + 'wherever you put it</span>';
 
     function drawCardFields() {
       const card = cards[cdEvent];
@@ -5489,7 +5498,7 @@
         : '<div class="section-row off"><span>Nothing but the heading.</span></div>';
 
       $('#cd-rest').innerHTML = rest.length ? rest.map((f) => `<div class="section-row off">
-        <span>${esc(f.label)}${f.sensitive ? SENSITIVE_NOTE : ''}</span>
+        <span>${esc(f.label)}${f.sensitive ? SENSITIVE_NOTE : ''}${f.always ? ALWAYS_NOTE : ''}</span>
         <span class="flow-moves"><button class="btn ghost" data-cdin="${f.id}">Add</button></span></div>`).join('')
         : '<div class="section-row off"><span>Everything is shown.</span></div>';
 

@@ -53,7 +53,24 @@ const VISIT_FIELDS = [
     id: 'source',
     label: 'Checked in',
     value: (v) => (v.source === 'phone' ? 'On their own phone, by QR code'
-      : v.source === 'desk' ? 'At the desk, by reception' : null)
+      : v.source === 'desk' ? 'At the desk, by reception' : null),
+    /*
+     * Shown on a QR check-in whether or not the design asks for it.
+     *
+     * Not a special case for its own sake. Every other line here is a detail
+     * about the visitor, and leaving one out costs nothing but detail. This
+     * one says how somebody got onto the site without passing the tablet at
+     * the gate, which is the whole reason anyone would want to know.
+     *
+     * And it had to be insisted on, because it had already gone missing: a
+     * card design saved before a field exists carries its own list of lines
+     * and silently drops anything added afterwards. Every install that had
+     * ever opened the card designer kept posting arrivals with no mention of
+     * this, and nothing anywhere said so.
+     *
+     * A design that names 'source' controls where it sits, as normal.
+     */
+    always: 'phone'
   },
   { id: 'time', label: 'Time', value: (v, ctx) => ctx.fmtTime(v.signed_in_at) },
   { id: 'signed_out', label: 'Signed out', value: (v, ctx) => v.signed_out_at && ctx.fmtTime(v.signed_out_at) },
@@ -370,6 +387,23 @@ function deliveryTokens(d, ctx) {
 }
 
 /**
+ * A chosen field list, plus the few lines that are not the design's to drop.
+ *
+ * At the moment that is one: how somebody checked in, when they did it from
+ * their own phone. Put before the time rather than after it, because the time
+ * reads as the end of a card and anything below it reads as an afterthought —
+ * which this is the opposite of.
+ */
+function insistOn(event, chosen, row) {
+  const owed = event.fields.filter((f) => f.always && row[f.id] === f.always && !chosen.includes(f.id));
+  if (!owed.length) return chosen;
+  const out = [...chosen];
+  const at = out.indexOf('time');
+  out.splice(at === -1 ? out.length : at, 0, ...owed.map((f) => f.id));
+  return out;
+}
+
+/**
  * Turn a row into the model every channel renders.
  *
  * @param {string} eventId  signin | signout | induction | delivery
@@ -385,7 +419,7 @@ function buildModel(eventId, row, notify, ctx) {
   const tokens = event.subject === 'delivery' ? deliveryTokens(row, ctx) : visitTokens(row, ctx);
 
   const byId = Object.fromEntries(event.fields.map((f) => [f.id, f]));
-  const chosen = Array.isArray(c.fields) ? c.fields : event.defaults.fields;
+  const chosen = insistOn(event, Array.isArray(c.fields) ? c.fields : event.defaults.fields, row);
   const fields = chosen
     .map((id) => byId[id])
     .filter(Boolean)
@@ -627,7 +661,9 @@ const catalogue = () => ({
   events: EVENTS.map((e) => ({
     id: e.id, label: e.label, hint: e.hint, subject: e.subject,
     defaults: cardDefaults(e.id),
-    fields: e.fields.map(({ id, label, sensitive }) => ({ id, label, sensitive: !!sensitive })),
+    fields: e.fields.map(({ id, label, sensitive, always }) => ({
+      id, label, sensitive: !!sensitive, always: always || null
+    })),
     tokens: TOKENS[e.subject]
   })),
   links: LINKS.map(({ id, label, needs }) => ({ id, label, needs: needs || null })),
