@@ -20,7 +20,9 @@ const auth = require('../auth');
 const ratelimit = require('../ratelimit');
 const localtime = require('../localtime');
 
-const router = express.Router();
+// The on-site board, shown on a screen nobody is watching for errors.
+// See server/asyncroutes.js.
+const router = require('../asyncroutes').guard(express.Router());
 
 const newKey = () => crypto.randomBytes(16).toString('hex');
 

@@ -40,7 +40,12 @@ if (process.env.CLEAR_EXAMPLES === 'true') {
   }
 }
 
-const app = express();
+/*
+ * Guarded before anything is registered on it: an async handler that throws
+ * answers 500 rather than ending the process. See server/asyncroutes.js for
+ * the afternoon that earned this.
+ */
+const app = require('./asyncroutes').guard(express());
 app.set('trust proxy', 1);
 /*
  * A sign-in carries a photo and a few signatures as base64, which fits inside

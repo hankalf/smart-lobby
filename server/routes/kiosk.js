@@ -17,7 +17,10 @@ const devices = require('../devices');
 const phoneRules = require('../../public/kiosk/phone');
 const ratelimit = require('../ratelimit');
 
-const router = express.Router();
+// The public kiosk. Doubly worth guarding: these are the routes a visitor
+// can reach, and a gate that stops answering is the worst failure here.
+// See server/asyncroutes.js.
+const router = require('../asyncroutes').guard(express.Router());
 
 const clean = (v) => (typeof v === 'string' ? v.trim() : v);
 const normPhone = (p) => String(p || '').replace(/[^\d+]/g, '');

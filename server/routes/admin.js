@@ -18,7 +18,10 @@ const expected = require('../expected');
 const cards = require('../notify-card');
 const roles = require('../roles');
 
-const router = express.Router();
+// The dashboard: every route here is behind a login, and none of them is
+// worth the whole server if it throws.
+// See server/asyncroutes.js.
+const router = require('../asyncroutes').guard(express.Router());
 const clean = (v) => (typeof v === 'string' ? v.trim() : v);
 
 function audit(req, action, entity, entityId, detail) {
@@ -693,7 +696,23 @@ crud('agreements', 'agreements', ['name', 'body', 'name_es', 'body_es', 'version
 crud('access-points', 'access_points', ['site_id', 'name', 'kind', 'url', 'method', 'headers', 'body',
   'unlock_seconds', 'auto_unlock_on_signin', 'auto_unlock_on_signout', 'enabled', 'notes']);
 
-/** Send a test straight to one person's own webhook, so it can be proved before a visitor relies on it. */
+/**
+ * Send a test straight to one person's own webhook, so it can be proved before
+ * a visitor relies on it.
+ *
+ * Sends the designed arrival card, exactly as the channel test does. It used to
+ * send a title and a list of plain lines — the shape notifications had before
+ * they were designed — which had stopped being a thing sendWebhook accepted:
+ * it read a property of undefined, and because Express does not catch what an
+ * async handler rejects with, pressing this button ended the server process.
+ *
+ * The card is what somebody wants to see anyway. "It arrived" is half the
+ * question; the other half is whether it arrives looking like anything.
+ *
+ * Nobody is tagged, for the same reason the channel test tags nobody: the
+ * sample is built from a real recent visit, and a test has no business
+ * @-mentioning a colleague who had nothing to do with the button being pressed.
+ */
 router.post('/staff/:id/test-webhook', async (req, res) => {
   const person = get('SELECT * FROM hosts WHERE id = ?', req.params.id);
   if (!person) return res.status(404).json({ error: 'not_found' });
@@ -701,18 +720,17 @@ router.post('/staff/:id/test-webhook', async (req, res) => {
   const url = clean(req.body.url) || person.webhook_url;
   if (!url) return res.json({ ok: false, detail: 'No chat webhook is set for this person yet.' });
 
-  const org = settings.getSection('org');
-  const result = await notify.sendWebhook({
-    url,
-    title: `Test from ${org.name} Smart Lobby`,
-    lines: [
-      `This is what ${person.name} will see when a visitor arrives for them.`,
-      'Visitor: Sam Taylor (Acme Roofing)',
-      'Type: contractor'
-    ]
-  });
+  const preview = buildPreview('signin', null, null);
+  const model = {
+    ...preview.model,
+    title: `${preview.model.title} — test`,
+    subtitle: `This is what ${person.name} will see when a visitor arrives for them.`,
+    mention: null,
+    mentionTemplate: null
+  };
+  const result = await notify.sendWebhook({ url, model });
   audit(req, 'test_webhook', 'staff', person.id, { ok: result.ok, status: result.status });
-  res.json(result);
+  res.json({ ...result, tagged_nobody: true });
 });
 
 /* --------------------------------------------------------- staff import */

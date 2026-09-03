@@ -127,6 +127,17 @@ async function sendWebhook({ url, model, visit_id, delivery_id }) {
   const n = settings.getSection('notify');
   const target = url;
   if (!target) return { ok: false, status: 0, detail: 'No webhook URL.' };
+  /*
+   * Answered rather than thrown. A caller that hands this the wrong shape is a
+   * bug either way, but the cost of the bug should be a failed notification,
+   * not a dead process — this is called from routes, and an async route that
+   * throws takes the server with it. That is not a hypothetical: a test button
+   * passed the pre-design shape, this read a property of undefined, and the
+   * gate stopped answering.
+   */
+  if (!model || typeof model !== 'object') {
+    return { ok: false, status: 0, detail: 'Nothing to send — the message was not built.' };
+  }
   const format = detectWebhookFormat(target) || n.webhook_format;
   const title = model.title;
   const body = cards.render(format, model);

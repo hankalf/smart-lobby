@@ -48,6 +48,8 @@ const SUITES = [
   { name: 'aamva', file: 'aamva-test.js' },
   { name: 'idscan', file: 'idscan-test.js' },
   { name: 'teams', file: 'teams-test.js' },
+  // A button in the settings must not be able to stop the gate.
+  { name: 'robust', file: 'robust-test.js' },
   { name: 'archive', file: 'archive-test.js' },
   { name: 'card', file: 'card-test.js' },
   { name: 'badgeno', file: 'badgeno-test.js' },
