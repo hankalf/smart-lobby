@@ -746,3 +746,32 @@ td .avatar[data-bigphoto]:hover, .visit-photo:hover {
 .site-map-frame.satellite .fence-label { fill: #fff; stroke: rgba(0, 0, 0, .65); }
 .site-map-frame.satellite .scale-bar line { stroke: #fff; }
 .site-map-frame.satellite .scale-bar text { fill: #fff; stroke: rgba(0, 0, 0, .65); }
+
+/* ------------------------------------------------- the install check */
+/*
+ * A list of plain findings, each readable on its own line. Deliberately not a
+ * dashboard of dials: this is opened when something is wrong, and the useful
+ * shape is a sentence saying what and a sentence saying what to do.
+ */
+.check-group { margin-top: 1rem; }
+.check-group h4 {
+  margin: 0 0 .35rem; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--ink-soft);
+}
+.check-row {
+  display: flex; gap: .6rem; align-items: baseline;
+  padding: .45rem .6rem; border-radius: 8px; font-size: .9rem;
+  border-left: 3px solid transparent;
+}
+.check-row + .check-row { margin-top: .15rem; }
+.check-mark { flex: 0 0 1rem; text-align: center; font-weight: 700; }
+.check-body { flex: 1 1 auto; }
+.check-hint { display: block; margin-top: .15rem; font-size: .82rem; }
+.check-row.is-ok { background: #f2f8f4; border-left-color: #2f7d5d; }
+.check-row.is-ok .check-mark { color: #2f7d5d; }
+.check-row.is-warn { background: #fdf6e8; border-left-color: #b8860b; }
+.check-row.is-warn .check-mark { color: #8a5a08; }
+.check-row.is-bad { background: #fdecea; border-left-color: var(--danger); }
+.check-row.is-bad .check-mark { color: var(--danger); }
+.check-row.is-info, .check-row.is-skip { background: var(--bg); }
+.check-row.is-info .check-mark, .check-row.is-skip .check-mark { color: var(--ink-soft); }

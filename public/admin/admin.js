@@ -5241,6 +5241,27 @@
         <div id="audit-list" class="scroll-10"><p class="empty">Loading…</p></div>
       </div>
 
+      <!--
+        What this install can actually do, asked of the machine it runs on.
+        Last, because it is the page somebody opens when something is wrong
+        rather than while setting something up.
+      -->
+      <div class="card section" id="set-check"><h2>Check this install</h2>
+        <p class="muted" style="margin-top:0">Everything above says what was <i>configured</i>. This goes and looks
+          at what is actually true from where this server is running: whether the data survives a deploy, whether it
+          can reach the map and the address lookup, whether the address Teams fetches photos from resolves, whether
+          the backups have ever run, whether the tablets are checking in — and the settings that are each valid on
+          their own and together do nothing.</p>
+        <p class="muted">It sends nothing anybody would see. No test messages go to real channels; it reports what
+          the notification log already recorded, so it is free to press twice and harmless on a busy morning.</p>
+        <div class="row">
+          <button class="btn" id="check-run" type="button">Run the check</button>
+          <button class="btn subtle hidden" id="check-copy" type="button">Copy as text</button>
+          <span class="muted" id="check-when"></span>
+        </div>
+        <div id="check-out"></div>
+      </div>
+
       <p class="muted">Everything here saves itself as you change it.</p>`;
 
     showSection(section || SECTION || firstSection());
@@ -5808,6 +5829,73 @@
        */
       Promise.resolve(saveSettings.now()).then(loadCardPreview);
     }));
+
+    /*
+     * The install check: run it, show it, and make it easy to hand to somebody
+     * who can help.
+     *
+     * The copy button is the point of the whole panel as much as the checks
+     * are. "It says the map cannot be loaded" is a sentence somebody has to
+     * retype; the text version is the whole picture, pasted in one go, with
+     * the version and the states of everything that was not asked about.
+     */
+    const checkRun = $('#check-run');
+    if (checkRun) {
+      const out = $('#check-out');
+      const when = $('#check-when');
+      const copy = $('#check-copy');
+      const MARK = { ok: '✓', warn: '!', bad: '✕', info: '·', skip: '·' };
+
+      checkRun.addEventListener('click', async () => {
+        checkRun.disabled = true;
+        when.textContent = 'Looking…';
+        out.innerHTML = '';
+        try {
+          const r = await api('/selfcheck');
+          const groups = [];
+          for (const c of r.checks) {
+            const last = groups[groups.length - 1];
+            if (last && last.name === c.group) last.items.push(c);
+            else groups.push({ name: c.group, items: [c] });
+          }
+          const counts = r.counts || {};
+          when.textContent = `${counts.bad || 0} needing attention, ${counts.warn || 0} worth a look, `
+            + `${counts.ok || 0} fine.`;
+          out.innerHTML = groups.map((g) => `<div class="check-group">
+            <h4>${esc(g.name)}</h4>
+            ${g.items.map((c) => `<div class="check-row is-${esc(c.state)}">
+              <span class="check-mark">${MARK[c.state] || '·'}</span>
+              <span class="check-body"><b>${esc(c.label)}</b> — ${esc(c.detail)}
+                ${c.hint && (c.state === 'bad' || c.state === 'warn')
+    ? `<span class="muted check-hint">${esc(c.hint)}</span>` : ''}</span>
+            </div>`).join('')}
+          </div>`).join('');
+          copy.classList.remove('hidden');
+        } catch (err) {
+          out.innerHTML = `<div class="notice error">Could not run the check. ${esc(err.message || '')}</div>`;
+        } finally { checkRun.disabled = false; }
+      });
+
+      copy.addEventListener('click', async () => {
+        try {
+          const res = await api('/selfcheck.txt', { raw: true });
+          const text = await res.text();
+          /*
+           * The clipboard is refused outside a secure context and in some
+           * kiosk browsers, and a button that silently does nothing is worse
+           * than one that hands over the text to copy by hand.
+           */
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            toast('Copied. Paste it wherever it is needed.');
+          } else {
+            modal('The check, as text', `<p class="muted" style="margin-top:0">This browser will not let a page
+              write to the clipboard here, so select it and copy it by hand.</p>
+              <pre class="json-dump" style="max-height:22rem">${esc(text)}</pre>`);
+          }
+        } catch { toast('Could not fetch the text version'); }
+      });
+    }
 
     /*
      * One visitor type on screen at a time, the same way the card designer

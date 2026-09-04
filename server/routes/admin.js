@@ -1460,6 +1460,26 @@ router.put('/settings', (req, res) => {
 });
 
 /**
+ * What this install can actually do, asked of the machine it is running on.
+ *
+ * Read-only and sends nothing anybody would see: it reports what the
+ * notification log already recorded rather than posting tests to real
+ * channels, so it is free to press twice and harmless on a busy morning.
+ * See server/selfcheck.js.
+ */
+router.get('/selfcheck', async (req, res) => {
+  const report = await require('../selfcheck').run();
+  audit(req, 'selfcheck', null, null, { worst: report.worst, counts: report.counts });
+  res.json(report);
+});
+
+/** The same thing as text, for pasting to whoever can help. */
+router.get('/selfcheck.txt', async (req, res) => {
+  const check = require('../selfcheck');
+  res.type('text/plain').send(check.asText(await check.run()));
+});
+
+/**
  * Change a visitor type's key, moving everything filed under it.
  *
  * Offered because a key is derived from the label once and then fixed: rename

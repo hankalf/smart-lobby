@@ -98,6 +98,12 @@ const SUITES = [
   { name: 'admin-smoke', file: 'admin-smoke.js', browser: true },
   { name: 'idscan-ui', file: 'idscan-ui-test.js', browser: true },
   { name: 'settings-nav', file: 'settings-nav-test.js', browser: true },
+  /*
+   * What the install can actually do, asked of the machine it runs on.
+   * Late, because it drives several settings into deliberately broken
+   * states to prove they are reported, and puts them back after.
+   */
+  { name: 'selfcheck', file: 'selfcheck-test.js' },
   { name: 'probe', file: 'probe-test.js' }
 ];
 
@@ -179,12 +185,50 @@ function runSuite(file) {
   });
 }
 
-/** "40 passed, 0 failed" if a suite says so; its last line otherwise. */
+/**
+ * What a suite says about itself.
+ *
+ * A suite that crashed never prints its tally, and used to be summarised as
+ * "0 passed, 0 failed" — which the totals then added nothing to. A full run
+ * came back reading "1285 checks passed, 0 failed" with a suite missing
+ * entirely, and the only thing that gave it away was somebody noticing the
+ * count had dropped by 89 since the last run. A count nobody is comparing is
+ * not a control, so `crashed` is carried out of here and counted.
+ */
 function summarise(out) {
   const counted = out.match(/(\d+) passed, (\d+) failed/);
-  if (counted) return { line: counted[0], passed: Number(counted[1]), failed: Number(counted[2]) };
+  if (counted) {
+    return { line: counted[0], passed: Number(counted[1]), failed: Number(counted[2]), crashed: false };
+  }
   const lines = out.trim().split('\n').filter(Boolean);
-  return { line: (lines[lines.length - 1] || '(no output)').slice(0, 90), passed: 0, failed: 0 };
+  return {
+    line: (lines[lines.length - 1] || '(no output)').slice(0, 90),
+    passed: 0,
+    failed: 0,
+    crashed: true
+  };
+}
+
+/**
+ * How many checks each suite is expected to report, remembered between runs.
+ *
+ * The tally is the only thing that notices a suite quietly doing less than it
+ * did yesterday — a `waitForSelector` that now matches nothing, a loop whose
+ * fixture disappeared, a whole file that crashed before its first check. None
+ * of those fail; they simply stop counting.
+ *
+ * Kept beside the data directory rather than in the repository: it is a note
+ * about this machine's last run, not a fact about the code, and a number
+ * checked in would be wrong for everybody the moment somebody adds a check.
+ */
+const TALLY_FILE = path.join(DATA_DIR, '..', 'smart-lobby-tally.json');
+
+function readTally() {
+  try { return JSON.parse(fs.readFileSync(TALLY_FILE, 'utf8')); } catch { return {}; }
+}
+
+function writeTally(tally) {
+  try { fs.writeFileSync(TALLY_FILE, JSON.stringify(tally, null, 2)); } catch { /* not worth failing a run over */ }
 }
 
 (async () => {
@@ -231,6 +275,10 @@ function summarise(out) {
   let totalPassed = 0;
   let totalFailed = 0;
   let skipped = 0;
+  let crashed = 0;
+  const wasExpecting = readTally();
+  const nowRan = {};
+  const shrank = [];
 
   for (const suite of chosen) {
     if (suite.browser && !canBrowse) {
@@ -253,9 +301,23 @@ function summarise(out) {
     const s = summarise(out);
     totalPassed += s.passed;
     totalFailed += s.failed;
+    if (s.crashed) crashed++;
+
+    /*
+     * A suite that ran fewer checks than last time did not fail — it stopped
+     * asking. Reported as its own thing, because it is invisible in both the
+     * pass count and the verdict.
+     */
+    const before = wasExpecting[suite.name];
+    if (!s.crashed) nowRan[suite.name] = s.passed + s.failed;
+    if (Number.isFinite(before) && !s.crashed && (s.passed + s.failed) < before) {
+      shrank.push({ name: suite.name, before, now: s.passed + s.failed });
+    }
     const ok = code === 0;
     if (!ok) failedSuites++;
-    console.log(`  ${suite.name.padEnd(15)} ${ok ? '   ' : 'FAIL'} ${s.line}`);
+    // A crash is marked as one rather than as a suite with nothing to say.
+    const mark = s.crashed ? 'CRASH' : (ok ? '   ' : 'FAIL ');
+    console.log(`  ${suite.name.padEnd(15)} ${mark} ${s.line}`);
     if (!ok) {
       // Only the failures, so a red run is readable without scrolling.
       const detail = out.split('\n').filter((l) => /^FAIL|^CRASH|^\s+at |Error/.test(l)).slice(0, 12);
@@ -265,8 +327,36 @@ function summarise(out) {
 
   if (!keep) fs.rmSync(DATA_DIR, { recursive: true, force: true });
 
+  /*
+   * Remembered only from a run where nothing crashed and nothing shrank.
+   * Writing the tally after a bad run would quietly accept the smaller number
+   * as the new normal, which is precisely the thing this is here to stop.
+   */
+  if (!crashed && !shrank.length) writeTally({ ...wasExpecting, ...nowRan });
+
   console.log(`\n  ${totalPassed} checks passed, ${totalFailed} failed`
     + `${skipped ? `, ${skipped} suite(s) skipped` : ''}`);
-  console.log(failedSuites ? `  ${failedSuites} suite(s) did not pass.\n` : '  Everything passed.\n');
-  process.exit(failedSuites ? 1 : 0);
+
+  /*
+   * Said plainly and last, because a crashed suite reports no failures and a
+   * shrunken one reports none either: both are invisible in the line above.
+   */
+  if (crashed) {
+    console.log(`  ${crashed} suite(s) CRASHED before finishing — their checks did not run at all.`);
+  }
+  for (const s2 of shrank) {
+    console.log(`  ${s2.name} ran ${s2.now} checks, down from ${s2.before} last time — `
+      + 'something stopped being asked rather than failing.');
+  }
+
+  /*
+   * The last line is the one people read, so it has to name the actual
+   * problem. A run whose only fault is a suite that shrank has no failures to
+   * report and must not end on a sentence about failures.
+   */
+  const notPassing = failedSuites + crashed;
+  if (notPassing) console.log(`  ${notPassing} suite(s) did not pass.\n`);
+  else if (shrank.length) console.log(`  ${shrank.length} suite(s) ran fewer checks than last time.\n`);
+  else console.log('  Everything passed.\n');
+  process.exit(notPassing || shrank.length ? 1 : 0);
 })().catch((err) => { console.error('\n  The runner itself failed:', err); process.exit(1); });
