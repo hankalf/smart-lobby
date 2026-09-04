@@ -4412,6 +4412,13 @@
             <button class="btn ghost" type="button" data-routetest="${esc(ty.key)}">Send a test to it</button>
             <span class="muted" data-routetestnote="${esc(ty.key)}"></span>
           </div>
+          <!--
+            What has actually reached this channel, where the channel is set
+            up. The Activity list answers it for the whole site, which is the
+            wrong shape for the question somebody has while looking at one
+            type: has anything ever arrived in here?
+          -->
+          <div class="route-history${hook ? '' : ' hidden'}" data-routehistory="${esc(ty.key)}"></div>
           <p class="muted route-channel-help">Only this type's notifications go here, and only the ones ticked.
             The company channel above still gets everything.</p>
         </div>
@@ -5907,7 +5914,11 @@
       const key = tab.dataset.routetab;
       $$('[data-routetab]').forEach((t) => t.classList.toggle('on', t === tab));
       $$('[data-routecard]').forEach((card) => { card.hidden = card.dataset.routecard !== key; });
+      drawRouteHistory(key);
     }));
+    // And for whichever tab is showing when the page is first drawn.
+    const firstTab = $('[data-routetab]');
+    if (firstTab) drawRouteHistory(firstTab.dataset.routetab);
 
     /** The one-line "who this reaches", kept in step with the ticks. */
     function routeSummary(type) {
@@ -5929,9 +5940,44 @@
       const has = !!box.value.trim();
       $('[data-routeevents]', card).classList.toggle('hidden', !has);
       $('.route-channel-foot', card).classList.toggle('hidden', !has);
+      $('[data-routehistory]', card).classList.toggle('hidden', !has);
       $(`[data-routetestnote="${box.dataset.routehook}"]`, card).textContent = '';
       saveSettings.soon();
+      if (has) drawRouteHistory(box.dataset.routehook);
     }));
+
+    /**
+     * The last few attempts on one type's own channel.
+     *
+     * Deliberately says "accepted" rather than "delivered" for a 202, the same
+     * as everywhere else: a Teams workflow answers when it takes the request
+     * and posts the card afterwards, so this is the end of what is knowable
+     * from here.
+     */
+    async function drawRouteHistory(type) {
+      const card = $(`[data-routecard="${type}"]`);
+      const box = card && $('[data-routehistory]', card);
+      const field = card && $('[data-routehook]', card);
+      if (!box || !field) return;
+      const url = field.value.trim();
+      if (!url) { box.innerHTML = ''; return; }
+      let r;
+      try { r = await api(`/notifications/for?url=${encodeURIComponent(url)}`); } catch { return; }
+      if (!r.attempts.length) {
+        box.innerHTML = '<p class="muted route-history-note">Nothing has been sent to this channel yet. '
+          + 'The test above proves the link; the first real arrival of this type proves the rest.</p>';
+        return;
+      }
+      box.innerHTML = `<p class="muted route-history-note">${r.sent} of ${r.total} accepted.</p>
+        <div class="route-attempts">${r.attempts.map((a) => {
+    const good = a.status === 'sent';
+    return `<div class="route-attempt ${good ? 'is-ok' : 'is-bad'}">
+            <span>${esc(fmtDate(a.created_at))}</span>
+            <span>${esc(a.visitor_name || 'a test')}</span>
+            <span>${good ? 'accepted' : esc(a.status)}${a.error ? ` — ${esc(String(a.error).slice(0, 80))}` : ''}</span>
+          </div>`;
+  }).join('')}</div>`;
+    }
     $$('[data-routeevent]').forEach((box) => box.addEventListener('change', () => saveSettings.soon()));
 
     /*

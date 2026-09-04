@@ -302,6 +302,23 @@ const settle = () => new Promise((done) => setTimeout(done, 1400));
      * request and posts the card afterwards, so that is the whole of what this
      * knows — see the same distinction in teams-test.
      */
+    /*
+     * What has actually reached this channel, where the channel is set up.
+     * The site-wide Activity list can answer it too, but not in the shape the
+     * question has: somebody looking at the contractors channel wants to know
+     * whether anything has ever arrived in *it*.
+     */
+    await page.waitForFunction(() => {
+      const el = document.querySelector('[data-routecard="contractor"] [data-routehistory]');
+      return el && /accepted|Nothing has been sent/.test(el.textContent);
+    }, null, { timeout: 10000 }).catch(() => {});
+    const history = await page.textContent('[data-routecard="contractor"] [data-routehistory]');
+    ok('the channel shows what has actually reached it, beside the link itself',
+      /accepted/.test(history), String(history).replace(/\s+/g, ' ').slice(0, 120));
+    ok('…naming the attempts rather than only counting them',
+      (await page.$$('[data-routecard="contractor"] .route-attempt')).length > 0,
+      String(history).replace(/\s+/g, ' ').slice(0, 120));
+
     ok('the test button reaches that channel and says what it knows',
       posts.length === 1 && posts[0].path.endsWith('/contractors')
       && /Accepted by the workflow/.test(await page.$eval('[data-routetestnote="contractor"]', (el) => el.textContent)),

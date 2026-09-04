@@ -1577,6 +1577,32 @@ router.get('/notifications', (req, res) => {
 });
 
 /**
+ * What has actually reached one destination, asked where that destination is
+ * configured.
+ *
+ * The Activity list answers "what has been sent" for the whole site, which is
+ * the wrong shape for the question people actually have: they are looking at a
+ * channel they set up for contractors and want to know whether anything has
+ * ever arrived in it. Scrolling a mixed list for a URL is not an answer.
+ *
+ * Takes the URL rather than a type, because the same channel can serve several
+ * types and a personal chat link belongs to nobody's type at all.
+ */
+router.get('/notifications/for', (req, res) => {
+  const target = clean(req.query.url);
+  if (!target) return res.json({ target: null, attempts: [] });
+  const attempts = all(`SELECT n.id, n.status, n.error, n.created_at, n.attempts, p.full_name AS visitor_name
+                        FROM notifications n
+                        LEFT JOIN visits v ON v.id = n.visit_id
+                        LEFT JOIN visitors p ON p.id = v.visitor_id
+                        WHERE n.target = ?
+                        ORDER BY n.id DESC LIMIT 5`, target);
+  const sent = get("SELECT COUNT(*) AS n FROM notifications WHERE target = ? AND status = 'sent'", target).n;
+  const total = get('SELECT COUNT(*) AS n FROM notifications WHERE target = ?', target).n;
+  res.json({ target, attempts, sent, total });
+});
+
+/**
  * The card as it would arrive, built by the very same code that sends one.
  *
  * The dashboard posts the settings currently on screen — saved or not — so the
