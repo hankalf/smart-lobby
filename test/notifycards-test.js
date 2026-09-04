@@ -295,7 +295,18 @@ function unit() {
   });
 
   await page.reload();
-  await page.waitForSelector('[data-routecard="contractor"]', { timeout: 10000 });
+  /*
+   * One visitor type is on screen at a time now, chosen from the tabs above
+   * the panels, so this opens the one the checks below are about. The rest
+   * stay in the page while hidden — everything is collected on save, and
+   * looking at one type must not wipe the others.
+   */
+  await page.waitForSelector('[data-routetab="contractor"]', { timeout: 10000 });
+  await page.click('[data-routetab="contractor"]');
+  await page.waitForSelector('[data-routecard="contractor"]:not([hidden])');
+  ok('there is a tab for every visitor type',
+    (await page.$$('[data-routetab]')).length === (await page.$$('[data-routecard]')).length,
+    `${(await page.$$('[data-routetab]')).length} tabs`);
   ok('every visitor type gets a card',
     (await page.$$('[data-routecard]')).length === (await page.$$('[data-notifytype]')).length,
     `${(await page.$$('[data-routecard]')).length} cards`);

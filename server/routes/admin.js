@@ -1673,7 +1673,23 @@ function buildPreview(eventId, card, visitType) {
           fallbackTitle: `${s.visit.full_name} has arrived` };
       })();
 
-  const model = cards.buildModel(event.id, row, notifyForPreview, {
+  /*
+   * Shown as the type being designed for, not as whatever the sample visit
+   * happened to be.
+   *
+   * The sample is a real recent arrival, which is what makes the preview worth
+   * looking at — a real face, a real company, real wording. But the tab above
+   * it says which visitor type is being designed, and the card underneath was
+   * answering with the sample's own type: pick UniFirst, get a preview reading
+   * "Visitor type: Interview". That is not a small cosmetic difference. The
+   * preview's whole job is to say what this type's arrivals will look like,
+   * and it was quietly describing a different one.
+   */
+  const shown = (event.subject === 'visit' && visitType && visitType !== row.visit_type)
+    ? { ...row, visit_type: visitType }
+    : row;
+
+  const model = cards.buildModel(event.id, shown, notifyForPreview, {
     org: settings.getSection('org'),
     fmtTime: notify.fmtTime,
     baseUrl: notify.baseUrl(),

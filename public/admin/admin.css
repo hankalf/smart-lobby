@@ -443,6 +443,13 @@ code.token { background: var(--bg); padding: .15rem .4rem; border-radius: 5px; f
 .tp-also { color: #616161; font-size: .78rem; }
 
 /* One card per visitor type: whether it is posted, and who else is told. */
+/*
+ * One type at a time, chosen from the tabs above — the card designer's
+ * arrangement, for the same reason: five cards side by side is five things to
+ * read when the question is always about one of them.
+ */
+.route-panels { margin-top: .5rem; }
+.route-panels .route-card { max-width: 46rem; }
 .route-cards { display: grid; gap: .85rem; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr)); }
 .route-card { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
 .route-head {

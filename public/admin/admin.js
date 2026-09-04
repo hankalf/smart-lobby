@@ -2592,8 +2592,8 @@
           <summary><b>Anything else</b> — Mattermost, n8n, Zapier, your own endpoint</summary>
           <p>Paste any URL that accepts a JSON POST. Unrecognised URLs use the format set in
             <b>Settings → Notifications</b>; choose <b>Generic JSON</b> there to receive:</p>
-          <pre class="token" style="white-space:pre-wrap">{ "event": "Sam Taylor has arrived to see Alex Green",
-  "details": ["Visitor: Sam Taylor (Acme Roofing)", "Type: contractor", "..."],
+          <pre class="token" style="white-space:pre-wrap">{ "event": "John Doe has arrived to see Jane Doe",
+  "details": ["Visitor: John Doe (Example Roofing)", "Type: contractor", "..."],
   "photo_url": "https://…/media/private/photos/….jpg",
   "timestamp": "2026-08-25T13:41:11.955Z" }</pre>
         </details>
@@ -3658,7 +3658,7 @@
 
       <div class="card section">
         <div class="inline-form" style="margin-bottom:1rem">
-          <label class="field"><span>Add a company</span><input class="input" id="co-name" placeholder="Acme Roofing Ltd"></label>
+          <label class="field"><span>Add a company</span><input class="input" id="co-name" placeholder="Example Roofing Ltd"></label>
           <button class="btn" id="co-add">Add</button>
           <input class="input" id="co-find" placeholder="Search" style="max-width:14rem">
         </div>
@@ -4351,7 +4351,7 @@
     ['induction', 'Inductions completed']
   ];
 
-  function routeCard(ty, s, staff) {
+  function routeCard(ty, s, staff, hidden) {
     const mine = (s.notify.type_routing || {})[ty.key] || {};
     const chosen = (mine.staff || []).map(Number);
     const hook = mine.webhook_url || '';
@@ -4369,7 +4369,8 @@
         ? esc(h.email) + (h.webhook_url ? ' · also messaged directly' : '')
         : 'No email on file — nothing to tag'}</span></span></label>`;
 
-    return `<div class="route-card${posting ? '' : ' not-posting'}" data-routecard="${esc(ty.key)}">
+    return `<div class="route-card${posting ? '' : ' not-posting'}" data-routecard="${esc(ty.key)}"
+      ${hidden ? 'hidden' : ''}>
       <div class="route-head">
         <span class="route-icon">${esc(ty.icon)}</span>
         <span class="route-label">${esc(ty.label)}</span>
@@ -4826,6 +4827,10 @@
           <span class="muted">A Teams, Slack or Google Chat link is recognised on sight; this only applies to
             anything else.</span></label>
         </div>
+        <div class="row" style="margin-top:.5rem"><button class="btn subtle" id="test-hook" type="button">Send test to
+          the company channel</button></div>
+        <div id="email-result"></div>
+
         <details class="howto" ${s.notify.global_webhook_url ? '' : 'open'}>
           <summary><b>Getting the Teams link for a channel</b></summary>
           <ol>
@@ -4849,6 +4854,64 @@
             anyway: a workflow owned by one person stops working when they leave, and the first anybody knows is a
             visitor at the gate with nobody told.</p>
         </details>
+
+        <h3>When to post</h3>
+        <p class="muted" style="margin-top:0">Which moments are worth interrupting a channel for.</p>
+        <div class="check-list">
+          ${chk('notify.on_signin', 'Someone signs in')}
+          ${chk('notify.on_signout', 'Someone signs out')}
+          ${chk('notify.on_induction', 'Someone finishes the site induction',
+            'The moment the briefing is on record, rather than the moment they walked in')}
+          ${chk('notify.on_delivery', 'A parcel arrives')}
+        </div>
+
+        <!--
+          Two events that are not about a visitor at all, and were only
+          settable through the API until now — the guides told people to tick a
+          box that did not exist.
+        -->
+        <h4>When the equipment stops</h4>
+        <p class="muted" style="margin-top:0">Neither is a visitor event, so both go to the company channel only —
+          never to a host's own webhook.</p>
+        <div class="check-list">
+          ${chk('notify.on_device_offline', 'A tablet stops checking in',
+            'It checks in every 20 seconds; the message goes once it has been quiet for the window below')}
+          ${chk('notify.on_printer_trouble', 'A badge printer is marked as not printing',
+            'Set by hand from the Printers page — nothing here can reach a printer to ask it')}
+        </div>
+        <div class="form-grid">
+          ${txt('notify.device_quiet_minutes', 'Minutes quiet before saying a tablet is down', 'number')}
+        </div>
+        <p class="muted">Fifteen rather than five on purpose: site wifi drops for two or three minutes often
+          enough that a shorter window produces a channel people mute, which is worse than no channel.</p>
+
+        <h3>Each visitor type</h3>
+        <p class="muted" style="margin-top:0">Everything that differs by who is arriving, one type at a time — the
+          same tabs the card designer below uses, so a type is set up in one place rather than three.</p>
+        <p class="muted" style="margin-top:0"><b>Post about these</b> covers signing in, signing out and the
+          induction. A type added later on the <b>Visitor types</b> tab starts switched on, so a new one is never
+          silently ignored.</p>
+        <p class="muted" style="margin-top:0">The person being visited is always tagged, whatever is set here.
+          <b>Also tell</b> names individual staff who want a whole kind of visitor regardless of who they came to
+          see — a safety officer who wants every contractor. <b>A channel of its own</b> does the same job for a
+          group, and the difference is who keeps the list up to date: naming people needs an administrator in here
+          every time somebody joins or leaves that role, while a Teams channel is maintained by whoever runs it.
+          The company channel above still receives everything either way.</p>
+        <div class="tabs subtle" id="route-tabs">
+          ${routeTypes().map((ty, i) => `<button class="tab${i === 0 ? ' on' : ''}" type="button"
+            data-routetab="${esc(ty.key)}">${esc(ty.icon)} ${esc(ty.label)}</button>`).join('')}
+        </div>
+        <!--
+          Every type's panel is in the page and all but one hidden, rather than
+          the hidden ones being left out. The whole lot is collected on save —
+          see collectRouting — so a panel that was not on screen when somebody
+          pressed save must still be there to be read, or looking at one type
+          would quietly wipe the rest.
+        -->
+        <div class="route-panels">
+          ${routeTypes().map((ty, i) => routeCard(ty, s, staff, i !== 0)).join('')
+            || '<div class="section-row off"><span>No visitor types yet.</span></div>'}
+        </div>
 
         <h3>What the message looks like</h3>
         <p class="muted" style="margin-top:0">Four different things get announced, and they are not the same kind of
@@ -4928,7 +4991,7 @@
             <label class="field"><span>And for anyone the visitor type is routed to</span>
               <input class="input" id="cd-also-line">
               <span class="muted"><code>{who}</code> becomes their tags. Only appears when a visitor type has
-                somebody in its <b>Also tell</b> list, below.</span></label>
+                somebody in its <b>Also tell</b> list, above.</span></label>
 
             <h4>Quick links</h4>
             <p class="muted" style="margin-top:0">Buttons along the bottom of the card, so whoever reads it can open
@@ -4958,61 +5021,6 @@
                 Leave blank to use the PUBLIC_URL the server was started with.</span></label>
           </div>
         </div>
-
-        <h3>When to post</h3>
-        <p class="muted" style="margin-top:0">Which moments are worth interrupting a channel for.</p>
-        <div class="check-list">
-          ${chk('notify.on_signin', 'Someone signs in')}
-          ${chk('notify.on_signout', 'Someone signs out')}
-          ${chk('notify.on_induction', 'Someone finishes the site induction',
-            'The moment the briefing is on record, rather than the moment they walked in')}
-          ${chk('notify.on_delivery', 'A parcel arrives')}
-        </div>
-
-        <!--
-          Two events that are not about a visitor at all, and were only
-          settable through the API until now — the guides told people to tick a
-          box that did not exist.
-        -->
-        <h4>When the equipment stops</h4>
-        <p class="muted" style="margin-top:0">Neither is a visitor event, so both go to the company channel only —
-          never to a host's own webhook.</p>
-        <div class="check-list">
-          ${chk('notify.on_device_offline', 'A tablet stops checking in',
-            'It checks in every 20 seconds; the message goes once it has been quiet for the window below')}
-          ${chk('notify.on_printer_trouble', 'A badge printer is marked as not printing',
-            'Set by hand from the Printers page — nothing here can reach a printer to ask it')}
-        </div>
-        <div class="form-grid">
-          ${txt('notify.device_quiet_minutes', 'Minutes quiet before saying a tablet is down', 'number')}
-        </div>
-        <p class="muted">Fifteen rather than five on purpose: site wifi drops for two or three minutes often
-          enough that a shorter window produces a channel people mute, which is worse than no channel.</p>
-
-        <h4>Who to post about, and who else to tell</h4>
-        <p class="muted" style="margin-top:0">One card per visitor type. <b>Post about these</b> covers signing in,
-          signing out and the induction; a type added later on the <b>Visitor types</b> tab starts switched on, so a
-          new one is never silently ignored.</p>
-        <p class="muted" style="margin-top:0">The person being visited is always tagged. <b>Also tell</b> is for
-          somebody who wants a whole kind of visitor regardless of who they came to see — a safety officer who wants
-          every contractor, an HR manager who wants every interview. They are tagged in the channel post, and get it
-          as a direct message as well if they have a chat webhook on their <b>Staff</b> record.</p>
-        <!--
-          Two ways of telling other people, and which one to use is a question
-          about who keeps the list up to date rather than about the software.
-        -->
-        <p class="muted" style="margin-top:0"><b>A channel of its own</b> is the other way, and the difference is who
-          maintains the list. Naming people above needs an administrator in here every time somebody joins or leaves.
-          A channel does not: give the Contractors team its own Teams workflow link, tick which of that type's
-          notifications go to it, and whoever runs that team adds and removes people themselves. The company channel
-          above still receives everything either way — that is the one for whoever needs the lot.</p>
-        <div class="route-cards">
-          ${routeTypes().map((ty) => routeCard(ty, s, staff)).join('')
-            || '<div class="section-row off"><span>No visitor types yet.</span></div>'}
-        </div>
-
-        <div class="row" style="margin-top:1rem"><button class="btn subtle" id="test-hook">Send test to Teams</button></div>
-        <div id="email-result"></div>
 
         <h3>Activity</h3>
         <p class="muted" style="margin-top:0">The last 50 attempts on every channel — what is being sent right now,
@@ -5799,6 +5807,18 @@
        * before the save lands would show the previous selection.
        */
       Promise.resolve(saveSettings.now()).then(loadCardPreview);
+    }));
+
+    /*
+     * One visitor type on screen at a time, the same way the card designer
+     * works. Panels are hidden rather than removed — see the note by the
+     * markup: everything is collected on save, and a panel that is not in the
+     * page cannot be.
+     */
+    $$('[data-routetab]').forEach((tab) => tab.addEventListener('click', () => {
+      const key = tab.dataset.routetab;
+      $$('[data-routetab]').forEach((t) => t.classList.toggle('on', t === tab));
+      $$('[data-routecard]').forEach((card) => { card.hidden = card.dataset.routecard !== key; });
     }));
 
     /** The one-line "who this reaches", kept in step with the ticks. */
@@ -7144,7 +7164,7 @@
           <td>${esc(r.visitor_name || r.subject || '—')}</td>
           <td>${status(r)}${r.error ? `<div class="muted">${esc(String(r.error).slice(0, 160))}</div>` : ''}</td>
         </tr>`).join('')}</tbody></table>`
-        : '<p class="empty">Nothing has been sent yet. Press “Send test email” above to try the settings.</p>';
+        : '<p class="empty">Nothing has been sent yet. Press “Send test to the company channel” above to try the settings.</p>';
 
       // While something is mid-send, keep the list fresh so its row is watched
       // settling into sent or failed, rather than found stale later.
@@ -7323,9 +7343,9 @@
       ${b.show_logo && SETTINGS.org.logo_path ? `<img src="${esc(SETTINGS.org.logo_path)}" style="max-height:26px;margin-bottom:4px">` : ''}
       <div class="b-type">${esc(b.title_text || 'VISITOR')}</div>
       ${b.show_photo ? '<div class="b-photo">photo</div>' : ''}
-      <div class="b-name">Sam Taylor</div>
-      ${b.show_company ? '<div class="b-company">Acme Roofing Ltd</div>' : ''}
-      <div class="b-meta">${[b.show_host ? 'Visiting: Alex Green' : '', b.show_date ? new Date().toLocaleDateString('en-GB', { timeZone: siteZone() }) : '',
+      <div class="b-name">John Doe</div>
+      ${b.show_company ? '<div class="b-company">Example Roofing Ltd</div>' : ''}
+      <div class="b-meta">${[b.show_host ? 'Visiting: Jane Doe' : '', b.show_date ? new Date().toLocaleDateString('en-GB', { timeZone: siteZone() }) : '',
         b.show_time ? new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: siteZone() }) : '',
         // Same date the server would put on a real one: the site's, not UTC.
         b.show_badge_no ? `${b.badge_prefix || 'V'}${new Date().toLocaleDateString('en-CA', { timeZone: siteZone() }).slice(2).replace(/-/g, '')}-001` : '']

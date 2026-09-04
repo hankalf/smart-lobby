@@ -236,7 +236,18 @@ const settle = () => new Promise((done) => setTimeout(done, 1400));
     await page.waitForSelector('#shell:not(.hidden)');
     await page.goto(`${BASE}/admin/#settings/notifications`);
     await page.reload();
-    await page.waitForSelector('#set-notifications:not([hidden]) [data-routehook="contractor"]', { timeout: 15000 });
+    // The tabs, not the panel: every type but the first is hidden now, and a
+    // hidden element never becomes visible to wait for.
+    await page.waitForSelector('#set-notifications:not([hidden]) [data-routetab="contractor"]', { timeout: 15000 });
+
+    /*
+     * One visitor type is on screen at a time now, chosen from the tabs, so
+     * this picks the one it is about. The others stay in the page while
+     * hidden — everything is collected on save, and looking at one type must
+     * not wipe the rest.
+     */
+    await page.click('[data-routetab="contractor"]');
+    await page.waitForSelector('[data-routecard="contractor"]:not([hidden])');
 
     const card = '[data-routecard="contractor"]';
     const savedRouting = () => page.evaluate(() => fetch('/api/admin/settings')
@@ -309,6 +320,25 @@ const settle = () => new Promise((done) => setTimeout(done, 1400));
       JSON.stringify(await savedRouting()));
     ok('…and the ticks and the test button go with it',
       await page.$eval(`${card} [data-routeevents]`, (el) => el.classList.contains('hidden')));
+
+    /*
+     * The risk the tabs introduce, checked rather than assumed: saving while
+     * looking at one type must not drop what the other types hold. They are
+     * hidden, not absent, and this is what says so.
+     */
+    await page.click('[data-routetab="visitor"]');
+    await page.waitForSelector('[data-routecard="visitor"]:not([hidden])');
+    await page.fill('[data-routecard="visitor"] [data-routehook]', VISITORS);
+    await until('the visitor channel never saved', () => true).catch(() => {});
+    await page.waitForFunction(() => fetch('/api/admin/settings').then((r) => r.json())
+      .then((s2) => !!(s2.notify.type_routing.visitor || {}).webhook_url), null, { timeout: 12000 })
+      .catch(() => {});
+    const both = await page.evaluate(() => fetch('/api/admin/settings')
+      .then((r) => r.json()).then((s2) => s2.notify.type_routing));
+    ok('setting one type while another is hidden keeps them both',
+      (both.visitor || {}).webhook_url && (both.contractor || {}).events
+      && both.contractor.events.signout === false,
+      JSON.stringify(both).slice(0, 200));
 
     ok('the panel threw nothing while doing any of that', errors.length === 0, errors.slice(0, 2).join(' | '));
     await browser.close();
