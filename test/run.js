@@ -98,6 +98,8 @@ const SUITES = [
   { name: 'admin-smoke', file: 'admin-smoke.js', browser: true },
   { name: 'idscan-ui', file: 'idscan-ui-test.js', browser: true },
   { name: 'settings-nav', file: 'settings-nav-test.js', browser: true },
+  // Opens every page there is. The net under any rearrangement of the admin.
+  { name: 'sweep', file: 'sweep-test.js', browser: true },
   /*
    * What the install can actually do, asked of the machine it runs on.
    * Late, because it drives several settings into deliberately broken
