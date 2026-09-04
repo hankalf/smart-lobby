@@ -27,7 +27,7 @@
  */
 const VISIT_FIELDS = [
   { id: 'company', label: 'Company', value: (v) => v.company },
-  { id: 'type', label: 'Visitor type', value: (v) => v.visit_type && title(v.visit_type) },
+  { id: 'type', label: 'Visitor type', value: (v, ctx) => v.visit_type && typeLabel(v.visit_type, ctx) },
   { id: 'project', label: 'Project', value: (v) => v.project_name },
   { id: 'host', label: 'Here to see', value: (v) => v.host_name },
   { id: 'purpose', label: 'Purpose', value: (v) => v.purpose },
@@ -97,6 +97,30 @@ const DELIVERY_FIELDS = [
 ];
 
 const title = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1);
+
+/**
+ * What a site calls a kind of visitor.
+ *
+ * A visitor type has a key and a label: `unifirst` and "UniFirst". The key is
+ * an identifier, derived once from the label and then fixed — renaming the
+ * type on the Visitor types tab changes what everyone sees and deliberately
+ * does not change the key, because the key is what every visit ever recorded
+ * is stored against.
+ *
+ * The cards used to capitalise the key and call it a day, which is wrong in
+ * two ways and badly wrong in one: "unifirst" came out as "Unifirst", and a
+ * type that had been renamed still announced its old name for ever. Rename
+ * Interview to UniFirst and every UniFirst arrival posted "Visitor type:
+ * Interview" — a card confidently contradicting the tile the visitor tapped.
+ *
+ * Falls back to the capitalised key for a type that has since been deleted,
+ * because a visit from last year still has to render as something.
+ */
+function typeLabel(key, ctx) {
+  if (!key) return '';
+  const known = (ctx && Array.isArray(ctx.types) ? ctx.types : []).find((t) => t && t.key === key);
+  return (known && String(known.label || '').trim()) || title(key);
+}
 
 /** "3h 20m" — worth having on a sign-out card, meaningless on an arrival. */
 function duration(from, to) {
@@ -366,7 +390,7 @@ function visitTokens(v, ctx) {
      * when nobody was named; the rest simply vanish, and fill() closes the gap.
      */
     host: v.host_name || 'reception',
-    type: v.visit_type ? title(v.visit_type) : '',
+    type: typeLabel(v.visit_type, ctx),
     site: v.site_name || '',
     project: v.project_name || '',
     org: (ctx.org && ctx.org.name) || ''

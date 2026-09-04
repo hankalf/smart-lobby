@@ -38,6 +38,26 @@ const anon = (path) => fetch(BASE + path, { cache: 'no-store' });
   });
   let data = await (await anon(`/api/board/${key}/data`)).json();
   ok('the roster loads without a login', Array.isArray(data.onsite), JSON.stringify(data).slice(0, 80));
+
+  /*
+   * Named the way the site names them. A visitor type has a key it is stored
+   * against and a label everybody reads; the board used to show the key, so a
+   * type renamed on the Visitor types tab kept its old name on a screen on the
+   * wall — contradicting the tile the visitor had just tapped.
+   */
+  const types = (await req('GET', '/api/admin/settings')).data.types;
+  const renamed = types.map((t) => (t.key === 'contractor' ? { ...t, label: 'UniFirst' } : t));
+  await req('PUT', '/api/admin/settings', { types: renamed });
+  data = await (await anon(`/api/board/${key}/data`)).json();
+  const shown = (data.onsite.find((p) => p.name === 'John Doe 41') || {}).type;
+  ok('the board calls a visitor type what the site calls it, not what it is stored as',
+    shown === 'UniFirst', String(shown));
+  // Put the label back so nothing downstream reads a renamed fixture.
+  await req('PUT', '/api/admin/settings', { types });
+  data = await (await anon(`/api/board/${key}/data`)).json();
+  ok('…and follows a rename straight back again',
+    (data.onsite.find((p) => p.name === 'John Doe 41') || {}).type === 'Contractor',
+    String((data.onsite.find((p) => p.name === 'John Doe 41') || {}).type));
   const me = data.onsite.find((p) => p.name === 'John Doe 41');
   ok('somebody who just signed in is on it', !!me, data.onsite.map((p) => p.name).join(','));
   ok('their company is shown', me && me.company === 'Board Co', me && me.company);

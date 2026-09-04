@@ -7,6 +7,20 @@
   const el = (html) => { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstElementChild; };
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+  /**
+   * What this site calls a kind of visitor.
+   *
+   * A visitor type has a key and a label — `unifirst` and "UniFirst" — and the
+   * key is fixed once, because every visit ever recorded is stored against it.
+   * Anything a person reads has to use the label: a badge printed for a type
+   * renamed last month should not still carry its old name.
+   */
+  const typeName = (key) => {
+    if (!key) return '';
+    const known = ((SETTINGS && SETTINGS.types) || []).find((t) => t && t.key === key);
+    return (known && String(known.label || '').trim()) || (String(key).charAt(0).toUpperCase() + String(key).slice(1));
+  };
+
   let SETTINGS = null;
   let ME = null;
 
@@ -2367,7 +2381,7 @@
 
     openBadgeWindow(badge, `
       ${badge.show_logo && org.logo_path ? `<img class="logo" src="${esc(org.logo_path)}">` : ''}
-      <div class="type">${esc(badge.title_text || String(visit.visit_type).toUpperCase())}</div>
+      <div class="type">${esc(badge.title_text || typeName(visit.visit_type).toUpperCase())}</div>
       ${badge.show_photo && visit.photo_path ? `<img class="photo" src="${esc(visit.photo_path)}">` : ''}
       <div class="name">${esc(visit.full_name)}</div>
       ${badge.show_company && visit.company ? `<div class="company">${esc(visit.company)}</div>` : ''}

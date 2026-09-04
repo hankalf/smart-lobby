@@ -247,6 +247,42 @@ function findAll(node, type, out = []) {
   ok('the catalogue marks the line as one the card sends regardless',
     sourceField && sourceField.always === 'phone', JSON.stringify(sourceField));
 
+  /* ---- a type is called what the site calls it ---- */
+
+  /*
+   * A visitor type has a key and a label: `unifirst` and "UniFirst". The key is
+   * fixed once, because every visit ever recorded is stored against it; the
+   * label is what everybody reads and can be changed whenever.
+   *
+   * The cards used to capitalise the key. Two things follow, and the second is
+   * the one that gets reported: "unifirst" came out as "Unifirst", and a type
+   * renamed from Interview to UniFirst kept announcing "Interview" for ever —
+   * a card confidently contradicting the tile the visitor had just tapped.
+   */
+  const named = (visitType, types) => {
+    const c = { org: { name: 'Example' }, fmtTime: () => '09:41', baseUrl: 'http://x', boardUrl: null, types };
+    const m = cards.buildModel('signin', { ...visit, visit_type: visitType },
+      { cards: { signin: { fields: ['type'], title_template: '{name} — {type}' } } }, c);
+    return { field: (m.fields[0] || {}).value, title: m.title };
+  };
+
+  const renamed = [{ key: 'interview', label: 'UniFirst' }, { key: 'visitor', label: 'Visitor' }];
+  const fresh = [{ key: 'unifirst', label: 'UniFirst' }, { key: 'visitor', label: 'Visitor' }];
+
+  let n = named('interview', renamed);
+  ok('a renamed type is announced by its new name, not the key it is stored against',
+    n.field === 'UniFirst', JSON.stringify(n));
+  ok('…in the wording templates as well as the fields', /— UniFirst$/.test(n.title), n.title);
+
+  n = named('unifirst', fresh);
+  ok('a new type keeps the capitals the site typed', n.field === 'UniFirst', JSON.stringify(n));
+
+  /* A visit from before a type was deleted still has to render as something. */
+  n = named('oldtype', fresh);
+  ok('a type that has since been deleted still reads as a name', n.field === 'Oldtype', JSON.stringify(n));
+  n = named('contractor', []);
+  ok('…and so does one on a site with no type list to hand', n.field === 'Contractor', JSON.stringify(n));
+
   /* ---- neither endpoint is open to the world ---- */
   ok('the preview needs a login', (await fetch(BASE + '/api/admin/notify/preview')).status !== 200);
 

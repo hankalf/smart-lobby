@@ -1660,6 +1660,9 @@ function buildPreview(eventId, card, visitType) {
     fmtTime: notify.fmtTime,
     baseUrl: notify.baseUrl(),
     boardUrl: notify.boardUrl(),
+    // The same list a real send is given, so the preview names types the way
+    // the channel will rather than the way the database does.
+    types: settings.getAll().types || [],
     photoUrl,
     // Whoever this visitor type is routed to, so the preview shows the extra
     // tag line rather than hiding it until the first real arrival.

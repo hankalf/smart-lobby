@@ -330,6 +330,12 @@ const cardContext = (extra) => ({
   fmtTime,
   baseUrl: baseUrl(),
   boardUrl: boardUrl(),
+  /*
+   * The visitor types as the site has named them, so a card says "UniFirst"
+   * rather than the key "unifirst" it is stored against. Read fresh each time:
+   * a type renamed this morning should read correctly this afternoon.
+   */
+  types: settings.getAll().types || [],
   ...extra
 });
 

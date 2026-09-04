@@ -63,12 +63,23 @@ router.get('/:key/data', boardLimit, allow, (req, res) => {
                 LEFT JOIN projects j ON j.id = v.project_id
                 LEFT JOIN locations l ON l.id = v.location_id`;
 
+  /*
+   * Named the way the site names them, not by the key the visit is stored
+   * against. A type renamed on the Visitor types tab has to read correctly on
+   * a screen on the wall — the alternative is a board confidently contradicting
+   * the tile the visitor tapped, which is how "everyone is here for an
+   * interview" happens.
+   */
+  const typeNames = new Map((settings.getAll().types || [])
+    .filter((t) => t && t.key).map((t) => [t.key, String(t.label || '').trim() || t.key]));
+  const named = (key) => (key ? (typeNames.get(key) || (key.charAt(0).toUpperCase() + key.slice(1))) : null);
+
   const shape = (r) => ({
     id: r.id,
     name: r.full_name,
     company: b.show_company === false ? null : r.company,
     host: b.show_host === false ? null : r.host_name,
-    type: r.visit_type,
+    type: named(r.visit_type),
     project: r.project_name,
     location: r.location_name,
     badge: r.badge_no,
