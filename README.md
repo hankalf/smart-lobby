@@ -654,8 +654,21 @@ server/
 public/
   kiosk/          the reception app
   admin/          the dashboard
+    admin.js      the entry: brings the pages in and starts
+    core.js       the shell — server calls, auto-save, modal, menu, permissions
+    people.js     dashboard, expected, visits, registry, drivers, deliveries
+    setup.js      induction decks, documents, badges, visitor types
+    site.js       staff, doors, locations, printers, tablets
+    records.js    projects, certificates, companies, reports
+    settings.js   every panel under Settings
   shared/theme.css
 ```
+
+The dashboard is loaded as an ES module, so each page file registers itself in
+`VIEWS` as it is imported and nothing has to list them. `SETTINGS` and `ME` are
+read straight from `core.js` — they are live bindings, so a page reads the
+current value rather than a copy, but a page cannot assign to one, which is why
+saving settings goes through `setSettings()`.
 
 Dependencies: express, multer, nodemailer, bcryptjs, qrcode, dotenv. SQLite comes from Node itself,
 so there is no compiler step and nothing to rebuild when Node updates.
