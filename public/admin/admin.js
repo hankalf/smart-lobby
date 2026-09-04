@@ -3350,9 +3350,15 @@
           </div>
           <div class="two-col" style="margin-top:.5rem">
             <input class="input" data-vtsubes="${i}" placeholder="Line under the name en español (optional)" value="${esc(ty.sub_es || '')}">
-            <span class="muted" style="align-self:center">Key: <code>${esc(ty.key || '(from the name)')}</code></span>
+            <span class="muted" style="align-self:center">Key: <code>${esc(ty.key || '(from the name)')}</code>${
+              keyDrifted(ty) ? ` — this type was renamed, so the key still says
+                <code>${esc(ty.key)}</code>. <button class="btn link" type="button"
+                data-vtrekey="${esc(ty.key)}" data-vtrekeyto="${esc(ty.label)}">Change it to
+                <code>${esc(keyFromLabel(ty.label))}</code></button>` : ''}</span>
           </div>
         </div>`).join('');
+
+      wireRekey();
 
       $$('[data-vtpick]', list).forEach((b) => b.addEventListener('click', () => {
         const i = Number(b.dataset.vtpick);
@@ -3382,6 +3388,44 @@
       }));
       drawPreview();
     };
+
+    /*
+     * A type's key is derived from its name once, when the type is created,
+     * and then left alone — every visit ever recorded is stored against it.
+     * Rename the type and the key stays as it was, which is correct and also
+     * invisible, so this says when the two have parted company and offers to
+     * put them back together. The move itself is the server's: see
+     * server/rekey.js, which takes the visits, the bookings, the deleted
+     * records and every per-type setting with it, or takes none of them.
+     */
+    const keyFromLabel = (label) => String(label || '').toLowerCase().trim()
+      .replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
+    const keyDrifted = (ty) => !!(ty && ty.key && ty.label && keyFromLabel(ty.label) !== ty.key);
+
+    const wireRekey = () => $$('[data-vtrekey]', list).forEach((b) => b.addEventListener('click', async () => {
+      const from = b.dataset.vtrekey;
+      const to = keyFromLabel(b.dataset.vtrekeyto);
+      /*
+       * Asked first, and told exactly what moves. This rewrites the identity of
+       * every historical visit of this type; somebody should press it having
+       * read what it does, not having guessed.
+       */
+      modal(`Change the key to “${to}”?`,
+        `<p>Every visit, booking and deleted record filed under <code>${esc(from)}</code> moves to
+          <code>${esc(to)}</code> — along with this type's form, sign-in flow, wording, whether it is
+          announced, who else is told, its own channel, its card design and its certificate rules.</p>
+         <p class="muted">Nothing changes for anybody signing in: it is the same visitor type under a key
+          that matches what you call it. All of it moves or none of it does.</p>`,
+        async (bg, close) => {
+          const out = await api(`/settings/types/${encodeURIComponent(from)}/rekey`,
+            { method: 'POST', body: { to } });
+          SETTINGS = out.settings;
+          close();
+          toast(out.message, 6000);
+          render('vtypes');
+        },
+        'Change the key');
+    }));
 
     const sync = () => {
       $$('[data-vtlabel]', list).forEach((el) => { types[Number(el.dataset.vtlabel)].label = el.value; });

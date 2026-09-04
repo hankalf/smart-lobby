@@ -653,14 +653,36 @@ function isValidLocale(tag) {
 }
 
 function deepMerge(base, override) {
-  if (override === undefined) return base;
+  /*
+   * Copied, not handed back.
+   *
+   * This used to return `base` itself when there was nothing stored over it,
+   * which meant getSection('details') on a site that had never edited the form
+   * returned DEFAULTS.details — the live object. Any caller that changed what
+   * it got back was editing the defaults for the whole process, and every
+   * later read agreed with it, so nothing looked wrong until a restart.
+   *
+   * Nobody should have to know that to use these settings safely.
+   */
+  if (override === undefined) return copy(base);
   if (override === null) return null; // an explicit null clears a value (e.g. removing the logo)
-  if (typeof base !== 'object' || Array.isArray(base) || base === null) return override;
+  if (typeof base !== 'object' || Array.isArray(base) || base === null) return copy(override);
   const out = Object.assign({}, base);
   for (const k of Object.keys(override || {})) {
     out[k] = deepMerge(base[k], override[k]);
   }
   return out;
+}
+
+/** A value nothing else holds a reference into. Settings are small and plain. */
+function copy(value) {
+  if (Array.isArray(value)) return value.map(copy);
+  if (value && typeof value === 'object') {
+    const out = {};
+    for (const k of Object.keys(value)) out[k] = copy(value[k]);
+    return out;
+  }
+  return value;
 }
 
 /*

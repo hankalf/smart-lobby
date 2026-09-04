@@ -90,6 +90,8 @@ const SUITES = [
   { name: 'roles', file: 'roles-test.js' },
   { name: 'roles-ui', file: 'roles-ui-test.js', browser: true },
   { name: 'vtypes', file: 'vtypes-test.js', browser: true },
+  // Renaming a type's key, and everything filed under it moving with it.
+  { name: 'rekey', file: 'rekey-test.js' },
   { name: 'autosave', file: 'autosave-test.js', browser: true },
   { name: 'xss', file: 'xss-test.js', browser: true },
   { name: 'attack', file: 'attack-test.js' },

@@ -1459,6 +1459,24 @@ router.put('/settings', (req, res) => {
   res.json({ ...updated, warnings });
 });
 
+/**
+ * Change a visitor type's key, moving everything filed under it.
+ *
+ * Offered because a key is derived from the label once and then fixed: rename
+ * Interview to UniFirst and the data goes on saying `interview` for ever,
+ * which is harmless until somebody reads an export or sets up a second thing
+ * keyed by type and has to be told why the names disagree.
+ *
+ * Deliberately its own action rather than something a label edit does quietly.
+ * See server/rekey.js.
+ */
+router.post('/settings/types/:key/rekey', (req, res) => {
+  const out = require('../rekey').rekey(req.params.key, clean(req.body.to));
+  if (!out.ok) return res.status(out.error === 'not_found' ? 404 : 400).json(out);
+  audit(req, 'rekey', 'visitor_type', null, { from: out.from, to: out.to, moved: out.moved });
+  res.json({ ...out, settings: settings.getAll() });
+});
+
 /* --------------------------------------------------------- branding images */
 
 router.post('/settings/logo', files.imageUpload.single('file'), (req, res) => {
