@@ -198,14 +198,20 @@ function runSuite(file) {
 function summarise(out) {
   const counted = out.match(/(\d+) passed, (\d+) failed/);
   if (counted) {
-    return { line: counted[0], passed: Number(counted[1]), failed: Number(counted[2]), crashed: false };
+    return { line: counted[0], passed: Number(counted[1]), failed: Number(counted[2]), counted: true };
   }
   const lines = out.trim().split('\n').filter(Boolean);
   return {
     line: (lines[lines.length - 1] || '(no output)').slice(0, 90),
     passed: 0,
     failed: 0,
-    crashed: true
+    /*
+     * Decided by the caller, which knows the exit code. A few suites report
+     * "page errors: none" and exit cleanly rather than counting checks; those
+     * are not crashes, and calling them crashes would be a new false alarm to
+     * replace the old silence.
+     */
+    counted: false
   };
 }
 
@@ -265,9 +271,95 @@ function writeTally(tally) {
     // several suites open a device page. api-test makes these itself.
     const post = (path, body) => fetch(BASE + path, {
       method: 'POST', headers: { 'Content-Type': 'application/json', cookie: jar || '' }, body: JSON.stringify(body)
-    }).catch(() => {});
-    await post('/api/admin/projects', { name: 'Warehouse extension', code: 'WX1', active: 1 });
-    await post('/api/admin/devices', { name: 'Front gate' });
+    }).then((r) => r.json().catch(() => null)).catch(() => null);
+    const patch = (path, body) => fetch(BASE + path, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json', cookie: jar || '' }, body: JSON.stringify(body)
+    }).then((r) => r.json().catch(() => null)).catch(() => null);
+
+    /*
+     * Enough of a site for any one suite to run on its own.
+     *
+     * Not decoration. Five suites could only run after api-test had been
+     * through first, which meant diagnosing one failure cost a full run —
+     * and a suite nobody can run alone is a suite people stop running. The
+     * shape here is the smallest thing the dashboard needs to have something
+     * to show: a job, a tablet, somebody to visit, and somebody who has
+     * visited.
+     */
+    const project = await post('/api/admin/projects', { name: 'Warehouse extension', code: 'WX1', active: 1 });
+    const host = await post('/api/admin/staff',
+      { name: 'Jane Doe', email: 'jane@example.test', phone: '415-268-0100', active: 1 });
+    /*
+     * The Contractor card, switched on. It is off out of the box, and it is
+     * the card the kiosk suites walk through — without it they wait thirty
+     * seconds for a button that was never going to appear.
+     */
+    const conf = await fetch(`${BASE}/api/admin/settings`, { headers: { cookie: jar || '' } })
+      .then((r) => r.json()).catch(() => null);
+    if (conf && Array.isArray(conf.types)) {
+      await fetch(`${BASE}/api/admin/settings`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', cookie: jar || '' },
+        body: JSON.stringify({
+          types: conf.types.map((t) => (t.key === 'contractor' ? { ...t, mode: 'both' } : t)),
+          // Spanish, for the same reason: the language bar only exists when
+          // somebody has turned the second language on.
+          kiosk: { ...(conf.kiosk || {}), spanish_enabled: true }
+        })
+      }).catch(() => null);
+    }
+
+    /*
+     * The tablet the kiosk suites open by name, cut down to the two cards they
+     * count. Its slug is fixed rather than derived, because /kiosk/front-gate
+     * is written into the suites and a tablet renamed in a later test would
+     * otherwise take them all down with it.
+     */
+    const device = await post('/api/admin/devices', { name: 'Front gate' });
+    if (device && device.id) {
+      await patch(`/api/admin/devices/${device.id}`,
+        { slug: 'front-gate', sections: JSON.stringify(['contractor', 'signout']) });
+    }
+
+    /*
+     * A deck with one slide in it. An empty deck is skipped by the kiosk, so
+     * the contractor flow would run straight past the induction the suites
+     * are there to check — the slide is what makes it appear at all.
+     */
+    const deck = await post('/api/admin/slideshows',
+      { name: 'Site induction', required_for: ['contractor', 'visitor'],
+        min_seconds_per_slide: 0, language: 'en', require_signature: true });
+    if (deck && deck.id) {
+      const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      const fd = new FormData();
+      fd.append('file', new Blob([Buffer.from(png, 'base64')], { type: 'image/png' }), 'slide1.png');
+      await fetch(`${BASE}/api/admin/slideshows/${deck.id}/upload`,
+        { method: 'POST', headers: { cookie: jar || '' }, body: fd }).catch(() => null);
+    }
+
+    /*
+     * One person who has actually been on site, so every list, report and
+     * record page has a row to open. Several suites look for one and time out
+     * waiting rather than saying what is missing.
+     *
+     * They look for this exact name. It carries a signed document and a
+     * completed induction because the suites about how often a document comes
+     * round again need somebody who has signed one — an unsigned visitor makes
+     * every "already signed" check read the wrong way round.
+     */
+    const docs = await fetch(`${BASE}/api/admin/agreements`, { headers: { cookie: jar || '' } })
+      .then((r) => r.json()).catch(() => null);
+    const doc = Array.isArray(docs) ? docs[docs.length - 1] : null;
+    const sig = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    await post('/api/kiosk/signin', {
+      full_name: 'John Doe 1', company: 'Example Consulting', phone: '415-268-0142',
+      visit_type: 'contractor', project_id: project && project.id,
+      host_id: host && host.id, client_ref: 'seed-standalone',
+      documents: doc ? [{ agreement_id: doc.id, signature: sig, answers: {} }] : [],
+      ...(deck && deck.id ? {
+        induction_completed: true, slideshow_id: deck.id, induction_signature: sig,
+        induction_started_at: new Date().toISOString(), induction_seconds: 42
+      } : {})
+    });
     await stop(seed);
   }
 
@@ -299,6 +391,8 @@ function writeTally(tally) {
     await stop(server);
 
     const s = summarise(out);
+    // A suite that printed no tally *and* did not exit cleanly stopped early.
+    s.crashed = !s.counted && code !== 0;
     totalPassed += s.passed;
     totalFailed += s.failed;
     if (s.crashed) crashed++;
@@ -309,8 +403,8 @@ function writeTally(tally) {
      * pass count and the verdict.
      */
     const before = wasExpecting[suite.name];
-    if (!s.crashed) nowRan[suite.name] = s.passed + s.failed;
-    if (Number.isFinite(before) && !s.crashed && (s.passed + s.failed) < before) {
+    if (s.counted) nowRan[suite.name] = s.passed + s.failed;
+    if (Number.isFinite(before) && s.counted && (s.passed + s.failed) < before) {
       shrank.push({ name: suite.name, before, now: s.passed + s.failed });
     }
     const ok = code === 0;
